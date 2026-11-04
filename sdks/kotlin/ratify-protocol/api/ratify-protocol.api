@@ -539,6 +539,8 @@ public final class com/ratifyprotocol/KeystoreKey$Custody : java/lang/Enum {
 public final class com/ratifyprotocol/LiveVerifyKt {
 	public static final fun verifyProofBundle-7-Fau3A (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RateReservationStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun verifyProofBundle-7-Fau3A$default (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RateReservationStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun verifyProofBundle-D5qb1SI (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/RateAtFinalizationClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun verifyProofBundle-D5qb1SI$default (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/RateAtFinalizationClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class com/ratifyprotocol/LogResult : java/lang/Enum {
@@ -652,6 +654,9 @@ public final class com/ratifyprotocol/ProofBundle {
 	public final fun getVerifierId ()Ljava/lang/String;
 	public final fun getVersion ()J
 	public fun hashCode ()I
+}
+
+public abstract interface class com/ratifyprotocol/RateAtFinalizationClaimStore : com/ratifyprotocol/ClaimStore {
 }
 
 public final class com/ratifyprotocol/RateReservation {

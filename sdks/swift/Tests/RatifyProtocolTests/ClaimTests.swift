@@ -63,7 +63,7 @@ final class ClaimTests: XCTestCase {
         XCTAssertEqual(calls, 1)
     }
 
-    actor CreatedClaimStore: ClaimStore {
+    actor CreatedClaimStore: RateAtFinalizationClaimStore {
         let onFinalize: (@Sendable () async -> Void)?
         private(set) var claims = 0
         private(set) var progressWrites = 0

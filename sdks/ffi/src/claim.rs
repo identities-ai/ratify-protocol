@@ -6,7 +6,7 @@ use ratify_protocol::v2::{
     self as core, ClaimStoreV2, CommittedV2Outcome, ConstraintEvaluatorRefV2,
     StatusEvidenceEntryV2, V2AuthoritativeClock, V2ChallengeClaim, V2ClaimDisposition,
     V2ClaimResult, V2CommittedClaim, V2CommittedClaimStore, V2Context, V2EvaluationProgress,
-    V2InterruptedClaim, V2RateReservation, V2RateReservationStore, V2StoreError,
+    V2InterruptedClaim, V2RateAtFinalizationStore, V2RateReservation, V2RateReservationStore, V2StoreError,
 };
 
 use crate::context::FfiCancelToken;
@@ -421,6 +421,59 @@ impl ClaimStoreV2 for ForeignClaimStore {
     }
 }
 
+/// One object supplies both core capability views for atomic rate admission.
+pub(crate) struct ForeignBarrierClaimStore(pub(crate) ForeignClaimStore);
+
+impl V2AuthoritativeClock for ForeignBarrierClaimStore {
+    fn authoritative_time_v2(&self, ctx: &V2Context) -> Result<i64, V2StoreError> {
+        self.0.authoritative_time_v2(ctx)
+    }
+}
+
+impl ClaimStoreV2 for ForeignBarrierClaimStore {
+    fn claim_v2(&self, ctx: &V2Context, claim: V2ChallengeClaim) -> Result<V2ClaimResult, V2StoreError> {
+        self.0.claim_v2(ctx, claim)
+    }
+
+    fn finalize_v2_claim(&self, ctx: &V2Context, claim_id: &str, owner_token: &[u8],
+        terminal_result: &[u8], receipt_body: &[u8], allow_valid_until: i64) -> Result<bool, V2StoreError> {
+        self.0.finalize_v2_claim(ctx, claim_id, owner_token, terminal_result, receipt_body, allow_valid_until)
+    }
+
+    fn record_v2_evaluation_progress(&self, ctx: &V2Context, claim_id: &str, owner_token: &[u8],
+        progress: V2EvaluationProgress) -> Result<(), V2StoreError> {
+        self.0.record_v2_evaluation_progress(ctx, claim_id, owner_token, progress)
+    }
+
+    fn load_v2_interrupted_claim(&self, ctx: &V2Context, claim_id: &str) -> Result<V2InterruptedClaim, V2StoreError> {
+        self.0.load_v2_interrupted_claim(ctx, claim_id)
+    }
+
+    fn recover_interrupted_v2_claim(&self, ctx: &V2Context, claim_id: &str,
+        terminal_result: &[u8], receipt_body: &[u8]) -> Result<bool, V2StoreError> {
+        self.0.recover_interrupted_v2_claim(ctx, claim_id, terminal_result, receipt_body)
+    }
+
+    fn rate_at_finalization_view(&self) -> Option<&dyn V2RateAtFinalizationStore> {
+        Some(self)
+    }
+}
+
+impl V2RateReservationStore for ForeignBarrierClaimStore {
+    fn reserve_v2_rate_batch(&self, _ctx: &V2Context, _claim_id: &str, _owner_token: &[u8],
+        _bundle_hash: &str, _batch: &[V2RateReservation]) -> Result<(), V2StoreError> {
+        Err(V2StoreError::Unavailable("rate admission is deferred to finalization".into()))
+    }
+
+    fn rate_at_finalization_view(&self) -> Option<&dyn V2RateAtFinalizationStore> {
+        Some(self)
+    }
+}
+
+impl V2RateAtFinalizationStore for ForeignBarrierClaimStore {
+    fn admits_v2_rate_at_finalization(&self) {}
+}
+
 #[uniffi::export(with_foreign)]
 pub trait FfiCommittedClaimStore: Send + Sync {
     fn load_committed(
@@ -621,6 +674,20 @@ mod tests {
             self.0.lock().unwrap().push("rate");
             Ok(())
         }
+    }
+
+    #[test]
+    fn barrier_uses_one_capability_object_and_defers_rate_admission() {
+        let foreign = Arc::new(TestStore::default());
+        let store = ForeignBarrierClaimStore(ForeignClaimStore(foreign.clone()));
+        let claim_view = ClaimStoreV2::rate_at_finalization_view(&store).unwrap();
+        let rate_view = V2RateReservationStore::rate_at_finalization_view(&store).unwrap();
+        assert!(std::ptr::eq(claim_view, rate_view));
+        let ctx = V2Context::background();
+        assert!(matches!(store.reserve_v2_rate_batch(&ctx, "claim", &[1, 2], "bundle", &[]),
+            Err(V2StoreError::Unavailable(_))));
+        assert!(store.finalize_v2_claim(&ctx, "claim", &[1, 2], &[3], &[4], 50).unwrap());
+        assert_eq!(*foreign.0.lock().unwrap(), vec!["finalize"]);
     }
 
     #[test]

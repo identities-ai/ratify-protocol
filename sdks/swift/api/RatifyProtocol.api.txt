@@ -407,6 +407,7 @@ ProofBundle.streamId [Var] -> Foundation.Data?
 ProofBundle.streamSeq [Var] -> Swift.Int64?
 ProofBundle.verifierId [Var] -> Swift.String
 ProofBundle.version [Var] -> Swift.Int64
+RateAtFinalizationClaimStore [Protocol]
 RateReservation [Struct]
 RateReservation.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RateReservation, RatifyProtocol.RateReservation
 RateReservation.certId [Var] -> Swift.String
@@ -539,6 +540,7 @@ Ratify.verifyArchivalWitnessEntry(_:witnessKey:) [Func] -> RatifyProtocol.Archiv
 Ratify.verifyDelegationCertSignature(_:) [Func] -> (), RatifyProtocol.DelegationCert
 Ratify.verifyKeyRotationStatement(_:state:now:futureSkew:) [Func] -> (), RatifyProtocol.KeyRotationStatement, RatifyProtocol.RotationState, Swift.Int64, Swift.Int64
 Ratify.verifyProofBundle(_:claimStore:receiverBinding:trust:audience:statusEvidence:statusJournal:rate:timeout:) [Func] -> RatifyProtocol.VerifyOutcome, RatifyProtocol.VerifyRequest, any RatifyProtocol.ClaimStore, (any RatifyProtocol.ReceiverBindingHook)?, (any RatifyProtocol.TrustProvider)?, (any RatifyProtocol.AudienceProvider)?, (any RatifyProtocol.StatusEvidenceProvider)?, (any RatifyProtocol.SecurityJournalStore)?, (any RatifyProtocol.RateReservationStore)?, Swift.Duration?
+Ratify.verifyProofBundle(_:claimStore:receiverBinding:trust:audience:statusEvidence:statusJournal:timeout:) [Func] -> RatifyProtocol.VerifyOutcome, RatifyProtocol.VerifyRequest, any RatifyProtocol.RateAtFinalizationClaimStore, (any RatifyProtocol.ReceiverBindingHook)?, (any RatifyProtocol.TrustProvider)?, (any RatifyProtocol.AudienceProvider)?, (any RatifyProtocol.StatusEvidenceProvider)?, (any RatifyProtocol.SecurityJournalStore)?, Swift.Duration?
 Ratify.verifyProofBundleSignatures(_:) [Func] -> (), RatifyProtocol.ProofBundle
 Ratify.verifyRevocationListSignature(_:trustedIssuerId:statusKey:) [Func] -> (), RatifyProtocol.RevocationList, Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.verifyRevocationPushSignature(_:trustedIssuerId:statusKey:) [Func] -> (), RatifyProtocol.RevocationPush, Swift.String, RatifyProtocol.HybridPublicKey

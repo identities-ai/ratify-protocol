@@ -68,7 +68,7 @@ class ClaimTest {
         assertEquals(1, store.calls)
     }
 
-    private class CreatedClaimStore(private val onFinalize: (suspend () -> Unit)? = null) : ClaimStore {
+    private class CreatedClaimStore(private val onFinalize: (suspend () -> Unit)? = null) : RateAtFinalizationClaimStore {
         var claims = 0
         var progressWrites = 0
         var finalizations = 0

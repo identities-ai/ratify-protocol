@@ -70,6 +70,24 @@ public struct VerifyOutcome: Sendable {
 }
 
 extension Ratify {
+    public static func verifyProofBundle(_ request: VerifyRequest, claimStore: any RateAtFinalizationClaimStore,
+                                         receiverBinding: (any ReceiverBindingHook)? = nil,
+                                         trust: (any TrustProvider)? = nil,
+                                         audience: (any AudienceProvider)? = nil,
+                                         statusEvidence: (any StatusEvidenceProvider)? = nil,
+                                         statusJournal: (any SecurityJournalStore)? = nil,
+                                         timeout: Duration? = nil) async throws(RatifyError) -> VerifyOutcome {
+        try await onWorker(timeout: timeout) { token throws(RatifyError) in
+            try VerifyOutcome(ffi { try ffiLiveVerifyProofBundleBarrier(request: request.ffi,
+                claimStore: ClaimStoreBridge(claimStore),
+                receiverBinding: receiverBinding.map(ReceiverBindingBridge.init),
+                trust: trust.map(TrustProviderBridge.init),
+                audience: audience.map(AudienceProviderBridge.init),
+                statusEvidence: statusEvidence.map(StatusEvidenceProviderBridge.init),
+                statusJournal: statusJournal.map(JournalStoreBridge.init), token: token) })
+        }
+    }
+
     public static func verifyProofBundle(_ request: VerifyRequest, claimStore: any ClaimStore,
                                          receiverBinding: (any ReceiverBindingHook)? = nil,
                                          trust: (any TrustProvider)? = nil,

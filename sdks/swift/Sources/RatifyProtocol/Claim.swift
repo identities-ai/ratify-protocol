@@ -171,6 +171,11 @@ public protocol ClaimStore: AuthoritativeClock {
     func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) async throws -> Bool
 }
 
+/// Finalization atomically admits the claim's sealed rate batch and commits the claim.
+/// Return rateLimitExceeded only after definitive rollback of the transaction.
+/// Keep this capability active for the claim's lifetime and reject legacy reservations.
+public protocol RateAtFinalizationClaimStore: ClaimStore {}
+
 /// Loads the exact terminal record for a lost committed handoff.
 public protocol CommittedClaimStore: Sendable {
     func loadCommitted(claimId: String) async throws -> CommittedClaim

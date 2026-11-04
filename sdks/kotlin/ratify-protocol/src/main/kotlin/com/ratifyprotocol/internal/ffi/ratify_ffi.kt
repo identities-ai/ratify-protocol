@@ -1089,6 +1089,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle_barrier(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_delegation_cert(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_key_rotation_statement(
@@ -1744,6 +1746,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_live_verify_proof_bundle(`request`: RustBuffer.ByValue,`claimStore`: Long,`receiverBinding`: RustBuffer.ByValue,`trust`: RustBuffer.ByValue,`audience`: RustBuffer.ByValue,`statusEvidence`: RustBuffer.ByValue,`statusJournal`: RustBuffer.ByValue,`rate`: RustBuffer.ByValue,`token`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_live_verify_proof_bundle_barrier(`request`: RustBuffer.ByValue,`claimStore`: Long,`receiverBinding`: RustBuffer.ByValue,`trust`: RustBuffer.ByValue,`audience`: RustBuffer.ByValue,`statusEvidence`: RustBuffer.ByValue,`statusJournal`: RustBuffer.ByValue,`token`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_delegation_cert(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_key_rotation_statement(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2149,6 +2153,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle() and 0xFFFF) != 28543) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle_barrier() and 0xFFFF) != 1120) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_delegation_cert() and 0xFFFF) != 57238) {
@@ -17147,6 +17154,28 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     )
     }
     
+
+        /**
+         * The claim and rate capability views refer to the same foreign store object.
+         */
+    @Throws(FfiException::class) internal fun `ffiLiveVerifyProofBundleBarrier`(`request`: FfiLiveVerifyRequest, `claimStore`: FfiClaimStore, `receiverBinding`: FfiReceiverBindingHook?, `trust`: FfiTrustProvider?, `audience`: FfiAudienceProvider?, `statusEvidence`: FfiStatusEvidenceProvider?, `statusJournal`: FfiJournalStore?, `token`: FfiCancelToken): FfiLiveVerifyOutcome {
+            return FfiConverterTypeFfiLiveVerifyOutcome.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_live_verify_proof_bundle_barrier(
+
+
+        FfiConverterTypeFfiLiveVerifyRequest.lower(`request`),
+        FfiConverterTypeFfiClaimStore.lower(`claimStore`),
+        FfiConverterOptionalTypeFfiReceiverBindingHook.lower(`receiverBinding`),
+        FfiConverterOptionalTypeFfiTrustProvider.lower(`trust`),
+        FfiConverterOptionalTypeFfiAudienceProvider.lower(`audience`),
+        FfiConverterOptionalTypeFfiStatusEvidenceProvider.lower(`statusEvidence`),
+        FfiConverterOptionalTypeFfiJournalStore.lower(`statusJournal`),
+        FfiConverterTypeFfiCancelToken.lower(`token`),_status)
+}
+    )
+    }
+
 
     @Throws(FfiException::class) internal fun `ffiDecodeDelegationCert`(`data`: kotlin.ByteArray): FfiDelegationCert {
             return FfiConverterTypeFfiDelegationCert.lift(

@@ -4,6 +4,7 @@ import com.ratifyprotocol.internal.ffi.FfiLiveVerifyOutcome
 import com.ratifyprotocol.internal.ffi.FfiLiveVerifyRequest
 import com.ratifyprotocol.internal.ffi.FfiStatusKeyConfig
 import com.ratifyprotocol.internal.ffi.ffiLiveVerifyProofBundle
+import com.ratifyprotocol.internal.ffi.ffiLiveVerifyProofBundleBarrier
 import kotlin.time.Duration
 
 public class StatusKeyConfig(public val epoch: ULong, public val key: HybridPublicKey) {
@@ -47,6 +48,17 @@ public class VerifyOutcome internal constructor(f: FfiLiveVerifyOutcome) {
     public val disposition: ClaimDisposition? = f.disposition?.let { ClaimDisposition.valueOf(it.name) }
     public val claim: ChallengeClaim = ChallengeClaim(f.claim)
     public val committed: CommittedOutcome? = f.committed?.let(::CommittedOutcome)
+}
+
+public suspend fun verifyProofBundle(request: VerifyRequest, claimStore: RateAtFinalizationClaimStore,
+    receiverBinding: ReceiverBindingHook? = null,
+    trust: TrustProvider? = null, audience: AudienceProvider? = null,
+    statusEvidence: StatusEvidenceProvider? = null, statusJournal: SecurityJournalStore? = null,
+    timeout: Duration? = null): VerifyOutcome = onWorker(timeout) { token ->
+    VerifyOutcome(ffi { ffiLiveVerifyProofBundleBarrier(request.toFfi(), ClaimStoreBridge(claimStore),
+        receiverBinding?.let(::ReceiverBindingBridge),
+        trust?.let(::TrustProviderBridge), audience?.let(::AudienceProviderBridge),
+        statusEvidence?.let(::StatusEvidenceProviderBridge), statusJournal?.let(::JournalStoreBridge), token) })
 }
 
 public suspend fun verifyProofBundle(request: VerifyRequest, claimStore: ClaimStore,

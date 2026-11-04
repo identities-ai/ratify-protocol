@@ -133,6 +133,12 @@ public interface ClaimStore : AuthoritativeClock {
     public suspend fun recoverInterrupted(claimId: String, terminalResult: ByteArray, receiptBody: ByteArray): Boolean
 }
 
+/** Finalization atomically admits the sealed rate batch and commits the claim.
+ * RateLimitExceeded requires definitive rollback. Keep this capability active
+ * for the claim's lifetime and reject legacy reservations.
+ */
+public interface RateAtFinalizationClaimStore : ClaimStore
+
 /** Loads the exact terminal record when the committed handoff was lost. */
 public interface CommittedClaimStore {
     public suspend fun loadCommitted(claimId: String): CommittedClaim

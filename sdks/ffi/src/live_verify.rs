@@ -6,7 +6,7 @@ use std::sync::Arc;
 use ratify_protocol::v2::{self as core, V2VerifyCallbacks, V2VerifyRequest};
 
 use crate::challenge_issuance::FfiExpectedChallenge;
-use crate::claim::{FfiChallengeClaim, FfiClaimDisposition, FfiClaimStore, FfiCommittedOutcome, FfiRateReservationStore, ForeignClaimStore, ForeignRateReservationStore};
+use crate::claim::{FfiChallengeClaim, FfiClaimDisposition, FfiClaimStore, FfiCommittedOutcome, FfiRateReservationStore, ForeignBarrierClaimStore, ForeignClaimStore, ForeignRateReservationStore};
 use crate::context::{FfiCancelToken, FfiContextPolicy};
 use crate::error::{protocol, FfiResult};
 use crate::evaluator::FfiConstraintContext;
@@ -109,16 +109,52 @@ pub fn ffi_live_verify_proof_bundle(
 ) -> FfiResult<FfiLiveVerifyOutcome> {
     call(|| {
         let request = request.try_into()?;
-        let callbacks = V2VerifyCallbacks {
-            claim_store: Some(Arc::new(ForeignClaimStore(claim_store))),
-            receiver_binding: receiver_binding.map(receiver_binding_callback),
-            trust: trust.map(trust_callback),
-            audience: audience.map(audience_callback),
-            status_evidence: status_evidence.map(status_callback),
-            status_journal: status_journal.map(|s| Arc::new(ForeignJournalStore(s)) as Arc<dyn core::SecurityJournalStoreV2>),
-            rate: rate.map(|s| Arc::new(ForeignRateReservationStore(s)) as Arc<dyn core::V2RateReservationStore>),
-            ..Default::default()
-        };
-        Ok(core::verify_proof_bundle_v2(token.context(), &request, &callbacks).into())
+        Ok(verify(request, Arc::new(ForeignClaimStore(claim_store)),
+            rate.map(|s| Arc::new(ForeignRateReservationStore(s)) as Arc<dyn core::V2RateReservationStore>),
+            receiver_binding, trust, audience, status_evidence, status_journal, token))
     })
+}
+
+/// The claim and rate capability views refer to the same foreign store object.
+#[uniffi::export]
+pub fn ffi_live_verify_proof_bundle_barrier(
+    request: FfiLiveVerifyRequest,
+    claim_store: Arc<dyn FfiClaimStore>,
+    receiver_binding: Option<Arc<dyn FfiReceiverBindingHook>>,
+    trust: Option<Arc<dyn FfiTrustProvider>>,
+    audience: Option<Arc<dyn FfiAudienceProvider>>,
+    status_evidence: Option<Arc<dyn FfiStatusEvidenceProvider>>,
+    status_journal: Option<Arc<dyn FfiJournalStore>>,
+    token: Arc<FfiCancelToken>,
+) -> FfiResult<FfiLiveVerifyOutcome> {
+    call(|| {
+        let request = request.try_into()?;
+        let store = Arc::new(ForeignBarrierClaimStore(ForeignClaimStore(claim_store)));
+        Ok(verify(request, store.clone(), Some(store), receiver_binding, trust,
+            audience, status_evidence, status_journal, token))
+    })
+}
+
+fn verify(
+    request: V2VerifyRequest,
+    claim_store: Arc<dyn core::ClaimStoreV2>,
+    rate: Option<Arc<dyn core::V2RateReservationStore>>,
+    receiver_binding: Option<Arc<dyn FfiReceiverBindingHook>>,
+    trust: Option<Arc<dyn FfiTrustProvider>>,
+    audience: Option<Arc<dyn FfiAudienceProvider>>,
+    status_evidence: Option<Arc<dyn FfiStatusEvidenceProvider>>,
+    status_journal: Option<Arc<dyn FfiJournalStore>>,
+    token: Arc<FfiCancelToken>,
+) -> FfiLiveVerifyOutcome {
+    let callbacks = V2VerifyCallbacks {
+        claim_store: Some(claim_store),
+        receiver_binding: receiver_binding.map(receiver_binding_callback),
+        trust: trust.map(trust_callback),
+        audience: audience.map(audience_callback),
+        status_evidence: status_evidence.map(status_callback),
+        status_journal: status_journal.map(|s| Arc::new(ForeignJournalStore(s)) as Arc<dyn core::SecurityJournalStoreV2>),
+        rate,
+        ..Default::default()
+    };
+    core::verify_proof_bundle_v2(token.context(), &request, &callbacks).into()
 }

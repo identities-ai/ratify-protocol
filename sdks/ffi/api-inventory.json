@@ -438,8 +438,8 @@
  },
  "ClaimStoreV2::rate_at_finalization_view": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Capability is represented by RateAtFinalizationClaimStore conformance, not a runtime method",
+  "status": "rust-idiom"
  },
  "ClaimStoreV2::record_v2_evaluation_progress": {
   "kind": "fn",
@@ -6954,13 +6954,14 @@
  },
  "V2RateAtFinalizationStore": {
   "kind": "trait",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RateAtFinalizationClaimStore",
+  "status": "mapped",
+  "swift": "RateAtFinalizationClaimStore"
  },
  "V2RateAtFinalizationStore::admits_v2_rate_at_finalization": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Capability is represented by RateAtFinalizationClaimStore conformance, not a runtime method",
+  "status": "rust-idiom"
  },
  "V2RateReservation": {
   "kind": "struct",
@@ -7025,8 +7026,8 @@
  },
  "V2RateReservationStore::rate_at_finalization_view": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Capability is represented by RateAtFinalizationClaimStore conformance, not a runtime method",
+  "status": "rust-idiom"
  },
  "V2RateReservationStore::reserve_v2_rate_batch": {
   "kind": "fn",

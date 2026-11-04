@@ -12034,6 +12034,24 @@ func ffiLiveVerifyProofBundle(request: FfiLiveVerifyRequest, claimStore: FfiClai
     )
 })
 }
+/**
+ * The claim and rate capability views refer to the same foreign store object.
+ */
+func ffiLiveVerifyProofBundleBarrier(request: FfiLiveVerifyRequest, claimStore: FfiClaimStore, receiverBinding: FfiReceiverBindingHook?, trust: FfiTrustProvider?, audience: FfiAudienceProvider?, statusEvidence: FfiStatusEvidenceProvider?, statusJournal: FfiJournalStore?, token: FfiCancelToken)throws  -> FfiLiveVerifyOutcome  {
+    return try  FfiConverterTypeFfiLiveVerifyOutcome_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_live_verify_proof_bundle_barrier(
+        FfiConverterTypeFfiLiveVerifyRequest_lower(request),
+        FfiConverterTypeFfiClaimStore_lower(claimStore),
+        FfiConverterOptionTypeFfiReceiverBindingHook.lower(receiverBinding),
+        FfiConverterOptionTypeFfiTrustProvider.lower(trust),
+        FfiConverterOptionTypeFfiAudienceProvider.lower(audience),
+        FfiConverterOptionTypeFfiStatusEvidenceProvider.lower(statusEvidence),
+        FfiConverterOptionTypeFfiJournalStore.lower(statusJournal),
+        FfiConverterTypeFfiCancelToken_lower(token),uniffiCallStatus
+    )
+})
+}
 func ffiDecodeDelegationCert(data: Data)throws  -> FfiDelegationCert  {
     return try  FfiConverterTypeFfiDelegationCert_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -13028,6 +13046,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle() != 28543) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle_barrier() != 1120) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_delegation_cert() != 57238) {

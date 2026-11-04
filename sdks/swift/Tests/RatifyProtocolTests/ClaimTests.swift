@@ -126,6 +126,7 @@ final class ClaimTests: XCTestCase {
         let claimedAt: Int64
         let finalizeTimeOffset: Int64
         let disposition: ClaimDisposition
+        private var claimed: ChallengeClaim?
         private(set) var claims = 0
         private(set) var progressWrites = 0
         private(set) var finalizations = 0
@@ -137,19 +138,24 @@ final class ClaimTests: XCTestCase {
         func authoritativeTime() -> Int64 { claimedAt }
         func claim(_ claim: ChallengeClaim) -> ClaimResult {
             claims += 1
+            if disposition == .created { claimed = claim }
             return ClaimResult(disposition: disposition, claimedAt: claimedAt,
                 ownerToken: disposition == .created ? Data(repeating: 7, count: 32) : Data())
         }
         func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data,
-                      allowValidUntil: Int64) async -> Bool {
+                      allowValidUntil: Int64) async throws -> Bool {
             if let onFinalize { await onFinalize() }
             XCTAssertEqual(ownerToken, Data(repeating: 7, count: 32))
             XCTAssertFalse(terminalResult.isEmpty)
             XCTAssertFalse(receiptBody.isEmpty)
-            if finalizeTimeOffset != 0 {
-                XCTAssertGreaterThan(allowValidUntil, claimedAt + finalizeTimeOffset)
-            }
             finalizations += 1
+            if finalizeTimeOffset != 0 {
+                let finalTime = claimedAt + finalizeTimeOffset
+                if finalTime < claimedAt { throw StoreError.classified(.clockRegressed, detail: "finalization clock regressed") }
+                if allowValidUntil != 0 && (finalTime >= allowValidUntil || finalTime >= claimed!.expiresAt) {
+                    throw StoreError.classified(.allowHorizonPassed, detail: "allow horizon passed")
+                }
+            }
             return true
         }
         func recordProgress(claimId: String, ownerToken: Data, progress: EvaluationProgress) {
@@ -191,6 +197,45 @@ final class ClaimTests: XCTestCase {
             XCTAssertEqual(trustCalls, callbacks.int("trust"), name)
             XCTAssertEqual(statusCalls, callbacks.int("status"), name)
             XCTAssertEqual(audienceCalls, callbacks.int("audience"), name)
+        }
+    }
+
+    func testVerifierCorpusFinalizationRefusals() async throws {
+        let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
+            $0.obj("expected").s("stage") == "evaluating"
+        }
+        XCTAssertEqual(vectors.count, 2)
+        for vector in vectors {
+            let name = vector.s("name")
+            let req = try request(name)
+            let (trust, status, journal) = try await vectorProviders(vector, request: req)
+            let store = CreatedClaimStore(claimedAt: Int64(vector.int("now")),
+                finalizeTimeOffset: Int64(vector.int("finalize_time_offset")))
+            let outcome = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
+                audience: EmptyAudience(), statusEvidence: status, statusJournal: journal)
+            let expected = vector.obj("expected")
+            let callbacks = expected.obj("callback_counts")
+            XCTAssertEqual(outcome.stage, .evaluating, name)
+            XCTAssertEqual(outcome.errorClass?.rawValue, expected.s("error_class"), name)
+            XCTAssertNil(outcome.committed, name)
+            let claims = await store.claims
+            let finalizations = await store.finalizations
+            let progress = await store.progressWrites
+            let trustCalls = await trust.calls
+            let requests = await status.requests
+            XCTAssertEqual(claims, callbacks.int("claim"), name)
+            XCTAssertEqual(finalizations, callbacks.int("finalize"), name)
+            XCTAssertEqual(progress, callbacks.int("progress"), name)
+            XCTAssertEqual(trustCalls, callbacks.int("trust"), name)
+            XCTAssertEqual(requests.count, callbacks.int("status"), name)
+            let expectedRequests = expected.arr("status_requests")
+            XCTAssertEqual(requests.count, expectedRequests.count, name)
+            for (actual, scripted) in zip(requests, expectedRequests) {
+                XCTAssertEqual(actual.issuerId, scripted.s("issuer_id"), name)
+                XCTAssertEqual(actual.statusKeyEpoch, UInt64(scripted.int("status_key_epoch")), name)
+                XCTAssertEqual(actual.statusKeyId, scripted.s("status_key_id"), name)
+                XCTAssertEqual(actual.refs.map(\.certId), scripted.arr("refs").map { $0.s("cert_id") }, name)
+            }
         }
     }
 

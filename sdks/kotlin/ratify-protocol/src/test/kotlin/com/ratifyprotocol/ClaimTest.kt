@@ -134,12 +134,14 @@ class ClaimTest {
         private val claimedAt: Long = 1_800_000_000L,
         private val finalizeTimeOffset: Long = 0L,
         private val disposition: ClaimDisposition = ClaimDisposition.CREATED) : RateAtFinalizationClaimStore {
+        private var claimed: ChallengeClaim? = null
         var claims = 0
         var progressWrites = 0
         var finalizations = 0
         override suspend fun authoritativeTime(): Long = claimedAt
         override suspend fun claim(claim: ChallengeClaim): ClaimResult {
             claims++
+            if (disposition == ClaimDisposition.CREATED) claimed = claim
             return ClaimResult(disposition, claimedAt,
                 if (disposition == ClaimDisposition.CREATED) ByteArray(32) { 7 } else ByteArray(0))
         }
@@ -149,8 +151,13 @@ class ClaimTest {
             org.junit.Assert.assertArrayEquals(ByteArray(32) { 7 }, ownerToken)
             org.junit.Assert.assertTrue(terminalResult.isNotEmpty())
             org.junit.Assert.assertTrue(receiptBody.isNotEmpty())
-            if (finalizeTimeOffset != 0L) org.junit.Assert.assertTrue(allowValidUntil > claimedAt + finalizeTimeOffset)
             finalizations++
+            if (finalizeTimeOffset != 0L) {
+                val finalTime = claimedAt + finalizeTimeOffset
+                if (finalTime < claimedAt) throw StoreError.Classified(ErrorClass.CLOCK_REGRESSED, "finalization clock regressed")
+                if (allowValidUntil != 0L && (finalTime >= allowValidUntil || finalTime >= claimed!!.expiresAt))
+                    throw StoreError.Classified(ErrorClass.ALLOW_HORIZON_PASSED, "allow horizon passed")
+            }
             return true
         }
         override suspend fun recordProgress(claimId: String, ownerToken: ByteArray, progress: EvaluationProgress) {
@@ -189,6 +196,42 @@ class ClaimTest {
             assertEquals(name, callbacks.getInt("trust"), trust.calls.get())
             assertEquals(name, callbacks.getInt("status"), status.requests.size)
             assertEquals(name, callbacks.getInt("audience"), audience.calls.get())
+        }
+    }
+
+    @Test fun verifierCorpusFinalizationRefusals() = runBlocking {
+        val root = File(System.getProperty("ratify.corpus")!!)
+        Corpus.read = { File(root, it).readBytes() }
+        val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
+            it.getJSONObject("expected").getString("stage") == "evaluating"
+        }
+        assertEquals(2, vectors.size)
+        for (vector in vectors) {
+            val name = vector.getString("name")
+            val req = request(name)
+            val (trust, status, journal) = vectorProviders(vector, req)
+            val store = CreatedClaimStore(claimedAt = vector.getLong("now"),
+                finalizeTimeOffset = vector.getLong("finalize_time_offset"))
+            val outcome = verifyProofBundle(req, store, trust = trust,
+                audience = CountingAudience(), statusEvidence = status, statusJournal = journal)
+            val expected = vector.getJSONObject("expected")
+            val callbacks = expected.getJSONObject("callback_counts")
+            assertEquals(name, VerifyStage.EVALUATING, outcome.stage)
+            assertEquals(name, expected.getString("error_class"), outcome.errorClass?.spelling)
+            assertEquals(name, null, outcome.committed)
+            assertEquals(name, callbacks.getInt("claim"), store.claims)
+            assertEquals(name, callbacks.getInt("finalize"), store.finalizations)
+            assertEquals(name, callbacks.getInt("progress"), store.progressWrites)
+            assertEquals(name, callbacks.getInt("trust"), trust.calls.get())
+            assertEquals(name, callbacks.getInt("status"), status.requests.size)
+            val expectedRequests = expected.arr("status_requests")
+            assertEquals(name, expectedRequests.size, status.requests.size)
+            for ((actual, scripted) in status.requests.zip(expectedRequests)) {
+                assertEquals(name, scripted.getString("issuer_id"), actual.issuerId)
+                assertEquals(name, scripted.getLong("status_key_epoch").toULong(), actual.statusKeyEpoch)
+                assertEquals(name, scripted.getString("status_key_id"), actual.statusKeyId)
+                assertEquals(name, scripted.arr("refs").map { it.getString("cert_id") }, actual.refs.map { it.certId })
+            }
         }
     }
 

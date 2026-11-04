@@ -100,6 +100,135 @@ class ChallengeIssuanceTest {
             }
     }
 
+    private class ScenarioStore : ChallengeIssuanceStore {
+        private val records = mutableMapOf<String, ExpectedChallenge>()
+        private var fault = ""
+        val count: Int get() = synchronized(this) { records.size }
+        fun arm(next: String) { synchronized(this) { fault = next } }
+        override suspend fun persist(record: ExpectedChallenge) {
+            synchronized(this) {
+                val active = fault
+                fault = ""
+                if (active == "fail_before_commit") throw StoreError.Unavailable("before commit")
+                val digest = java.util.Base64.getEncoder().encodeToString(challengeClaimDigest(record.value))
+                if (records.containsKey(digest)) throw StoreError.ChallengeIssuanceConflict()
+                records[digest] = record
+                if (active == "fail_after_commit") throw StoreError.Unavailable("after commit")
+            }
+        }
+        override suspend fun load(namespace: String, replayEpoch: Long, claimDigest: ByteArray): ExpectedChallenge =
+            synchronized(this) {
+                val record = records[java.util.Base64.getEncoder().encodeToString(claimDigest)]
+                    ?: throw StoreError.ChallengeIssuanceNotFound()
+                if (record.verifierNamespace != namespace || record.replayEpoch != replayEpoch)
+                    throw StoreError.ChallengeIssuanceNotFound()
+                record
+            }
+    }
+
+    private class ScenarioRandom(private val values: List<ByteArray>) : ChallengeRandomSource {
+        private var index = 0
+        private var attempts = 0
+        private var exhausted = false
+        val calls: Int get() = synchronized(this) { attempts }
+        val wasExhausted: Boolean get() = synchronized(this) { exhausted }
+        val available: Int get() = values.size
+        override suspend fun fill(count: Int): ByteArray = synchronized(this) {
+            attempts++
+            if (index >= values.size) {
+                exhausted = true
+                throw StoreError.Unavailable("random fixture exhausted")
+            }
+            val value = values[index++].copyOf()
+            assertEquals(count, value.size)
+            value
+        }
+    }
+
+    private fun assertBindings(record: ExpectedChallenge, request: ChallengeIssueRequest, label: String) {
+        assertEquals(label, request.verifierNamespace, record.verifierNamespace)
+        assertEquals(label, request.replayEpoch, record.replayEpoch)
+        assertEquals(label, request.verifierId, record.verifierId)
+        assertEquals(label, request.expectedAgentId, record.expectedAgentId)
+        assertEquals(label, request.expectedAgentPublicKey, record.expectedAgentPublicKey)
+        assertEquals(label, request.expectedReceiverId, record.expectedReceiverId)
+        org.junit.Assert.assertArrayEquals(label, request.expectedSessionContext, record.expectedSessionContext)
+    }
+
+    @Test fun challengeIssuanceCorpusIssueAndLoadSteps() = runBlocking {
+        val scenarios = Corpus.load("challenge-issuance.json").arr("scenarios")
+        assertEquals(11, scenarios.size)
+        var checked = 0
+        for (scenario in scenarios) {
+            val name = scenario.getString("name")
+            val store = ScenarioStore()
+            val random = ScenarioRandom(scenario.strings("random_b64").map(java.util.Base64.getDecoder()::decode))
+            val issuedRequests = mutableMapOf<String, ChallengeIssueRequest>()
+            val firstRequest = scenario.arr("steps").first { it.getString("op") == "issue" }.getJSONObject("request")
+            for ((index, step) in scenario.arr("steps").withIndex()) {
+                val label = "$name step $index"
+                val expect = step.getJSONObject("expect")
+                when (step.getString("op")) {
+                    "issue" -> {
+                        checked++
+                        val input = step.getJSONObject("request")
+                        val agent = input.getString("expected_agent")
+                        val request = ChallengeIssueRequest(input.getString("verifier_namespace"),
+                            input.getLong("replay_epoch"), input.getString("verifier_id"),
+                            input.getLong("lifetime_seconds"), Fixture.keyId(agent), Fixture.key(agent),
+                            input.opt("expected_receiver_id") as? String ?: "",
+                            (input.opt("expected_session_context_b64") as? String)?.let(java.util.Base64.getDecoder()::decode))
+                        store.arm(step.optString("persist_fault"))
+                        try {
+                            val issued = issueChallenge(request, Clock(step.getLong("at")), store, random)
+                            assertEquals(label, "issued", expect.getString("result"))
+                            if (expect.getString("result") == "issued") {
+                                assertTrue(label, issued.value.contentEquals(expect.b64("challenge_b64")))
+                                assertEquals(label, expect.getLong("issued_at"), issued.issuedAt)
+                                assertEquals(label, expect.getLong("expires_at"), issued.expiresAt)
+                                assertBindings(issued, request, label)
+                                issuedRequests[java.util.Base64.getEncoder().encodeToString(issued.value)] = request
+                            }
+                        } catch (e: RatifyException) {
+                            assertEquals(label + ": $e", "error", expect.getString("result"))
+                            val expectedClass = if (expect.has("error_class")) expect.getString("error_class") else
+                                if (step.has("persist_fault")) "claim_store_unavailable" else "configuration_invalid"
+                            assertEquals(label, expectedClass, e.errorClass?.spelling)
+                        }
+                        assertEquals(label, expect.getInt("records_after"), store.count)
+                    }
+                    "load" -> {
+                        checked++
+                        assertTrue(label, !step.has("verifier_namespace") && !step.has("replay_epoch"))
+                        try {
+                            val loaded = loadExpectedChallenge(store, firstRequest.getString("verifier_namespace"),
+                                firstRequest.getLong("replay_epoch"), step.b64("challenge_b64"))
+                            assertEquals(label, "found", expect.getString("result"))
+                            if (expect.getString("result") == "found") {
+                                assertTrue(label, loaded.value.contentEquals(step.b64("challenge_b64")))
+                                assertEquals(label, expect.getLong("issued_at"), loaded.issuedAt)
+                                assertEquals(label, expect.getLong("expires_at"), loaded.expiresAt)
+                                val original = issuedRequests[java.util.Base64.getEncoder().encodeToString(loaded.value)]
+                                assertTrue("$label loaded challenge has no issued request", original != null)
+                                assertBindings(loaded, original!!, label)
+                                if (expect.has("expected_receiver_id"))
+                                    assertEquals(label, expect.getString("expected_receiver_id"), loaded.expectedReceiverId)
+                            }
+                        } catch (e: RatifyException) {
+                            assertEquals(label, "expected_challenge_unavailable", e.errorClass?.spelling)
+                            assertEquals(label, "expected_challenge_unavailable", expect.getString("result"))
+                        }
+                    }
+                    "present", "present_concurrent" -> Unit
+                    else -> fail("unsupported corpus operation: ${step.getString("op")}")
+                }
+            }
+            assertTrue(name, !random.wasExhausted)
+            assertEquals(name, random.available - if (name == "expiry_at_timestamp_domain_end") 1 else 0, random.calls)
+        }
+        assertEquals(27, checked)
+    }
+
     @Test fun issuePersistsBeforeExposureAndLoadsByDigest() = runBlocking {
         val step = Corpus.load("challenge-issuance.json").arr("scenarios")[0].arr("steps")[0]
         val req = step.getJSONObject("request")

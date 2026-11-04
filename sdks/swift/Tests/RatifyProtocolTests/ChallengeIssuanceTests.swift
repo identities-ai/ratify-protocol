@@ -98,6 +98,136 @@ final class ChallengeIssuanceTests: XCTestCase {
         }
     }
 
+    actor ScenarioStore: ChallengeIssuanceStore {
+        private var records: [Data: ExpectedChallenge] = [:]
+        private var fault = ""
+        var count: Int { records.count }
+        func arm(_ next: String) { fault = next }
+        func persist(_ record: ExpectedChallenge) throws {
+            let active = fault
+            fault = ""
+            if active == "fail_before_commit" { throw StoreError.unavailable("before commit") }
+            let digest = try Ratify.challengeClaimDigest(record.value)
+            if records[digest] != nil { throw StoreError.challengeIssuanceConflict }
+            records[digest] = record
+            if active == "fail_after_commit" { throw StoreError.unavailable("after commit") }
+        }
+        func load(namespace: String, replayEpoch: Int64, claimDigest: Data) throws -> ExpectedChallenge {
+            guard let record = records[claimDigest], record.verifierNamespace == namespace,
+                  record.replayEpoch == replayEpoch else { throw StoreError.challengeIssuanceNotFound }
+            return record
+        }
+    }
+
+    actor ScenarioRandom: ChallengeRandomSource {
+        let values: [Data]
+        private var index = 0
+        private(set) var calls = 0
+        private(set) var exhausted = false
+        init(_ values: [Data]) { self.values = values }
+        func fill(count: Int) throws -> Data {
+            calls += 1
+            guard index < values.count else {
+                exhausted = true
+                throw StoreError.unavailable("random fixture exhausted")
+            }
+            let value = values[index]
+            index += 1
+            XCTAssertEqual(value.count, count)
+            return value
+        }
+    }
+
+    private func assertBindings(_ record: ExpectedChallenge, _ request: ChallengeIssueRequest, _ label: String) {
+        XCTAssertEqual(record.verifierNamespace, request.verifierNamespace, label)
+        XCTAssertEqual(record.replayEpoch, request.replayEpoch, label)
+        XCTAssertEqual(record.verifierId, request.verifierId, label)
+        XCTAssertEqual(record.expectedAgentId, request.expectedAgentId, label)
+        XCTAssertEqual(record.expectedAgentPublicKey, request.expectedAgentPublicKey, label)
+        XCTAssertEqual(record.expectedReceiverId, request.expectedReceiverId, label)
+        XCTAssertEqual(record.expectedSessionContext, request.expectedSessionContext, label)
+    }
+
+    func testChallengeIssuanceCorpusIssueAndLoadSteps() async throws {
+        let scenarios = Corpus.load("challenge-issuance.json").arr("scenarios")
+        XCTAssertEqual(scenarios.count, 11)
+        var checked = 0
+        for scenario in scenarios {
+            let name = scenario.s("name")
+            let store = ScenarioStore()
+            let random = ScenarioRandom(scenario.strings("random_b64").map { Data(base64Encoded: $0)! })
+            var issuedRequests: [Data: ChallengeIssueRequest] = [:]
+            let firstRequest = scenario.arr("steps").first { $0.s("op") == "issue" }!.obj("request")
+            for (index, step) in scenario.arr("steps").enumerated() {
+                let label = "\(name) step \(index)"
+                let expect = step.obj("expect")
+                if step.s("op") == "issue" {
+                    checked += 1
+                    let input = step.obj("request")
+                    let request = ChallengeIssueRequest(verifierNamespace: input.s("verifier_namespace"),
+                        replayEpoch: Int64(input.int("replay_epoch")), verifierId: input.s("verifier_id"),
+                        lifetimeSeconds: Int64(input.int("lifetime_seconds")),
+                        expectedAgentId: Fixture.shared.keyId(input.s("expected_agent")),
+                        expectedAgentPublicKey: Fixture.shared.key(input.s("expected_agent")),
+                        expectedReceiverId: input["expected_receiver_id"] as? String ?? "",
+                        expectedSessionContext: (input["expected_session_context_b64"] as? String)
+                            .map { Data(base64Encoded: $0)! })
+                    await store.arm(step["persist_fault"] as? String ?? "")
+                    do {
+                        let issued = try await Ratify.issueChallenge(request: request,
+                            clock: Clock(time: Int64(step.int("at"))), store: store, random: random)
+                        XCTAssertEqual(expect.s("result"), "issued", label)
+                        if expect.s("result") == "issued" {
+                            XCTAssertEqual(issued.value, expect.b64("challenge_b64"), label)
+                            XCTAssertEqual(issued.issuedAt, Int64(expect.int("issued_at")), label)
+                            XCTAssertEqual(issued.expiresAt, Int64(expect.int("expires_at")), label)
+                            assertBindings(issued, request, label)
+                            issuedRequests[issued.value] = request
+                        }
+                    } catch {
+                        XCTAssertEqual(expect.s("result"), "error", label + ": \(error)")
+                        let expectedClass = expect["error_class"] as? String ??
+                            ((step["persist_fault"] as? String) != nil ? "claim_store_unavailable" : "configuration_invalid")
+                        XCTAssertEqual(error.errorClass?.rawValue, expectedClass, label)
+                    }
+                    let recordCount = await store.count
+                    XCTAssertEqual(recordCount, expect.int("records_after"), label)
+                } else if step.s("op") == "load" {
+                    checked += 1
+                    XCTAssertNil(step["verifier_namespace"], label)
+                    XCTAssertNil(step["replay_epoch"], label)
+                    do {
+                        let loaded = try await Ratify.loadExpectedChallenge(store: store,
+                            namespace: firstRequest.s("verifier_namespace"),
+                            replayEpoch: Int64(firstRequest.int("replay_epoch")), challenge: step.b64("challenge_b64"))
+                        XCTAssertEqual(expect.s("result"), "found", label)
+                        if expect.s("result") == "found" {
+                            XCTAssertEqual(loaded.value, step.b64("challenge_b64"), label)
+                            XCTAssertEqual(loaded.issuedAt, Int64(expect.int("issued_at")), label)
+                            XCTAssertEqual(loaded.expiresAt, Int64(expect.int("expires_at")), label)
+                            if let request = issuedRequests[loaded.value] {
+                                assertBindings(loaded, request, label)
+                            } else { XCTFail("loaded challenge has no issued request: \(label)") }
+                            if let receiver = expect["expected_receiver_id"] as? String {
+                                XCTAssertEqual(loaded.expectedReceiverId, receiver, label)
+                            }
+                        }
+                    } catch {
+                        XCTAssertEqual(error.errorClass, .expectedChallengeUnavailable, label)
+                        XCTAssertEqual(expect.s("result"), "expected_challenge_unavailable", label)
+                    }
+                } else if !["present", "present_concurrent"].contains(step.s("op")) {
+                    XCTFail("unsupported corpus operation: \(step.s("op"))")
+                }
+            }
+            let calls = await random.calls
+            let exhausted = await random.exhausted
+            XCTAssertFalse(exhausted, name)
+            XCTAssertEqual(calls, random.values.count - (name == "expiry_at_timestamp_domain_end" ? 1 : 0), name)
+        }
+        XCTAssertEqual(checked, 27)
+    }
+
     func testIssuePersistsBeforeExposureAndLoadsByDigest() async throws {
         let step = Corpus.load("challenge-issuance.json").arr("scenarios")[0].arr("steps")[0]
         let request = step.obj("request")

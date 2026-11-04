@@ -208,13 +208,28 @@ final class ClaimTests: XCTestCase {
         let key: HybridPublicKey
         let outcome: TrustOutcome
         let fails: Bool
+        let registry: [HybridPublicKey]?
         private(set) var calls = 0
-        init(key: HybridPublicKey, outcome: TrustOutcome, fails: Bool = false) {
-            self.key = key; self.outcome = outcome; self.fails = fails
+        init(key: HybridPublicKey, outcome: TrustOutcome, fails: Bool = false,
+             registry: [HybridPublicKey]? = nil) {
+            self.key = key; self.outcome = outcome; self.fails = fails; self.registry = registry
         }
         func resolve(chain: [DelegationCert]) throws -> TrustResolution {
             calls += 1
             if fails { throw StoreError.unavailable("scripted trust failure") }
+            if let registry {
+                guard let root = chain.last else { return TrustResolution(outcome: .untrusted, rootKey: key) }
+                var match: HybridPublicKey?
+                for candidate in registry {
+                    if try Ratify.keyId(candidate) != root.issuerId &&
+                        candidate.ed25519 != root.issuerPubKey.ed25519 &&
+                        candidate.mlDsa65 != root.issuerPubKey.mlDsa65 { continue }
+                    if match != nil { return TrustResolution(outcome: .ambiguous, rootKey: key) }
+                    match = candidate
+                }
+                return match.map { TrustResolution(outcome: .trusted, rootKey: $0) } ??
+                    TrustResolution(outcome: .untrusted, rootKey: key)
+            }
             return TrustResolution(outcome: outcome, rootKey: key)
         }
     }
@@ -289,10 +304,13 @@ final class ClaimTests: XCTestCase {
         -> (VectorTrust, VectorStatus, VectorJournal) {
         let trustScript = vector["trust"] as? [String: Any] ?? [:]
         let root = trustScript["root_public_key"] as? [String: Any]
+        let records = (trustScript["registry"] as? [[String: Any]])?.map {
+            HybridPublicKey(ed25519: $0.b64("ed25519"), mlDsa65: $0.b64("ml_dsa_65"))
+        }
         let trust = VectorTrust(key: root.map { HybridPublicKey(ed25519: $0.b64("ed25519"), mlDsa65: $0.b64("ml_dsa_65")) }
             ?? HybridPublicKey(ed25519: Data(), mlDsa65: Data()),
             outcome: TrustOutcome(rawValue: trustScript["outcome"] as? String ?? "") ?? .unavailable,
-            fails: trustScript["mode"] as? String == "error")
+            fails: trustScript["mode"] as? String == "error", registry: records)
         let evidence = vector.obj("status_evidence").mapValues { value -> [StatusEvidenceObject] in
             let script = value as! [String: Any]
             return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }
@@ -343,6 +361,7 @@ final class ClaimTests: XCTestCase {
             return vector.obj("expected").s("stage") == "committed" &&
                 vector.s("claim_store") == "create" &&
                 (vector["trust"] is NSNull || trust["mode"] as? String == "error" ||
+                    trust["mode"] as? String == "registry" ||
                     trust["mode"] as? String == "ok" &&
                     TrustOutcome(rawValue: trust["outcome"] as? String ?? "") != nil) &&
                 ["ok", "error"].contains(vector.s("audience_mode")) &&
@@ -355,7 +374,7 @@ final class ClaimTests: XCTestCase {
                 ["absent", "accept"].contains(vector.s("receiver_binding_hook")) &&
                 evidence.values.allSatisfy { $0["mode"] as? String != "panic" }
         }
-        XCTAssertEqual(vectors.count, 351)
+        XCTAssertEqual(vectors.count, 356)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {

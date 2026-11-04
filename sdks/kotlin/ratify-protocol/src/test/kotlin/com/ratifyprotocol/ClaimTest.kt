@@ -231,11 +231,24 @@ class ClaimTest {
     }
 
     private class VectorTrust(private val key: HybridPublicKey, private val outcome: TrustOutcome,
-        private val fails: Boolean = false) : TrustProvider {
+        private val fails: Boolean = false, private val registry: List<HybridPublicKey>? = null) : TrustProvider {
         val calls = AtomicInteger()
         override suspend fun resolve(chain: List<DelegationCert>): TrustResolution {
             calls.incrementAndGet()
             if (fails) error("scripted trust failure")
+            if (registry != null) {
+                val root = chain.lastOrNull() ?: return TrustResolution(TrustOutcome.UNTRUSTED, key)
+                var match: HybridPublicKey? = null
+                for (candidate in registry) {
+                    if (keyId(candidate) != root.issuerId &&
+                        !candidate.ed25519.contentEquals(root.issuerPubKey.ed25519) &&
+                        !candidate.mlDsa65.contentEquals(root.issuerPubKey.mlDsa65)) continue
+                    if (match != null) return TrustResolution(TrustOutcome.AMBIGUOUS, key)
+                    match = candidate
+                }
+                return if (match == null) TrustResolution(TrustOutcome.UNTRUSTED, key)
+                    else TrustResolution(TrustOutcome.TRUSTED, match)
+            }
             return TrustResolution(outcome, key)
         }
     }
@@ -256,7 +269,10 @@ class ClaimTest {
             ?: HybridPublicKey(ByteArray(0), ByteArray(0))
         val trust = VectorTrust(trustKey,
             TrustOutcome.fromSpelling(trustScript.optString("outcome")) ?: TrustOutcome.UNAVAILABLE,
-            trustScript.optString("mode") == "error")
+            trustScript.optString("mode") == "error",
+            trustScript.optJSONArray("registry")?.let { records ->
+                (0 until records.length()).map { publicKeyOf(records.getJSONObject(it)) }
+            })
         val evidenceObject = vector.getJSONObject("status_evidence")
         val evidence = evidenceObject.keys().asSequence().associateWith { issuer ->
             val objects = evidenceObject.getJSONObject(issuer).getJSONArray("objects")
@@ -321,7 +337,8 @@ class ClaimTest {
             val evidence = vector.optJSONObject("status_evidence") ?: JSONObject()
             vector.getJSONObject("expected").getString("stage") == "committed" &&
                 vector.getString("claim_store") == "create" &&
-                (vector.isNull("trust") || trust.optString("mode") == "error" || trust.optString("mode") == "ok" &&
+                (vector.isNull("trust") || trust.optString("mode") in listOf("error", "registry") ||
+                    trust.optString("mode") == "ok" &&
                     TrustOutcome.fromSpelling(trust.optString("outcome")) != null) &&
                 vector.getString("audience_mode") in listOf("ok", "error") &&
                 vector.getString("rate") in listOf("absent", "reserve", "exceeded", "unavailable") &&
@@ -337,7 +354,7 @@ class ClaimTest {
                     evidence.getJSONObject(issuer).optString("mode") != "panic"
                 }
         }
-        assertEquals(351, vectors.size)
+        assertEquals(356, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")

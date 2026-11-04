@@ -10,6 +10,7 @@ uniffi::setup_scaffolding!("ratify_ffi");
 
 mod archival;
 mod context;
+mod device_state;
 mod claim;
 mod live_verify;
 mod release;
@@ -34,6 +35,7 @@ mod verify;
 
 pub use archival::*;
 pub use context::*;
+pub use device_state::*;
 pub use claim::*;
 pub use live_verify::*;
 pub use release::*;

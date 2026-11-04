@@ -17,6 +17,7 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "RatifyProtocol", targets: ["RatifyProtocol"]),
+        .library(name: "RatifyProtocolTestSupport", targets: ["RatifyProtocolTestSupport"]),
     ],
     targets: [
         ffi,
@@ -25,9 +26,14 @@ let package = Package(
             dependencies: ["RatifyProtocolFFI"],
             path: "sdks/swift/Sources/RatifyProtocol"
         ),
+        .target(
+            name: "RatifyProtocolTestSupport",
+            dependencies: ["RatifyProtocol"],
+            path: "sdks/swift/Sources/RatifyProtocolTestSupport"
+        ),
         .testTarget(
             name: "RatifyProtocolTests",
-            dependencies: ["RatifyProtocol"],
+            dependencies: ["RatifyProtocol", "RatifyProtocolTestSupport"],
             path: "sdks/swift/Tests/RatifyProtocolTests"
         ),
     ]

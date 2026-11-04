@@ -1159,6 +1159,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_session_context_bytes(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_device_state_projection_test_only(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_constraint_profile_digest(
@@ -1942,6 +1944,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_session_context_bytes(`inputs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_device_state_projection_test_only(`stateJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_error_class_spellings(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_constraint_profile_digest(`profile`: RustBuffer.ByValue,`kind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2341,6 +2345,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_session_context_bytes() and 0xFFFF) != 38536) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_device_state_projection_test_only() and 0xFFFF) != 2046) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings() and 0xFFFF) != 14258) {
@@ -13950,6 +13957,69 @@ internal object FfiConverterTypeFfiDelegationCert: FfiConverterRustBuffer<FfiDel
 
 
 
+internal data class FfiDeviceStateProjectionTestOnly (
+    var `claims`: kotlin.ByteArray
+    ,
+    var `streams`: kotlin.ByteArray
+    ,
+    var `rateCounters`: kotlin.ByteArray
+    ,
+    var `receiptLog`: kotlin.ByteArray
+    ,
+    var `issuanceRecords`: kotlin.ByteArray
+    ,
+    var `projection`: kotlin.ByteArray
+    ,
+    var `completeStateDigest`: kotlin.ByteArray
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiDeviceStateProjectionTestOnly: FfiConverterRustBuffer<FfiDeviceStateProjectionTestOnly> {
+    override fun read(buf: ByteBuffer): FfiDeviceStateProjectionTestOnly {
+        return FfiDeviceStateProjectionTestOnly(
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiDeviceStateProjectionTestOnly) = (
+            FfiConverterByteArray.allocationSize(value.`claims`) +
+            FfiConverterByteArray.allocationSize(value.`streams`) +
+            FfiConverterByteArray.allocationSize(value.`rateCounters`) +
+            FfiConverterByteArray.allocationSize(value.`receiptLog`) +
+            FfiConverterByteArray.allocationSize(value.`issuanceRecords`) +
+            FfiConverterByteArray.allocationSize(value.`projection`) +
+            FfiConverterByteArray.allocationSize(value.`completeStateDigest`)
+    )
+
+    override fun write(value: FfiDeviceStateProjectionTestOnly, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`claims`, buf)
+            FfiConverterByteArray.write(value.`streams`, buf)
+            FfiConverterByteArray.write(value.`rateCounters`, buf)
+            FfiConverterByteArray.write(value.`receiptLog`, buf)
+            FfiConverterByteArray.write(value.`issuanceRecords`, buf)
+            FfiConverterByteArray.write(value.`projection`, buf)
+            FfiConverterByteArray.write(value.`completeStateDigest`, buf)
+    }
+}
+
+
+
 internal data class FfiEvaluationProgress (
     var `trustAssessment`: kotlin.String
     , 
@@ -19957,6 +20027,18 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     )
     }
     
+
+    @Throws(FfiException::class) internal fun `ffiDeviceStateProjectionTestOnly`(`stateJson`: kotlin.ByteArray): FfiDeviceStateProjectionTestOnly {
+            return FfiConverterTypeFfiDeviceStateProjectionTestOnly.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_device_state_projection_test_only(
+
+
+        FfiConverterByteArray.lower(`stateJson`),_status)
+}
+    )
+    }
+
 
         /**
          * Every §2.7 class spelling in table order. The Swift and Kotlin

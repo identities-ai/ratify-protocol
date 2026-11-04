@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "ratify-protocol-kotlin"
 include(":ratify-protocol")
+include(":ratify-protocol-testing")

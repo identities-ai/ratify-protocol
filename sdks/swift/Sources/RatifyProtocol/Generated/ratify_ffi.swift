@@ -7778,6 +7778,80 @@ func FfiConverterTypeFfiDelegationCert_lower(_ value: FfiDelegationCert) -> Rust
 }
 
 
+struct FfiDeviceStateProjectionTestOnly: Equatable, Hashable {
+    var claims: Data
+    var streams: Data
+    var rateCounters: Data
+    var receiptLog: Data
+    var issuanceRecords: Data
+    var projection: Data
+    var completeStateDigest: Data
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(claims: Data, streams: Data, rateCounters: Data, receiptLog: Data, issuanceRecords: Data, projection: Data, completeStateDigest: Data) {
+        self.claims = claims
+        self.streams = streams
+        self.rateCounters = rateCounters
+        self.receiptLog = receiptLog
+        self.issuanceRecords = issuanceRecords
+        self.projection = projection
+        self.completeStateDigest = completeStateDigest
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiDeviceStateProjectionTestOnly: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiDeviceStateProjectionTestOnly: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiDeviceStateProjectionTestOnly {
+        return
+            try FfiDeviceStateProjectionTestOnly(
+                claims: FfiConverterData.read(from: &buf),
+                streams: FfiConverterData.read(from: &buf),
+                rateCounters: FfiConverterData.read(from: &buf),
+                receiptLog: FfiConverterData.read(from: &buf),
+                issuanceRecords: FfiConverterData.read(from: &buf),
+                projection: FfiConverterData.read(from: &buf),
+                completeStateDigest: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiDeviceStateProjectionTestOnly, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.claims, into: &buf)
+        FfiConverterData.write(value.streams, into: &buf)
+        FfiConverterData.write(value.rateCounters, into: &buf)
+        FfiConverterData.write(value.receiptLog, into: &buf)
+        FfiConverterData.write(value.issuanceRecords, into: &buf)
+        FfiConverterData.write(value.projection, into: &buf)
+        FfiConverterData.write(value.completeStateDigest, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiDeviceStateProjectionTestOnly_lift(_ buf: RustBuffer) throws -> FfiDeviceStateProjectionTestOnly {
+    return try FfiConverterTypeFfiDeviceStateProjectionTestOnly.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiDeviceStateProjectionTestOnly_lower(_ value: FfiDeviceStateProjectionTestOnly) -> RustBuffer {
+    return FfiConverterTypeFfiDeviceStateProjectionTestOnly.lower(value)
+}
+
+
 struct FfiEvaluationProgress: Equatable, Hashable {
     var trustAssessment: String
     var statusAssessment: String
@@ -13874,6 +13948,14 @@ func ffiSessionContextBytes(inputs: FfiSessionContextInputs)throws  -> Data  {
     )
 })
 }
+func ffiDeviceStateProjectionTestOnly(stateJson: Data)throws  -> FfiDeviceStateProjectionTestOnly  {
+    return try  FfiConverterTypeFfiDeviceStateProjectionTestOnly_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_device_state_projection_test_only(
+        FfiConverterData.lower(stateJson),uniffiCallStatus
+    )
+})
+}
 /**
  * Every §2.7 class spelling in table order. The Swift and Kotlin
  * `ErrorClass` enums are pinned to this list by a test.
@@ -15074,6 +15156,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_session_context_bytes() != 38536) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_device_state_projection_test_only() != 2046) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings() != 14258) {

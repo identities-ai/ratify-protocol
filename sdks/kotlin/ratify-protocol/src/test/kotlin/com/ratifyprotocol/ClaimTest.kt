@@ -137,6 +137,7 @@ class ClaimTest {
         private var claimed: ChallengeClaim? = null
         var claims = 0
         var progressWrites = 0
+        val progressRecords = mutableListOf<EvaluationProgress>()
         var finalizations = 0
         val allowHorizons = mutableListOf<Long>()
         override suspend fun authoritativeTime(): Long = claimedAt
@@ -162,6 +163,7 @@ class ClaimTest {
         }
         override suspend fun recordProgress(claimId: String, ownerToken: ByteArray, progress: EvaluationProgress) {
             progressWrites++
+            progressRecords.add(progress)
         }
         override suspend fun loadInterrupted(claimId: String): InterruptedClaim = error("no interruption")
         override suspend fun recoverInterrupted(claimId: String, terminalResult: ByteArray,
@@ -471,6 +473,14 @@ class ClaimTest {
             assertEquals(name, listOf(vector.getJSONObject("expected").optLong("allow_valid_until")), store.allowHorizons)
             assertEquals(name, vector.getJSONObject("expected").getJSONObject("callback_counts").getInt("progress"),
                 store.progressWrites)
+            val expectedEvidence: List<StatusEvidenceEntry> = vector.getJSONObject("expected").optJSONArray("status_evidence")?.let { array ->
+                (0 until array.length()).map { index ->
+                    val item = array.getJSONObject(index)
+                    StatusEvidenceEntry(item.getString("issuer_id"), item.getString("status_key_id"),
+                        item.getLong("sequence"), item.getInt("object_type_code").toUShort(), item.getString("digest"))
+                }
+            } ?: emptyList()
+            assertEquals(name, expectedEvidence, store.progressRecords.lastOrNull()?.statusEvidence ?: emptyList<StatusEvidenceEntry>())
             val callbacks = vector.getJSONObject("expected").getJSONObject("callback_counts")
             assertEquals(name, callbacks.getInt("receiver_binding"), receiver?.calls?.get() ?: 0)
             assertEquals(name, callbacks.getInt("trust"), trust.calls.get())

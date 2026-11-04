@@ -129,6 +129,7 @@ final class ClaimTests: XCTestCase {
         private var claimed: ChallengeClaim?
         private(set) var claims = 0
         private(set) var progressWrites = 0
+        private(set) var progressRecords: [EvaluationProgress] = []
         private(set) var finalizations = 0
         private(set) var allowHorizons: [Int64] = []
         init(onFinalize: (@Sendable () async -> Void)? = nil, claimedAt: Int64 = 1_800_000_000,
@@ -160,6 +161,7 @@ final class ClaimTests: XCTestCase {
         }
         func recordProgress(claimId: String, ownerToken: Data, progress: EvaluationProgress) {
             progressWrites += 1
+            progressRecords.append(progress)
         }
         func loadInterrupted(claimId: String) -> InterruptedClaim { fatalError("no interruption") }
         func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) -> Bool {
@@ -494,6 +496,13 @@ final class ClaimTests: XCTestCase {
             let finalizations = await store.finalizations
             let allowHorizons = await store.allowHorizons
             let progressWrites = await store.progressWrites
+            let progressRecords = await store.progressRecords
+            let expectedEvidence = (vector.obj("expected")["status_evidence"] as? [[String: Any]] ?? []).map {
+                StatusEvidenceEntry(issuerId: $0.s("issuer_id"), statusKeyId: $0.s("status_key_id"),
+                    sequence: Int64($0.int("sequence")), objectType: UInt16($0.int("object_type_code")),
+                    digest: $0.s("digest"))
+            }
+            XCTAssertEqual(progressRecords.last?.statusEvidence ?? [], expectedEvidence, name)
             let trustCalls = await trust.calls
             let statusRequests = await status.requests
             let audienceCalls = await audience.calls

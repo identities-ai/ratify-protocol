@@ -3721,6 +3721,220 @@ func FfiConverterTypeFfiConstraint_lower(_ value: FfiConstraint) -> RustBuffer {
 }
 
 
+struct FfiConstraintContext: Equatable, Hashable {
+    var requestedAmountMicros: Int64
+    var requestedCurrency: String
+    var hasAmount: Bool
+    var requestedResourceId: String
+    var requestedPath: String
+    var hasResource: Bool
+    var extensionCounts: [String: Int64]
+    var extensionValues: [String: String]
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(requestedAmountMicros: Int64, requestedCurrency: String, hasAmount: Bool, requestedResourceId: String, requestedPath: String, hasResource: Bool, extensionCounts: [String: Int64], extensionValues: [String: String]) {
+        self.requestedAmountMicros = requestedAmountMicros
+        self.requestedCurrency = requestedCurrency
+        self.hasAmount = hasAmount
+        self.requestedResourceId = requestedResourceId
+        self.requestedPath = requestedPath
+        self.hasResource = hasResource
+        self.extensionCounts = extensionCounts
+        self.extensionValues = extensionValues
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiConstraintContext: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiConstraintContext: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiConstraintContext {
+        return
+            try FfiConstraintContext(
+                requestedAmountMicros: FfiConverterInt64.read(from: &buf), 
+                requestedCurrency: FfiConverterString.read(from: &buf), 
+                hasAmount: FfiConverterBool.read(from: &buf), 
+                requestedResourceId: FfiConverterString.read(from: &buf), 
+                requestedPath: FfiConverterString.read(from: &buf), 
+                hasResource: FfiConverterBool.read(from: &buf), 
+                extensionCounts: FfiConverterDictionaryStringInt64.read(from: &buf), 
+                extensionValues: FfiConverterDictionaryStringString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiConstraintContext, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.requestedAmountMicros, into: &buf)
+        FfiConverterString.write(value.requestedCurrency, into: &buf)
+        FfiConverterBool.write(value.hasAmount, into: &buf)
+        FfiConverterString.write(value.requestedResourceId, into: &buf)
+        FfiConverterString.write(value.requestedPath, into: &buf)
+        FfiConverterBool.write(value.hasResource, into: &buf)
+        FfiConverterDictionaryStringInt64.write(value.extensionCounts, into: &buf)
+        FfiConverterDictionaryStringString.write(value.extensionValues, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintContext_lift(_ buf: RustBuffer) throws -> FfiConstraintContext {
+    return try FfiConverterTypeFfiConstraintContext.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintContext_lower(_ value: FfiConstraintContext) -> RustBuffer {
+    return FfiConverterTypeFfiConstraintContext.lower(value)
+}
+
+
+struct FfiConstraintEvaluationInput: Equatable, Hashable {
+    var kind: String
+    var paramsJson: Data?
+    var delegationIndex: UInt64
+    var constraintIndex: UInt64
+    var issuerId: String
+    var certId: String
+    var context: FfiConstraintContext
+    var evaluationTime: Int64
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(kind: String, paramsJson: Data?, delegationIndex: UInt64, constraintIndex: UInt64, issuerId: String, certId: String, context: FfiConstraintContext, evaluationTime: Int64) {
+        self.kind = kind
+        self.paramsJson = paramsJson
+        self.delegationIndex = delegationIndex
+        self.constraintIndex = constraintIndex
+        self.issuerId = issuerId
+        self.certId = certId
+        self.context = context
+        self.evaluationTime = evaluationTime
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiConstraintEvaluationInput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiConstraintEvaluationInput: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiConstraintEvaluationInput {
+        return
+            try FfiConstraintEvaluationInput(
+                kind: FfiConverterString.read(from: &buf), 
+                paramsJson: FfiConverterOptionData.read(from: &buf), 
+                delegationIndex: FfiConverterUInt64.read(from: &buf), 
+                constraintIndex: FfiConverterUInt64.read(from: &buf), 
+                issuerId: FfiConverterString.read(from: &buf), 
+                certId: FfiConverterString.read(from: &buf), 
+                context: FfiConverterTypeFfiConstraintContext.read(from: &buf), 
+                evaluationTime: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiConstraintEvaluationInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterOptionData.write(value.paramsJson, into: &buf)
+        FfiConverterUInt64.write(value.delegationIndex, into: &buf)
+        FfiConverterUInt64.write(value.constraintIndex, into: &buf)
+        FfiConverterString.write(value.issuerId, into: &buf)
+        FfiConverterString.write(value.certId, into: &buf)
+        FfiConverterTypeFfiConstraintContext.write(value.context, into: &buf)
+        FfiConverterInt64.write(value.evaluationTime, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluationInput_lift(_ buf: RustBuffer) throws -> FfiConstraintEvaluationInput {
+    return try FfiConverterTypeFfiConstraintEvaluationInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluationInput_lower(_ value: FfiConstraintEvaluationInput) -> RustBuffer {
+    return FfiConverterTypeFfiConstraintEvaluationInput.lower(value)
+}
+
+
+struct FfiConstraintEvaluationResult: Equatable, Hashable {
+    var outcome: String
+    var validUntil: Int64
+    var detail: String
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(outcome: String, validUntil: Int64, detail: String) {
+        self.outcome = outcome
+        self.validUntil = validUntil
+        self.detail = detail
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiConstraintEvaluationResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiConstraintEvaluationResult: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiConstraintEvaluationResult {
+        return
+            try FfiConstraintEvaluationResult(
+                outcome: FfiConverterString.read(from: &buf), 
+                validUntil: FfiConverterInt64.read(from: &buf), 
+                detail: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiConstraintEvaluationResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.outcome, into: &buf)
+        FfiConverterInt64.write(value.validUntil, into: &buf)
+        FfiConverterString.write(value.detail, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluationResult_lift(_ buf: RustBuffer) throws -> FfiConstraintEvaluationResult {
+    return try FfiConverterTypeFfiConstraintEvaluationResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluationResult_lower(_ value: FfiConstraintEvaluationResult) -> RustBuffer {
+    return FfiConverterTypeFfiConstraintEvaluationResult.lower(value)
+}
+
+
 struct FfiConstraintEvaluatorRef: Equatable, Hashable {
     var kind: String
     var profileDigest: String
@@ -8053,6 +8267,58 @@ fileprivate struct FfiConverterDictionaryInt64Data: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterDictionaryStringInt64: FfiConverterRustBuffer {
+    static func write(_ value: [String: Int64], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterInt64.write(value, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: Int64] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: Int64]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterInt64.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
+    static func write(_ value: [String: String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterString.write(value, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: String] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: String]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterString.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterDictionaryStringTypeFfiParamsValue: FfiConverterRustBuffer {
     static func write(_ value: [String: FfiParamsValue], into buf: inout [UInt8]) {
         let len = Int32(value.count)
@@ -8276,6 +8542,38 @@ func ffiErrorClassSpellings()throws  -> [String]  {
     uniffi_ratify_protocol_ffi_fn_func_ffi_error_class_spellings(uniffiCallStatus
     )
 })
+}
+func ffiConstraintProfileDigest(profile: String, kind: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_constraint_profile_digest(
+        FfiConverterString.lower(profile),
+        FfiConverterString.lower(kind),uniffiCallStatus
+    )
+})
+}
+func ffiEvaluateAllowedValues(input: FfiConstraintEvaluationInput)throws  -> FfiConstraintEvaluationResult  {
+    return try  FfiConverterTypeFfiConstraintEvaluationResult_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_evaluate_allowed_values(
+        FfiConverterTypeFfiConstraintEvaluationInput_lower(input),uniffiCallStatus
+    )
+})
+}
+func ffiEvaluateMaxCount(input: FfiConstraintEvaluationInput)throws  -> FfiConstraintEvaluationResult  {
+    return try  FfiConverterTypeFfiConstraintEvaluationResult_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_evaluate_max_count(
+        FfiConverterTypeFfiConstraintEvaluationInput_lower(input),uniffiCallStatus
+    )
+})
+}
+func ffiValidateRequestContext(context: FfiConstraintContext)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_validate_request_context(
+        FfiConverterTypeFfiConstraintContext_lower(context),uniffiCallStatus
+    )
+}
 }
 func ffiApplyRevocationListToJournal(store: FfiJournalStore, token: FfiCancelToken, list: FfiRevocationList, issuerId: String, epoch: UInt64, key: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws  -> FfiJournalSnapshot  {
     return try  FfiConverterTypeFfiJournalSnapshot_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
@@ -9346,6 +9644,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings() != 14258) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_constraint_profile_digest() != 7791) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_evaluate_allowed_values() != 33825) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_evaluate_max_count() != 41605) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_request_context() != 33413) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list_to_journal() != 32159) {

@@ -90,12 +90,61 @@ public final class com/ratifyprotocol/Constraint {
 	public fun hashCode ()I
 }
 
+public final class com/ratifyprotocol/ConstraintContext {
+	public fun <init> ()V
+	public fun <init> (JLjava/lang/String;ZLjava/lang/String;Ljava/lang/String;ZLjava/util/Map;Ljava/util/Map;)V
+	public synthetic fun <init> (JLjava/lang/String;ZLjava/lang/String;Ljava/lang/String;ZLjava/util/Map;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getExtensionCounts ()Ljava/util/Map;
+	public final fun getExtensionValues ()Ljava/util/Map;
+	public final fun getHasAmount ()Z
+	public final fun getHasResource ()Z
+	public final fun getRequestedAmountMicros ()J
+	public final fun getRequestedCurrency ()Ljava/lang/String;
+	public final fun getRequestedPath ()Ljava/lang/String;
+	public final fun getRequestedResourceId ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/ConstraintEvaluationInput {
+	public synthetic fun <init> (Ljava/lang/String;[BJJLjava/lang/String;Ljava/lang/String;Lcom/ratifyprotocol/ConstraintContext;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;[BJJLjava/lang/String;Ljava/lang/String;Lcom/ratifyprotocol/ConstraintContext;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCertId ()Ljava/lang/String;
+	public final fun getConstraintIndex-s-VKNKU ()J
+	public final fun getContext ()Lcom/ratifyprotocol/ConstraintContext;
+	public final fun getDelegationIndex-s-VKNKU ()J
+	public final fun getEvaluationTime ()J
+	public final fun getIssuerId ()Ljava/lang/String;
+	public final fun getParamsJson ()[B
+	public final fun getType ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/ConstraintEvaluationResult {
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getOutcome ()Lcom/ratifyprotocol/ConstraintOutcome;
+	public final fun getValidUntil ()J
+}
+
 public final class com/ratifyprotocol/ConstraintEvaluatorRef {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getKind ()Ljava/lang/String;
 	public final fun getProfileDigest ()Ljava/lang/String;
 	public fun hashCode ()I
+}
+
+public final class com/ratifyprotocol/ConstraintOutcome : java/lang/Enum {
+	public static final field DENIED Lcom/ratifyprotocol/ConstraintOutcome;
+	public static final field INVALID Lcom/ratifyprotocol/ConstraintOutcome;
+	public static final field PASS Lcom/ratifyprotocol/ConstraintOutcome;
+	public static final field UNVERIFIABLE Lcom/ratifyprotocol/ConstraintOutcome;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/ConstraintOutcome;
+	public static fun values ()[Lcom/ratifyprotocol/ConstraintOutcome;
+}
+
+public final class com/ratifyprotocol/ConstraintProfileDescriptor {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun getProfile ()Ljava/lang/String;
+	public final fun getType ()Ljava/lang/String;
 }
 
 public final class com/ratifyprotocol/ContextKt {
@@ -204,6 +253,13 @@ public final class com/ratifyprotocol/ErrorClass : java/lang/Enum {
 
 public final class com/ratifyprotocol/ErrorClass$Companion {
 	public final fun fromSpelling (Ljava/lang/String;)Lcom/ratifyprotocol/ErrorClass;
+}
+
+public final class com/ratifyprotocol/EvaluatorKt {
+	public static final fun constraintProfileDigest (Lcom/ratifyprotocol/ConstraintProfileDescriptor;)Ljava/lang/String;
+	public static final fun evaluateAllowedValues (Lcom/ratifyprotocol/ConstraintEvaluationInput;)Lcom/ratifyprotocol/ConstraintEvaluationResult;
+	public static final fun evaluateMaxCount (Lcom/ratifyprotocol/ConstraintEvaluationInput;)Lcom/ratifyprotocol/ConstraintEvaluationResult;
+	public static final fun validateRequestContext (Lcom/ratifyprotocol/ConstraintContext;)V
 }
 
 public final class com/ratifyprotocol/ExpectedChallenge {

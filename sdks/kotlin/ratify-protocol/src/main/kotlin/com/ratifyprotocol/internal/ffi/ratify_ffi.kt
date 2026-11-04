@@ -869,6 +869,14 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_constraint_profile_digest(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_evaluate_allowed_values(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_evaluate_max_count(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_request_context(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list_to_journal(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_push_to_journal(
@@ -1391,6 +1399,14 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_error_class_spellings(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_constraint_profile_digest(`profile`: RustBuffer.ByValue,`kind`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_evaluate_allowed_values(`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_evaluate_max_count(`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_validate_request_context(`context`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_list_to_journal(`store`: Long,`token`: Long,`list`: RustBuffer.ByValue,`issuerId`: RustBuffer.ByValue,`epoch`: Long,`key`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`now`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_push_to_journal(`store`: Long,`token`: Long,`push`: RustBuffer.ByValue,`issuerId`: RustBuffer.ByValue,`epoch`: Long,`key`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`now`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1766,6 +1782,18 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings() and 0xFFFF) != 14258) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_constraint_profile_digest() and 0xFFFF) != 7791) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_evaluate_allowed_values() and 0xFFFF) != 33825) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_evaluate_max_count() and 0xFFFF) != 41605) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_request_context() and 0xFFFF) != 33413) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list_to_journal() and 0xFFFF) != 32159) {
@@ -7579,6 +7607,185 @@ internal object FfiConverterTypeFfiConstraint: FfiConverterRustBuffer<FfiConstra
 
 
 
+internal data class FfiConstraintContext (
+    var `requestedAmountMicros`: kotlin.Long
+    , 
+    var `requestedCurrency`: kotlin.String
+    , 
+    var `hasAmount`: kotlin.Boolean
+    , 
+    var `requestedResourceId`: kotlin.String
+    , 
+    var `requestedPath`: kotlin.String
+    , 
+    var `hasResource`: kotlin.Boolean
+    , 
+    var `extensionCounts`: Map<kotlin.String, kotlin.Long>
+    , 
+    var `extensionValues`: Map<kotlin.String, kotlin.String>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiConstraintContext: FfiConverterRustBuffer<FfiConstraintContext> {
+    override fun read(buf: ByteBuffer): FfiConstraintContext {
+        return FfiConstraintContext(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterMapStringLong.read(buf),
+            FfiConverterMapStringString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiConstraintContext) = (
+            FfiConverterLong.allocationSize(value.`requestedAmountMicros`) +
+            FfiConverterString.allocationSize(value.`requestedCurrency`) +
+            FfiConverterBoolean.allocationSize(value.`hasAmount`) +
+            FfiConverterString.allocationSize(value.`requestedResourceId`) +
+            FfiConverterString.allocationSize(value.`requestedPath`) +
+            FfiConverterBoolean.allocationSize(value.`hasResource`) +
+            FfiConverterMapStringLong.allocationSize(value.`extensionCounts`) +
+            FfiConverterMapStringString.allocationSize(value.`extensionValues`)
+    )
+
+    override fun write(value: FfiConstraintContext, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`requestedAmountMicros`, buf)
+            FfiConverterString.write(value.`requestedCurrency`, buf)
+            FfiConverterBoolean.write(value.`hasAmount`, buf)
+            FfiConverterString.write(value.`requestedResourceId`, buf)
+            FfiConverterString.write(value.`requestedPath`, buf)
+            FfiConverterBoolean.write(value.`hasResource`, buf)
+            FfiConverterMapStringLong.write(value.`extensionCounts`, buf)
+            FfiConverterMapStringString.write(value.`extensionValues`, buf)
+    }
+}
+
+
+
+internal data class FfiConstraintEvaluationInput (
+    var `kind`: kotlin.String
+    , 
+    var `paramsJson`: kotlin.ByteArray?
+    , 
+    var `delegationIndex`: kotlin.ULong
+    , 
+    var `constraintIndex`: kotlin.ULong
+    , 
+    var `issuerId`: kotlin.String
+    , 
+    var `certId`: kotlin.String
+    , 
+    var `context`: FfiConstraintContext
+    , 
+    var `evaluationTime`: kotlin.Long
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiConstraintEvaluationInput: FfiConverterRustBuffer<FfiConstraintEvaluationInput> {
+    override fun read(buf: ByteBuffer): FfiConstraintEvaluationInput {
+        return FfiConstraintEvaluationInput(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeFfiConstraintContext.read(buf),
+            FfiConverterLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiConstraintEvaluationInput) = (
+            FfiConverterString.allocationSize(value.`kind`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`paramsJson`) +
+            FfiConverterULong.allocationSize(value.`delegationIndex`) +
+            FfiConverterULong.allocationSize(value.`constraintIndex`) +
+            FfiConverterString.allocationSize(value.`issuerId`) +
+            FfiConverterString.allocationSize(value.`certId`) +
+            FfiConverterTypeFfiConstraintContext.allocationSize(value.`context`) +
+            FfiConverterLong.allocationSize(value.`evaluationTime`)
+    )
+
+    override fun write(value: FfiConstraintEvaluationInput, buf: ByteBuffer) {
+            FfiConverterString.write(value.`kind`, buf)
+            FfiConverterOptionalByteArray.write(value.`paramsJson`, buf)
+            FfiConverterULong.write(value.`delegationIndex`, buf)
+            FfiConverterULong.write(value.`constraintIndex`, buf)
+            FfiConverterString.write(value.`issuerId`, buf)
+            FfiConverterString.write(value.`certId`, buf)
+            FfiConverterTypeFfiConstraintContext.write(value.`context`, buf)
+            FfiConverterLong.write(value.`evaluationTime`, buf)
+    }
+}
+
+
+
+internal data class FfiConstraintEvaluationResult (
+    var `outcome`: kotlin.String
+    , 
+    var `validUntil`: kotlin.Long
+    , 
+    var `detail`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiConstraintEvaluationResult: FfiConverterRustBuffer<FfiConstraintEvaluationResult> {
+    override fun read(buf: ByteBuffer): FfiConstraintEvaluationResult {
+        return FfiConstraintEvaluationResult(
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiConstraintEvaluationResult) = (
+            FfiConverterString.allocationSize(value.`outcome`) +
+            FfiConverterLong.allocationSize(value.`validUntil`) +
+            FfiConverterString.allocationSize(value.`detail`)
+    )
+
+    override fun write(value: FfiConstraintEvaluationResult, buf: ByteBuffer) {
+            FfiConverterString.write(value.`outcome`, buf)
+            FfiConverterLong.write(value.`validUntil`, buf)
+            FfiConverterString.write(value.`detail`, buf)
+    }
+}
+
+
+
 internal data class FfiConstraintEvaluatorRef (
     var `kind`: kotlin.String
     , 
@@ -11740,6 +11947,84 @@ internal object FfiConverterMapLongByteArray: FfiConverterRustBuffer<Map<kotlin.
 /**
  * @suppress
  */
+internal object FfiConverterMapStringLong: FfiConverterRustBuffer<Map<kotlin.String, kotlin.Long>> {
+    override fun read(buf: ByteBuffer): Map<kotlin.String, kotlin.Long> {
+        val len = buf.getInt()
+        return buildMap<kotlin.String, kotlin.Long>(len) {
+            repeat(len) {
+                val k = FfiConverterString.read(buf)
+                val v = FfiConverterLong.read(buf)
+                this[k] = v
+            }
+        }
+    }
+
+    override fun allocationSize(value: Map<kotlin.String, kotlin.Long>): ULong {
+        val spaceForMapSize = 4UL
+        val spaceForChildren = value.map { (k, v) ->
+            FfiConverterString.allocationSize(k) +
+            FfiConverterLong.allocationSize(v)
+        }.sum()
+        return spaceForMapSize + spaceForChildren
+    }
+
+    override fun write(value: Map<kotlin.String, kotlin.Long>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        // The parens on `(k, v)` here ensure we're calling the right method,
+        // which is important for compatibility with older android devices.
+        // Ref https://blog.danlew.net/2017/03/16/kotlin-puzzler-whose-line-is-it-anyways/
+        value.forEach { (k, v) ->
+            FfiConverterString.write(k, buf)
+            FfiConverterLong.write(v, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterMapStringString: FfiConverterRustBuffer<Map<kotlin.String, kotlin.String>> {
+    override fun read(buf: ByteBuffer): Map<kotlin.String, kotlin.String> {
+        val len = buf.getInt()
+        return buildMap<kotlin.String, kotlin.String>(len) {
+            repeat(len) {
+                val k = FfiConverterString.read(buf)
+                val v = FfiConverterString.read(buf)
+                this[k] = v
+            }
+        }
+    }
+
+    override fun allocationSize(value: Map<kotlin.String, kotlin.String>): ULong {
+        val spaceForMapSize = 4UL
+        val spaceForChildren = value.map { (k, v) ->
+            FfiConverterString.allocationSize(k) +
+            FfiConverterString.allocationSize(v)
+        }.sum()
+        return spaceForMapSize + spaceForChildren
+    }
+
+    override fun write(value: Map<kotlin.String, kotlin.String>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        // The parens on `(k, v)` here ensure we're calling the right method,
+        // which is important for compatibility with older android devices.
+        // Ref https://blog.danlew.net/2017/03/16/kotlin-puzzler-whose-line-is-it-anyways/
+        value.forEach { (k, v) ->
+            FfiConverterString.write(k, buf)
+            FfiConverterString.write(v, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterMapStringTypeFfiParamsValue: FfiConverterRustBuffer<Map<kotlin.String, FfiParamsValue>> {
     override fun read(buf: ByteBuffer): Map<kotlin.String, FfiParamsValue> {
         val len = buf.getInt()
@@ -12057,6 +12342,54 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
 }
     )
     }
+    
+
+    @Throws(FfiException::class) internal fun `ffiConstraintProfileDigest`(`profile`: kotlin.String, `kind`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_constraint_profile_digest(
+    
+        
+        FfiConverterString.lower(`profile`),
+        FfiConverterString.lower(`kind`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEvaluateAllowedValues`(`input`: FfiConstraintEvaluationInput): FfiConstraintEvaluationResult {
+            return FfiConverterTypeFfiConstraintEvaluationResult.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_evaluate_allowed_values(
+    
+        
+        FfiConverterTypeFfiConstraintEvaluationInput.lower(`input`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiEvaluateMaxCount`(`input`: FfiConstraintEvaluationInput): FfiConstraintEvaluationResult {
+            return FfiConverterTypeFfiConstraintEvaluationResult.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_evaluate_max_count(
+    
+        
+        FfiConverterTypeFfiConstraintEvaluationInput.lower(`input`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) internal fun `ffiValidateRequestContext`(`context`: FfiConstraintContext)
+        = 
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_validate_request_context(
+    
+        
+        FfiConverterTypeFfiConstraintContext.lower(`context`),_status)
+}
+    
     
 
     @Throws(FfiException::class) internal fun `ffiApplyRevocationListToJournal`(`store`: FfiJournalStore, `token`: FfiCancelToken, `list`: FfiRevocationList, `issuerId`: kotlin.String, `epoch`: kotlin.ULong, `key`: FfiPublicKey, `policy`: FfiStatusPolicy, `now`: kotlin.Long): FfiJournalSnapshot {

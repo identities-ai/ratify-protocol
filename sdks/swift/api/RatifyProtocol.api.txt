@@ -52,6 +52,30 @@ Constraint.resourceId [Var] -> Swift.String
 Constraint.start [Var] -> Swift.String
 Constraint.tz [Var] -> Swift.String
 Constraint.windowS [Var] -> Swift.Int64
+ConstraintContext [Struct]
+ConstraintContext.extensionCounts [Var] -> [Swift.String : Swift.Int64]
+ConstraintContext.extensionValues [Var] -> [Swift.String : Swift.String]
+ConstraintContext.hasAmount [Var] -> Swift.Bool
+ConstraintContext.hasResource [Var] -> Swift.Bool
+ConstraintContext.init(requestedAmountMicros:requestedCurrency:hasAmount:requestedResourceId:requestedPath:hasResource:extensionCounts:extensionValues:) [Constructor] -> RatifyProtocol.ConstraintContext, Swift.Int64, Swift.String, Swift.Bool, Swift.String, Swift.String, Swift.Bool, [Swift.String : Swift.Int64], [Swift.String : Swift.String]
+ConstraintContext.requestedAmountMicros [Var] -> Swift.Int64
+ConstraintContext.requestedCurrency [Var] -> Swift.String
+ConstraintContext.requestedPath [Var] -> Swift.String
+ConstraintContext.requestedResourceId [Var] -> Swift.String
+ConstraintEvaluationInput [Struct]
+ConstraintEvaluationInput.certId [Var] -> Swift.String
+ConstraintEvaluationInput.constraintIndex [Var] -> Swift.UInt64
+ConstraintEvaluationInput.context [Var] -> RatifyProtocol.ConstraintContext
+ConstraintEvaluationInput.delegationIndex [Var] -> Swift.UInt64
+ConstraintEvaluationInput.evaluationTime [Var] -> Swift.Int64
+ConstraintEvaluationInput.init(type:paramsJSON:delegationIndex:constraintIndex:issuerId:certId:context:evaluationTime:) [Constructor] -> RatifyProtocol.ConstraintEvaluationInput, Swift.String, Foundation.Data?, Swift.UInt64, Swift.UInt64, Swift.String, Swift.String, RatifyProtocol.ConstraintContext, Swift.Int64
+ConstraintEvaluationInput.issuerId [Var] -> Swift.String
+ConstraintEvaluationInput.paramsJSON [Var] -> Foundation.Data?
+ConstraintEvaluationInput.type [Var] -> Swift.String
+ConstraintEvaluationResult [Struct]
+ConstraintEvaluationResult.detail [Var] -> Swift.String
+ConstraintEvaluationResult.outcome [Var] -> RatifyProtocol.ConstraintOutcome
+ConstraintEvaluationResult.validUntil [Var] -> Swift.Int64
 ConstraintEvaluatorRef [Struct]
 ConstraintEvaluatorRef.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ConstraintEvaluatorRef, RatifyProtocol.ConstraintEvaluatorRef
 ConstraintEvaluatorRef.hash(into:) [Func] -> (), Swift.Hasher
@@ -59,6 +83,18 @@ ConstraintEvaluatorRef.hashValue [Var] -> Swift.Int
 ConstraintEvaluatorRef.init(kind:profileDigest:) [Constructor] -> RatifyProtocol.ConstraintEvaluatorRef, Swift.String, Swift.String
 ConstraintEvaluatorRef.kind [Var] -> Swift.String
 ConstraintEvaluatorRef.profileDigest [Var] -> Swift.String
+ConstraintOutcome [Enum]
+ConstraintOutcome.RawValue [TypeAlias]
+ConstraintOutcome.denied [EnumElement] -> (RatifyProtocol.ConstraintOutcome.Type) -> RatifyProtocol.ConstraintOutcome
+ConstraintOutcome.init(rawValue:) [Constructor] -> RatifyProtocol.ConstraintOutcome?, Swift.String
+ConstraintOutcome.invalid [EnumElement] -> (RatifyProtocol.ConstraintOutcome.Type) -> RatifyProtocol.ConstraintOutcome
+ConstraintOutcome.pass [EnumElement] -> (RatifyProtocol.ConstraintOutcome.Type) -> RatifyProtocol.ConstraintOutcome
+ConstraintOutcome.rawValue [Var] -> Swift.String
+ConstraintOutcome.unverifiable [EnumElement] -> (RatifyProtocol.ConstraintOutcome.Type) -> RatifyProtocol.ConstraintOutcome
+ConstraintProfileDescriptor [Struct]
+ConstraintProfileDescriptor.init(profile:type:) [Constructor] -> RatifyProtocol.ConstraintProfileDescriptor, Swift.String, Swift.String
+ConstraintProfileDescriptor.profile [Var] -> Swift.String
+ConstraintProfileDescriptor.type [Var] -> Swift.String
 ContextPolicy [Class]
 ContextPolicy.digest [Var] -> Swift.String
 ContextPolicy.expectedSessionContext [Var] -> Foundation.Data
@@ -290,6 +326,7 @@ Ratify.canonicalJSON(_:) [Func] -> Foundation.Data, Foundation.Data
 Ratify.challengeClaimDigest(_:) [Func] -> Foundation.Data, Foundation.Data
 Ratify.checkVerificationReceiptBundleBinding(_:bundle:) [Func] -> (), RatifyProtocol.VerificationReceipt, RatifyProtocol.ProofBundle
 Ratify.configureStatusKeyEpoch(store:issuerId:epoch:key:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, Swift.Duration?
+Ratify.constraintProfileDigest(_:) [Func] -> Swift.String, RatifyProtocol.ConstraintProfileDescriptor
 Ratify.decodeDelegationCert(_:) [Func] -> RatifyProtocol.DelegationCert, Foundation.Data
 Ratify.decodeKeyRotationStatement(_:) [Func] -> RatifyProtocol.KeyRotationStatement, Foundation.Data
 Ratify.decodePayloadDigest(_:) [Func] -> Foundation.Data?, Swift.String?
@@ -313,6 +350,8 @@ Ratify.encodeTransactionReceipt(_:) [Func] -> Foundation.Data, RatifyProtocol.Tr
 Ratify.encodeVerificationReceipt(_:) [Func] -> Foundation.Data, RatifyProtocol.VerificationReceipt
 Ratify.encodeWitnessEntry(_:) [Func] -> Foundation.Data, RatifyProtocol.WitnessEntry
 Ratify.errorClassSpellings() [Func] -> [Swift.String]
+Ratify.evaluateAllowedValues(_:) [Func] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintEvaluationInput
+Ratify.evaluateMaxCount(_:) [Func] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintEvaluationInput
 Ratify.expandScopes(_:) [Func] -> [Swift.String], [Swift.String]
 Ratify.externalMu(mlDsaPublicKey:mlDsaContext:message:) [Func] -> Foundation.Data, Foundation.Data, Foundation.Data, Foundation.Data
 Ratify.intersectScopes(_:) [Func] -> [Swift.String], [[Swift.String]]
@@ -377,6 +416,7 @@ Ratify.transactionPartyRequestHash(_:requiredScope:) [Func] -> Foundation.Data, 
 Ratify.transactionReceiptSignBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.TransactionReceipt
 Ratify.transitionRevocationStatusEpoch(_:issuerId:nextEpoch:nextStatusKey:) [Func] -> RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationStatusState, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey
 Ratify.validId(_:) [Func] -> Swift.Bool, Swift.String
+Ratify.validateRequestContext(_:) [Func] -> (), RatifyProtocol.ConstraintContext
 Ratify.validateScopes(_:) [Func] -> (), [Swift.String]
 Ratify.validateSecurityJournalSnapshot(_:head:) [Func] -> (), Foundation.Data, RatifyProtocol.SecurityJournalHead
 Ratify.validateSecurityJournalTransition(current:next:) [Func] -> (), RatifyProtocol.SecurityJournalSnapshot, RatifyProtocol.SecurityJournalSnapshot

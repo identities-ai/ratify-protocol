@@ -35,6 +35,7 @@ object CorpusRunners {
         "provider-evidence" to ProviderEvidenceVectors::run,
         "security-journal.json" to JournalVectors::run,
         "status-publisher.json" to PublisherVectors::run,
+        "evaluator-profiles.json" to EvaluatorVectors::run,
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
@@ -44,7 +45,6 @@ object CorpusRunners {
         "concurrency-scenarios.json" to "M4",
         "cross-sdk" to "M4",
         "device-state.json" to "M3",
-        "evaluator-profiles.json" to "M3",
         "lifecycle-scenarios.json" to "M3",
         "transaction-verification.json" to "M3",
         "verifier-ordering.json" to "M3",

@@ -2,7 +2,7 @@ import Foundation
 @_spi(TestSupport) import RatifyProtocol
 
 /// Rust Part B reference store for conformance tests.
-public final class Store: ClaimStore {
+public final class Store: ClaimStore, CommittedClaimStore, ReleaseClaimStore, ReceiptPublisher, ReceiptCheckpoint {
     private let bridge: ReferenceStoreBridge
 
     public init(now: Int64, leaseSeconds: Int64, logId: String, verifierKey: SoftwarePrivateKey) throws(RatifyError) {
@@ -35,5 +35,19 @@ public final class Store: ClaimStore {
     public func loadInterrupted(claimId: String) async throws -> InterruptedClaim { try bridge.loadInterrupted(claimId: claimId) }
     public func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) async throws -> Bool {
         try bridge.recoverInterrupted(claimId: claimId, terminalResult: terminalResult, receiptBody: receiptBody)
+    }
+
+    public func loadCommitted(claimId: String) async throws -> CommittedClaim { try bridge.loadCommitted(claimId: claimId) }
+    public func loadTerminal(claimId: String) async throws -> TerminalClaimRecord { try bridge.loadTerminal(claimId: claimId) }
+    public func recordRelease(_ record: ReleaseRecord) async throws { try bridge.recordRelease(record) }
+    public func publish(claimId: String, receiptBody: Data) async throws -> Data {
+        try bridge.publish(claimId: claimId, receiptBody: receiptBody)
+    }
+    public func acknowledge(logId: String, sequence: Int64, previousEntryHash: Data,
+                            entryHash: Data) async throws -> CheckpointAcknowledgement {
+        try bridge.acknowledge(logId: logId, sequence: sequence, previousEntryHash: previousEntryHash, entryHash: entryHash)
+    }
+    public func get(logId: String, sequence: Int64) async throws -> CheckpointAcknowledgement {
+        try bridge.get(logId: logId, sequence: sequence)
     }
 }

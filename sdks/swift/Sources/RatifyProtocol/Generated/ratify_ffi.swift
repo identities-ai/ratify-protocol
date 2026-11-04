@@ -4428,6 +4428,8 @@ protocol FfiReferenceStoreProtocol: AnyObject, Sendable {
 
     func abandonPendingReceipts() throws  -> [String]
 
+    func acknowledgeReceipt(logId: String, sequence: Int64, previousEntryHash: Data, entryHash: Data) throws  -> FfiReferenceStoreReply
+
     func authoritativeTime() throws  -> FfiReferenceStoreReply
 
     func claim(claim: FfiChallengeClaim) throws  -> FfiReferenceStoreReply
@@ -4436,7 +4438,13 @@ protocol FfiReferenceStoreProtocol: AnyObject, Sendable {
 
     func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data, allowValidUntil: Int64) throws  -> FfiReferenceStoreReply
 
+    func getAcknowledgement(logId: String, sequence: Int64) throws  -> FfiReferenceStoreReply
+
+    func loadCommitted(claimId: String) throws  -> FfiReferenceStoreReply
+
     func loadInterrupted(claimId: String) throws  -> FfiReferenceStoreReply
+
+    func loadTerminal(claimId: String) throws  -> FfiReferenceStoreReply
 
     func logLength() throws  -> UInt64
 
@@ -4444,7 +4452,11 @@ protocol FfiReferenceStoreProtocol: AnyObject, Sendable {
 
     func plantReleaseTestOnly(claimId: String, ackTimestamp: Int64) throws
 
+    func publishReceipt(claimId: String, receiptBody: Data) throws  -> FfiReferenceStoreReply
+
     func recordProgress(claimId: String, ownerToken: Data, progress: FfiEvaluationProgress) throws  -> FfiReferenceStoreReply
+
+    func recordRelease(record: FfiReleaseRecord) throws  -> FfiReferenceStoreReply
 
     func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) throws  -> FfiReferenceStoreReply
 
@@ -4529,6 +4541,19 @@ func abandonPendingReceipts()throws  -> [String]  {
 })
 }
 
+func acknowledgeReceipt(logId: String, sequence: Int64, previousEntryHash: Data, entryHash: Data)throws  -> FfiReferenceStoreReply  {
+    return try  FfiConverterTypeFfiReferenceStoreReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_acknowledge_receipt(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(logId),
+        FfiConverterInt64.lower(sequence),
+        FfiConverterData.lower(previousEntryHash),
+        FfiConverterData.lower(entryHash),uniffiCallStatus
+    )
+})
+}
+
 func authoritativeTime()throws  -> FfiReferenceStoreReply  {
     return try  FfiConverterTypeFfiReferenceStoreReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -4571,10 +4596,41 @@ func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBo
 })
 }
 
+func getAcknowledgement(logId: String, sequence: Int64)throws  -> FfiReferenceStoreReply  {
+    return try  FfiConverterTypeFfiReferenceStoreReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_get_acknowledgement(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(logId),
+        FfiConverterInt64.lower(sequence),uniffiCallStatus
+    )
+})
+}
+
+func loadCommitted(claimId: String)throws  -> FfiReferenceStoreReply  {
+    return try  FfiConverterTypeFfiReferenceStoreReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_load_committed(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(claimId),uniffiCallStatus
+    )
+})
+}
+
 func loadInterrupted(claimId: String)throws  -> FfiReferenceStoreReply  {
     return try  FfiConverterTypeFfiReferenceStoreReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_load_interrupted(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(claimId),uniffiCallStatus
+    )
+})
+}
+
+func loadTerminal(claimId: String)throws  -> FfiReferenceStoreReply  {
+    return try  FfiConverterTypeFfiReferenceStoreReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_load_terminal(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(claimId),uniffiCallStatus
     )
@@ -4609,6 +4665,17 @@ func plantReleaseTestOnly(claimId: String, ackTimestamp: Int64)throws   {try rus
 }
 }
 
+func publishReceipt(claimId: String, receiptBody: Data)throws  -> FfiReferenceStoreReply  {
+    return try  FfiConverterTypeFfiReferenceStoreReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_publish_receipt(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(claimId),
+        FfiConverterData.lower(receiptBody),uniffiCallStatus
+    )
+})
+}
+
 func recordProgress(claimId: String, ownerToken: Data, progress: FfiEvaluationProgress)throws  -> FfiReferenceStoreReply  {
     return try  FfiConverterTypeFfiReferenceStoreReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -4617,6 +4684,16 @@ func recordProgress(claimId: String, ownerToken: Data, progress: FfiEvaluationPr
         FfiConverterString.lower(claimId),
         FfiConverterData.lower(ownerToken),
         FfiConverterTypeFfiEvaluationProgress_lower(progress),uniffiCallStatus
+    )
+})
+}
+
+func recordRelease(record: FfiReleaseRecord)throws  -> FfiReferenceStoreReply  {
+    return try  FfiConverterTypeFfiReferenceStoreReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_record_release(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiReleaseRecord_lower(record),uniffiCallStatus
     )
 })
 }
@@ -9156,15 +9233,23 @@ struct FfiReferenceStoreReply: Equatable, Hashable {
     var time: Int64?
     var claim: FfiClaimResult?
     var interrupted: FfiInterruptedClaim?
+    var committed: FfiCommittedClaim?
+    var terminal: FfiTerminalClaimRecord?
+    var receipt: Data?
+    var acknowledgement: FfiCheckpointAcknowledgement?
     var boolean: Bool?
     var failure: FfiReferenceStoreFailure?
 
     // Default memberwise initializers are never by default, so we
     // declare one manually.
-    init(time: Int64?, claim: FfiClaimResult?, interrupted: FfiInterruptedClaim?, boolean: Bool?, failure: FfiReferenceStoreFailure?) {
+    init(time: Int64?, claim: FfiClaimResult?, interrupted: FfiInterruptedClaim?, committed: FfiCommittedClaim?, terminal: FfiTerminalClaimRecord?, receipt: Data?, acknowledgement: FfiCheckpointAcknowledgement?, boolean: Bool?, failure: FfiReferenceStoreFailure?) {
         self.time = time
         self.claim = claim
         self.interrupted = interrupted
+        self.committed = committed
+        self.terminal = terminal
+        self.receipt = receipt
+        self.acknowledgement = acknowledgement
         self.boolean = boolean
         self.failure = failure
     }
@@ -9188,6 +9273,10 @@ struct FfiConverterTypeFfiReferenceStoreReply: FfiConverterRustBuffer {
                 time: FfiConverterOptionInt64.read(from: &buf),
                 claim: FfiConverterOptionTypeFfiClaimResult.read(from: &buf),
                 interrupted: FfiConverterOptionTypeFfiInterruptedClaim.read(from: &buf),
+                committed: FfiConverterOptionTypeFfiCommittedClaim.read(from: &buf),
+                terminal: FfiConverterOptionTypeFfiTerminalClaimRecord.read(from: &buf),
+                receipt: FfiConverterOptionData.read(from: &buf),
+                acknowledgement: FfiConverterOptionTypeFfiCheckpointAcknowledgement.read(from: &buf),
                 boolean: FfiConverterOptionBool.read(from: &buf),
                 failure: FfiConverterOptionTypeFfiReferenceStoreFailure.read(from: &buf)
         )
@@ -9197,6 +9286,10 @@ struct FfiConverterTypeFfiReferenceStoreReply: FfiConverterRustBuffer {
         FfiConverterOptionInt64.write(value.time, into: &buf)
         FfiConverterOptionTypeFfiClaimResult.write(value.claim, into: &buf)
         FfiConverterOptionTypeFfiInterruptedClaim.write(value.interrupted, into: &buf)
+        FfiConverterOptionTypeFfiCommittedClaim.write(value.committed, into: &buf)
+        FfiConverterOptionTypeFfiTerminalClaimRecord.write(value.terminal, into: &buf)
+        FfiConverterOptionData.write(value.receipt, into: &buf)
+        FfiConverterOptionTypeFfiCheckpointAcknowledgement.write(value.acknowledgement, into: &buf)
         FfiConverterOptionBool.write(value.boolean, into: &buf)
         FfiConverterOptionTypeFfiReferenceStoreFailure.write(value.failure, into: &buf)
     }
@@ -13383,6 +13476,30 @@ fileprivate struct FfiConverterOptionTypeFfiTrustProvider: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiCheckpointAcknowledgement: FfiConverterRustBuffer {
+    typealias SwiftType = FfiCheckpointAcknowledgement?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiCheckpointAcknowledgement.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiCheckpointAcknowledgement.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiClaimResult: FfiConverterRustBuffer {
     typealias SwiftType = FfiClaimResult?
 
@@ -13399,6 +13516,30 @@ fileprivate struct FfiConverterOptionTypeFfiClaimResult: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFfiClaimResult.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFfiCommittedClaim: FfiConverterRustBuffer {
+    typealias SwiftType = FfiCommittedClaim?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiCommittedClaim.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiCommittedClaim.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -13615,6 +13756,30 @@ fileprivate struct FfiConverterOptionTypeFfiRotationRefusal: FfiConverterRustBuf
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFfiRotationRefusal.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFfiTerminalClaimRecord: FfiConverterRustBuffer {
+    typealias SwiftType = FfiTerminalClaimRecord?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiTerminalClaimRecord.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiTerminalClaimRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -16187,6 +16352,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_abandon_pending_receipts() != 63650) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_acknowledge_receipt() != 52528) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_authoritative_time() != 23274) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16199,7 +16367,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_finalize() != 10538) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_get_acknowledgement() != 35429) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_load_committed() != 45749) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_load_interrupted() != 31854) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_load_terminal() != 32814) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_log_length() != 4826) {
@@ -16211,7 +16388,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_plant_release_test_only() != 43747) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_publish_receipt() != 8692) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_record_progress() != 52051) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_record_release() != 31394) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_recover_interrupted() != 41429) {

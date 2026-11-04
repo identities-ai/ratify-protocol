@@ -61,6 +61,30 @@ final class ReferenceStoreTests: XCTestCase {
         let replay = try await store.claim(claim)
         XCTAssertEqual(replay.disposition, .inProgress)
         XCTAssertTrue(replay.ownerToken.isEmpty)
+        let terminal = try await store.loadTerminal(claimId: claim.claimId)
+        XCTAssertFalse(terminal.terminal)
+        XCTAssertEqual(terminal.challengeExpiresAt, 200)
+        do {
+            _ = try await store.loadCommitted(claimId: claim.claimId)
+            XCTFail("an evaluating claim was reported committed")
+        } catch let error as StoreError {
+            XCTAssertEqual(error.errorClass, .claimLeaseLive)
+        }
+        do {
+            _ = try await store.get(logId: String(repeating: "a", count: 32), sequence: 1)
+            XCTFail("a missing checkpoint was reported acknowledged")
+        } catch StoreError.acknowledgementNotFound {}
+        do {
+            _ = try await store.publish(claimId: claim.claimId, receiptBody: Data())
+            XCTFail("an evaluating claim published a receipt")
+        } catch StoreError.unavailable(let detail) {
+            XCTAssertTrue(detail.contains("no committed outbox body"))
+        }
+        do {
+            try await store.recordRelease(ReleaseRecord(claimId: claim.claimId, entryHash: Data(repeating: 0, count: 48),
+                ackTimestamp: 100, outcome: .released, reason: ""))
+            XCTFail("an evaluating claim recorded a release")
+        } catch StoreError.releaseStateMismatch {}
         do {
             _ = try await store.loadInterrupted(claimId: claim.claimId)
             XCTFail("an unexpired evaluator lease was interrupted")
@@ -71,5 +95,11 @@ final class ReferenceStoreTests: XCTestCase {
         let interrupted = try await store.loadInterrupted(claimId: claim.claimId)
         XCTAssertEqual(interrupted.claim, claim)
         XCTAssertEqual(interrupted.claimedAt, 100)
+        do {
+            _ = try await store.loadCommitted(claimId: claim.claimId)
+            XCTFail("an expired evaluating claim was reported committed")
+        } catch let error as StoreError {
+            XCTAssertEqual(error.errorClass, .claimLeaseLost)
+        }
     }
 }

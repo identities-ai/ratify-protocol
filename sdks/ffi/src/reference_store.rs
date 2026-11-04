@@ -2,13 +2,15 @@
 
 use std::sync::Arc;
 
-use ratify_protocol::v2::{ClaimStoreV2, V2AuthoritativeClock, V2Context, V2StoreError};
+use ratify_protocol::v2::{ClaimStoreV2, V2AuthoritativeClock, V2CommittedClaimStore, V2Context,
+    V2ReceiptPublisher, V2ReceiptCheckpoint, V2ReleaseClaimStore, V2StoreError};
 use ratify_protocol::v2::reference::Store;
 
-use crate::claim::{FfiChallengeClaim, FfiClaimResult, FfiEvaluationProgress, FfiInterruptedClaim};
+use crate::claim::{FfiChallengeClaim, FfiClaimResult, FfiCommittedClaim, FfiEvaluationProgress, FfiInterruptedClaim};
 use crate::error::FfiResult;
 use crate::guard::{call_with, call_on, Poison};
 use crate::keys::FfiSoftwareKey;
+use crate::release::{FfiCheckpointAcknowledgement, FfiReleaseRecord, FfiTerminalClaimRecord};
 
 /// A store failure is data inside a guarded export, so Rust panics still use
 /// FfiError::Internal and every UniFFI method retains the one-guard rule.
@@ -43,6 +45,10 @@ pub struct FfiReferenceStoreReply {
     pub time: Option<i64>,
     pub claim: Option<FfiClaimResult>,
     pub interrupted: Option<FfiInterruptedClaim>,
+    pub committed: Option<FfiCommittedClaim>,
+    pub terminal: Option<FfiTerminalClaimRecord>,
+    pub receipt: Option<Vec<u8>>,
+    pub acknowledgement: Option<FfiCheckpointAcknowledgement>,
     pub boolean: Option<bool>,
     pub failure: Option<FfiReferenceStoreFailure>,
 }
@@ -160,5 +166,37 @@ impl FfiReferenceStore {
                                receipt_body: Vec<u8>) -> FfiResult<FfiReferenceStoreReply> {
         call_on(&self.poison, || Ok(Self::reply(self.inner.recover_interrupted_v2_claim(&V2Context::background(),
             &claim_id, &terminal_result, &receipt_body), |reply, value| reply.boolean = Some(value))))
+    }
+
+    pub fn load_committed(&self, claim_id: String) -> FfiResult<FfiReferenceStoreReply> {
+        call_on(&self.poison, || Ok(Self::reply(self.inner.load_v2_committed_claim(&V2Context::background(), &claim_id),
+            |reply, value| reply.committed = Some(value.into()))))
+    }
+
+    pub fn load_terminal(&self, claim_id: String) -> FfiResult<FfiReferenceStoreReply> {
+        call_on(&self.poison, || Ok(Self::reply(self.inner.load_v2_terminal_claim(&V2Context::background(), &claim_id),
+            |reply, value| reply.terminal = Some(value.into()))))
+    }
+
+    pub fn record_release(&self, record: FfiReleaseRecord) -> FfiResult<FfiReferenceStoreReply> {
+        call_on(&self.poison, || Ok(Self::reply(record.try_into().and_then(|record| self.inner.record_v2_release(
+            &V2Context::background(), record)), |_, ()| {})))
+    }
+
+    pub fn publish_receipt(&self, claim_id: String, receipt_body: Vec<u8>) -> FfiResult<FfiReferenceStoreReply> {
+        call_on(&self.poison, || Ok(Self::reply(self.inner.publish_v2_receipt(&V2Context::background(),
+            &claim_id, &receipt_body), |reply, value| reply.receipt = Some(value))))
+    }
+
+    pub fn acknowledge_receipt(&self, log_id: String, sequence: i64, previous_entry_hash: Vec<u8>,
+                               entry_hash: Vec<u8>) -> FfiResult<FfiReferenceStoreReply> {
+        call_on(&self.poison, || Ok(Self::reply(self.inner.acknowledge_v2_receipt(&V2Context::background(),
+            &log_id, sequence, &previous_entry_hash, &entry_hash),
+            |reply, value| reply.acknowledgement = Some(value.into()))))
+    }
+
+    pub fn get_acknowledgement(&self, log_id: String, sequence: i64) -> FfiResult<FfiReferenceStoreReply> {
+        call_on(&self.poison, || Ok(Self::reply(self.inner.get_v2_acknowledgement(&V2Context::background(),
+            &log_id, sequence), |reply, value| reply.acknowledgement = Some(value.into()))))
     }
 }

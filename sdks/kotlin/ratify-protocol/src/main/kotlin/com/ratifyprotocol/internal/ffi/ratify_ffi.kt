@@ -1479,6 +1479,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_abandon_pending_receipts(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_acknowledge_receipt(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_authoritative_time(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_claim(
@@ -1487,7 +1489,13 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_finalize(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_get_acknowledgement(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_load_committed(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_load_interrupted(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_load_terminal(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_log_length(
     ): Int
@@ -1495,7 +1503,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_plant_release_test_only(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_publish_receipt(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_record_progress(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_record_release(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_recover_interrupted(
     ): Int
@@ -1822,6 +1834,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_abandon_pending_receipts(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_acknowledge_receipt(`ptr`: Long,`logId`: RustBuffer.ByValue,`sequence`: Long,`previousEntryHash`: RustBuffer.ByValue,`entryHash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_authoritative_time(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_claim(`ptr`: Long,`claim`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1830,7 +1844,13 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_finalize(`ptr`: Long,`claimId`: RustBuffer.ByValue,`ownerToken`: RustBuffer.ByValue,`terminalResult`: RustBuffer.ByValue,`receiptBody`: RustBuffer.ByValue,`allowValidUntil`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_get_acknowledgement(`ptr`: Long,`logId`: RustBuffer.ByValue,`sequence`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_load_committed(`ptr`: Long,`claimId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_load_interrupted(`ptr`: Long,`claimId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_load_terminal(`ptr`: Long,`claimId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_log_length(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -1838,7 +1858,11 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_plant_release_test_only(`ptr`: Long,`claimId`: RustBuffer.ByValue,`ackTimestamp`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_publish_receipt(`ptr`: Long,`claimId`: RustBuffer.ByValue,`receiptBody`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_record_progress(`ptr`: Long,`claimId`: RustBuffer.ByValue,`ownerToken`: RustBuffer.ByValue,`progress`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_record_release(`ptr`: Long,`record`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_recover_interrupted(`ptr`: Long,`claimId`: RustBuffer.ByValue,`terminalResult`: RustBuffer.ByValue,`receiptBody`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -2891,6 +2915,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_abandon_pending_receipts() and 0xFFFF) != 63650) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_acknowledge_receipt() and 0xFFFF) != 52528) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_authoritative_time() and 0xFFFF) != 23274) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2903,7 +2930,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_finalize() and 0xFFFF) != 10538) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_get_acknowledgement() and 0xFFFF) != 35429) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_load_committed() and 0xFFFF) != 45749) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_load_interrupted() and 0xFFFF) != 31854) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_load_terminal() and 0xFFFF) != 32814) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_log_length() and 0xFFFF) != 4826) {
@@ -2915,7 +2951,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_plant_release_test_only() and 0xFFFF) != 43747) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_publish_receipt() and 0xFFFF) != 8692) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_record_progress() and 0xFFFF) != 52051) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_record_release() and 0xFFFF) != 31394) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_recover_interrupted() and 0xFFFF) != 41429) {
@@ -9566,6 +9608,8 @@ internal interface FfiReferenceStoreInterface {
 
     fun `abandonPendingReceipts`(): List<kotlin.String>
 
+    fun `acknowledgeReceipt`(`logId`: kotlin.String, `sequence`: kotlin.Long, `previousEntryHash`: kotlin.ByteArray, `entryHash`: kotlin.ByteArray): FfiReferenceStoreReply
+
     fun `authoritativeTime`(): FfiReferenceStoreReply
 
     fun `claim`(`claim`: FfiChallengeClaim): FfiReferenceStoreReply
@@ -9574,7 +9618,13 @@ internal interface FfiReferenceStoreInterface {
 
     fun `finalize`(`claimId`: kotlin.String, `ownerToken`: kotlin.ByteArray, `terminalResult`: kotlin.ByteArray, `receiptBody`: kotlin.ByteArray, `allowValidUntil`: kotlin.Long): FfiReferenceStoreReply
 
+    fun `getAcknowledgement`(`logId`: kotlin.String, `sequence`: kotlin.Long): FfiReferenceStoreReply
+
+    fun `loadCommitted`(`claimId`: kotlin.String): FfiReferenceStoreReply
+
     fun `loadInterrupted`(`claimId`: kotlin.String): FfiReferenceStoreReply
+
+    fun `loadTerminal`(`claimId`: kotlin.String): FfiReferenceStoreReply
 
     fun `logLength`(): kotlin.ULong
 
@@ -9582,7 +9632,11 @@ internal interface FfiReferenceStoreInterface {
 
     fun `plantReleaseTestOnly`(`claimId`: kotlin.String, `ackTimestamp`: kotlin.Long)
 
+    fun `publishReceipt`(`claimId`: kotlin.String, `receiptBody`: kotlin.ByteArray): FfiReferenceStoreReply
+
     fun `recordProgress`(`claimId`: kotlin.String, `ownerToken`: kotlin.ByteArray, `progress`: FfiEvaluationProgress): FfiReferenceStoreReply
+
+    fun `recordRelease`(`record`: FfiReleaseRecord): FfiReferenceStoreReply
 
     fun `recoverInterrupted`(`claimId`: kotlin.String, `terminalResult`: kotlin.ByteArray, `receiptBody`: kotlin.ByteArray): FfiReferenceStoreReply
 
@@ -9723,6 +9777,24 @@ internal open class FfiReferenceStore: Disposable, AutoCloseable, FfiReferenceSt
 
 
 
+    @Throws(FfiException::class)override fun `acknowledgeReceipt`(`logId`: kotlin.String, `sequence`: kotlin.Long, `previousEntryHash`: kotlin.ByteArray, `entryHash`: kotlin.ByteArray): FfiReferenceStoreReply {
+            return FfiConverterTypeFfiReferenceStoreReply.lift(
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_acknowledge_receipt(
+        it,
+
+        FfiConverterString.lower(`logId`),
+        FfiConverterLong.lower(`sequence`),
+        FfiConverterByteArray.lower(`previousEntryHash`),
+        FfiConverterByteArray.lower(`entryHash`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(FfiException::class)override fun `authoritativeTime`(): FfiReferenceStoreReply {
             return FfiConverterTypeFfiReferenceStoreReply.lift(
     callWithHandle {
@@ -9785,11 +9857,57 @@ internal open class FfiReferenceStore: Disposable, AutoCloseable, FfiReferenceSt
 
 
 
+    @Throws(FfiException::class)override fun `getAcknowledgement`(`logId`: kotlin.String, `sequence`: kotlin.Long): FfiReferenceStoreReply {
+            return FfiConverterTypeFfiReferenceStoreReply.lift(
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_get_acknowledgement(
+        it,
+
+        FfiConverterString.lower(`logId`),
+        FfiConverterLong.lower(`sequence`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(FfiException::class)override fun `loadCommitted`(`claimId`: kotlin.String): FfiReferenceStoreReply {
+            return FfiConverterTypeFfiReferenceStoreReply.lift(
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_load_committed(
+        it,
+
+        FfiConverterString.lower(`claimId`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(FfiException::class)override fun `loadInterrupted`(`claimId`: kotlin.String): FfiReferenceStoreReply {
             return FfiConverterTypeFfiReferenceStoreReply.lift(
     callWithHandle {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_load_interrupted(
+        it,
+
+        FfiConverterString.lower(`claimId`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(FfiException::class)override fun `loadTerminal`(`claimId`: kotlin.String): FfiReferenceStoreReply {
+            return FfiConverterTypeFfiReferenceStoreReply.lift(
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_load_terminal(
         it,
 
         FfiConverterString.lower(`claimId`),_status)
@@ -9843,6 +9961,22 @@ internal open class FfiReferenceStore: Disposable, AutoCloseable, FfiReferenceSt
 
 
 
+    @Throws(FfiException::class)override fun `publishReceipt`(`claimId`: kotlin.String, `receiptBody`: kotlin.ByteArray): FfiReferenceStoreReply {
+            return FfiConverterTypeFfiReferenceStoreReply.lift(
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_publish_receipt(
+        it,
+
+        FfiConverterString.lower(`claimId`),
+        FfiConverterByteArray.lower(`receiptBody`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(FfiException::class)override fun `recordProgress`(`claimId`: kotlin.String, `ownerToken`: kotlin.ByteArray, `progress`: FfiEvaluationProgress): FfiReferenceStoreReply {
             return FfiConverterTypeFfiReferenceStoreReply.lift(
     callWithHandle {
@@ -9853,6 +9987,21 @@ internal open class FfiReferenceStore: Disposable, AutoCloseable, FfiReferenceSt
         FfiConverterString.lower(`claimId`),
         FfiConverterByteArray.lower(`ownerToken`),
         FfiConverterTypeFfiEvaluationProgress.lower(`progress`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(FfiException::class)override fun `recordRelease`(`record`: FfiReleaseRecord): FfiReferenceStoreReply {
+            return FfiConverterTypeFfiReferenceStoreReply.lift(
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_record_release(
+        it,
+
+        FfiConverterTypeFfiReleaseRecord.lower(`record`),_status)
 }
     }
     )
@@ -15531,6 +15680,14 @@ internal data class FfiReferenceStoreReply (
     ,
     var `interrupted`: FfiInterruptedClaim?
     ,
+    var `committed`: FfiCommittedClaim?
+    ,
+    var `terminal`: FfiTerminalClaimRecord?
+    ,
+    var `receipt`: kotlin.ByteArray?
+    ,
+    var `acknowledgement`: FfiCheckpointAcknowledgement?
+    ,
     var `boolean`: kotlin.Boolean?
     ,
     var `failure`: FfiReferenceStoreFailure?
@@ -15553,6 +15710,10 @@ internal object FfiConverterTypeFfiReferenceStoreReply: FfiConverterRustBuffer<F
             FfiConverterOptionalLong.read(buf),
             FfiConverterOptionalTypeFfiClaimResult.read(buf),
             FfiConverterOptionalTypeFfiInterruptedClaim.read(buf),
+            FfiConverterOptionalTypeFfiCommittedClaim.read(buf),
+            FfiConverterOptionalTypeFfiTerminalClaimRecord.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
+            FfiConverterOptionalTypeFfiCheckpointAcknowledgement.read(buf),
             FfiConverterOptionalBoolean.read(buf),
             FfiConverterOptionalTypeFfiReferenceStoreFailure.read(buf),
         )
@@ -15562,6 +15723,10 @@ internal object FfiConverterTypeFfiReferenceStoreReply: FfiConverterRustBuffer<F
             FfiConverterOptionalLong.allocationSize(value.`time`) +
             FfiConverterOptionalTypeFfiClaimResult.allocationSize(value.`claim`) +
             FfiConverterOptionalTypeFfiInterruptedClaim.allocationSize(value.`interrupted`) +
+            FfiConverterOptionalTypeFfiCommittedClaim.allocationSize(value.`committed`) +
+            FfiConverterOptionalTypeFfiTerminalClaimRecord.allocationSize(value.`terminal`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`receipt`) +
+            FfiConverterOptionalTypeFfiCheckpointAcknowledgement.allocationSize(value.`acknowledgement`) +
             FfiConverterOptionalBoolean.allocationSize(value.`boolean`) +
             FfiConverterOptionalTypeFfiReferenceStoreFailure.allocationSize(value.`failure`)
     )
@@ -15570,6 +15735,10 @@ internal object FfiConverterTypeFfiReferenceStoreReply: FfiConverterRustBuffer<F
             FfiConverterOptionalLong.write(value.`time`, buf)
             FfiConverterOptionalTypeFfiClaimResult.write(value.`claim`, buf)
             FfiConverterOptionalTypeFfiInterruptedClaim.write(value.`interrupted`, buf)
+            FfiConverterOptionalTypeFfiCommittedClaim.write(value.`committed`, buf)
+            FfiConverterOptionalTypeFfiTerminalClaimRecord.write(value.`terminal`, buf)
+            FfiConverterOptionalByteArray.write(value.`receipt`, buf)
+            FfiConverterOptionalTypeFfiCheckpointAcknowledgement.write(value.`acknowledgement`, buf)
             FfiConverterOptionalBoolean.write(value.`boolean`, buf)
             FfiConverterOptionalTypeFfiReferenceStoreFailure.write(value.`failure`, buf)
     }
@@ -19494,6 +19663,38 @@ internal object FfiConverterOptionalTypeFfiTrustProvider: FfiConverterRustBuffer
 /**
  * @suppress
  */
+internal object FfiConverterOptionalTypeFfiCheckpointAcknowledgement: FfiConverterRustBuffer<FfiCheckpointAcknowledgement?> {
+    override fun read(buf: ByteBuffer): FfiCheckpointAcknowledgement? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiCheckpointAcknowledgement.read(buf)
+    }
+
+    override fun allocationSize(value: FfiCheckpointAcknowledgement?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiCheckpointAcknowledgement.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiCheckpointAcknowledgement?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiCheckpointAcknowledgement.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterOptionalTypeFfiClaimResult: FfiConverterRustBuffer<FfiClaimResult?> {
     override fun read(buf: ByteBuffer): FfiClaimResult? {
         if (buf.get().toInt() == 0) {
@@ -19516,6 +19717,38 @@ internal object FfiConverterOptionalTypeFfiClaimResult: FfiConverterRustBuffer<F
         } else {
             buf.put(1)
             FfiConverterTypeFfiClaimResult.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterOptionalTypeFfiCommittedClaim: FfiConverterRustBuffer<FfiCommittedClaim?> {
+    override fun read(buf: ByteBuffer): FfiCommittedClaim? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiCommittedClaim.read(buf)
+    }
+
+    override fun allocationSize(value: FfiCommittedClaim?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiCommittedClaim.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiCommittedClaim?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiCommittedClaim.write(value, buf)
         }
     }
 }
@@ -19804,6 +20037,38 @@ internal object FfiConverterOptionalTypeFfiRotationRefusal: FfiConverterRustBuff
         } else {
             buf.put(1)
             FfiConverterTypeFfiRotationRefusal.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterOptionalTypeFfiTerminalClaimRecord: FfiConverterRustBuffer<FfiTerminalClaimRecord?> {
+    override fun read(buf: ByteBuffer): FfiTerminalClaimRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiTerminalClaimRecord.read(buf)
+    }
+
+    override fun allocationSize(value: FfiTerminalClaimRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiTerminalClaimRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiTerminalClaimRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiTerminalClaimRecord.write(value, buf)
         }
     }
 }

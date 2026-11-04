@@ -53,4 +53,18 @@ public class ReferenceStoreBridge private constructor(private val handle: FfiRef
         InterruptedClaim(value(ffi { handle.loadInterrupted(claimId) }) { it.interrupted })
     public fun recoverInterrupted(claimId: String, terminalResult: ByteArray, receiptBody: ByteArray): Boolean =
         value(ffi { handle.recoverInterrupted(claimId, terminalResult, receiptBody) }) { it.boolean }
+
+    public fun loadCommitted(claimId: String): CommittedClaim =
+        CommittedClaim(value(ffi { handle.loadCommitted(claimId) }) { it.committed })
+    public fun loadTerminal(claimId: String): TerminalClaimRecord =
+        TerminalClaimRecord(value(ffi { handle.loadTerminal(claimId) }) { it.terminal })
+    public fun recordRelease(record: ReleaseRecord): Unit = check(ffi { handle.recordRelease(record.toFfi()) })
+    public fun publish(claimId: String, receiptBody: ByteArray): ByteArray =
+        value(ffi { handle.publishReceipt(claimId, receiptBody) }) { it.receipt }.copyOf()
+    public fun acknowledge(logId: String, sequence: Long, previousEntryHash: ByteArray,
+        entryHash: ByteArray): CheckpointAcknowledgement = CheckpointAcknowledgement(value(ffi {
+        handle.acknowledgeReceipt(logId, sequence, previousEntryHash, entryHash)
+    }) { it.acknowledgement })
+    public fun get(logId: String, sequence: Long): CheckpointAcknowledgement =
+        CheckpointAcknowledgement(value(ffi { handle.getAcknowledgement(logId, sequence) }) { it.acknowledgement })
 }

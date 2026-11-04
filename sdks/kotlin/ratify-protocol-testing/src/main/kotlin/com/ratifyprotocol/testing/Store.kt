@@ -7,9 +7,18 @@ import com.ratifyprotocol.ChallengeClaim
 import com.ratifyprotocol.ClaimResult
 import com.ratifyprotocol.EvaluationProgress
 import com.ratifyprotocol.InterruptedClaim
+import com.ratifyprotocol.CommittedClaim
+import com.ratifyprotocol.CommittedClaimStore
+import com.ratifyprotocol.ReleaseClaimStore
+import com.ratifyprotocol.ReleaseRecord
+import com.ratifyprotocol.TerminalClaimRecord
+import com.ratifyprotocol.ReceiptPublisher
+import com.ratifyprotocol.ReceiptCheckpoint
+import com.ratifyprotocol.CheckpointAcknowledgement
 
 /** Rust Part B reference store for conformance tests. */
-public class Store private constructor(private val bridge: ReferenceStoreBridge) : ClaimStore {
+public class Store private constructor(private val bridge: ReferenceStoreBridge) :
+    ClaimStore, CommittedClaimStore, ReleaseClaimStore, ReceiptPublisher, ReceiptCheckpoint {
     public constructor(now: Long, leaseSeconds: Long, logId: String, verifierKey: SoftwarePrivateKey) :
         this(ReferenceStoreBridge(now, leaseSeconds, logId, verifierKey))
 
@@ -32,4 +41,12 @@ public class Store private constructor(private val bridge: ReferenceStoreBridge)
     override suspend fun loadInterrupted(claimId: String): InterruptedClaim = bridge.loadInterrupted(claimId)
     override suspend fun recoverInterrupted(claimId: String, terminalResult: ByteArray, receiptBody: ByteArray): Boolean =
         bridge.recoverInterrupted(claimId, terminalResult, receiptBody)
+
+    override suspend fun loadCommitted(claimId: String): CommittedClaim = bridge.loadCommitted(claimId)
+    override suspend fun loadTerminal(claimId: String): TerminalClaimRecord = bridge.loadTerminal(claimId)
+    override suspend fun recordRelease(record: ReleaseRecord): Unit = bridge.recordRelease(record)
+    override suspend fun publish(claimId: String, receiptBody: ByteArray): ByteArray = bridge.publish(claimId, receiptBody)
+    override suspend fun acknowledge(logId: String, sequence: Long, previousEntryHash: ByteArray,
+        entryHash: ByteArray): CheckpointAcknowledgement = bridge.acknowledge(logId, sequence, previousEntryHash, entryHash)
+    override suspend fun get(logId: String, sequence: Long): CheckpointAcknowledgement = bridge.get(logId, sequence)
 }

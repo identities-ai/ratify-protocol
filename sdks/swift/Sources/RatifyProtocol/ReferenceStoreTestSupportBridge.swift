@@ -72,4 +72,25 @@ import Foundation
         try value(ffi { try handle.recoverInterrupted(claimId: claimId, terminalResult: terminalResult,
             receiptBody: receiptBody) }, \.boolean)
     }
+
+    public func loadCommitted(claimId: String) throws -> CommittedClaim {
+        CommittedClaim(try value(ffi { try handle.loadCommitted(claimId: claimId) }, \.committed))
+    }
+    public func loadTerminal(claimId: String) throws -> TerminalClaimRecord {
+        TerminalClaimRecord(try value(ffi { try handle.loadTerminal(claimId: claimId) }, \.terminal))
+    }
+    public func recordRelease(_ record: ReleaseRecord) throws {
+        try check(ffi { try handle.recordRelease(record: record.ffi) })
+    }
+    public func publish(claimId: String, receiptBody: Data) throws -> Data {
+        try value(ffi { try handle.publishReceipt(claimId: claimId, receiptBody: receiptBody) }, \.receipt)
+    }
+    public func acknowledge(logId: String, sequence: Int64, previousEntryHash: Data,
+                            entryHash: Data) throws -> CheckpointAcknowledgement {
+        CheckpointAcknowledgement(try value(ffi { try handle.acknowledgeReceipt(logId: logId, sequence: sequence,
+            previousEntryHash: previousEntryHash, entryHash: entryHash) }, \.acknowledgement))
+    }
+    public func get(logId: String, sequence: Int64) throws -> CheckpointAcknowledgement {
+        CheckpointAcknowledgement(try value(ffi { try handle.getAcknowledgement(logId: logId, sequence: sequence) }, \.acknowledgement))
+    }
 }

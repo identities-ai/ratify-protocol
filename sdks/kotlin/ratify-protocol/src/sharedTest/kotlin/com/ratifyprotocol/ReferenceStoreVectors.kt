@@ -61,6 +61,24 @@ object ReferenceStoreVectors {
         val replay = store.claim(claim)
         check(replay.disposition == ClaimDisposition.IN_PROGRESS)
         check(replay.ownerToken.isEmpty())
+        val terminal = store.loadTerminal(claim.claimId)
+        check(!terminal.terminal && terminal.challengeExpiresAt == 200L)
+        try {
+            store.loadCommitted(claim.claimId)
+            error("an evaluating claim was reported committed")
+        } catch (e: StoreError.Classified) { check(e.errorClass == ErrorClass.CLAIM_LEASE_LIVE) }
+        try {
+            store.get("a".repeat(32), 1)
+            error("a missing checkpoint was reported acknowledged")
+        } catch (_: StoreError.AcknowledgementNotFound) {}
+        try {
+            store.publish(claim.claimId, ByteArray(0))
+            error("an evaluating claim published a receipt")
+        } catch (e: StoreError.Unavailable) { check(e.message?.contains("no committed outbox body") == true) }
+        try {
+            store.recordRelease(ReleaseRecord(claim.claimId, ByteArray(48), 100, ReleaseStatus.RELEASED, ""))
+            error("an evaluating claim recorded a release")
+        } catch (_: StoreError.ReleaseStateMismatch) {}
         try {
             store.loadInterrupted(claim.claimId)
             error("an unexpired evaluator lease was interrupted")
@@ -71,5 +89,9 @@ object ReferenceStoreVectors {
         val interrupted = store.loadInterrupted(claim.claimId)
         check(interrupted.claim == claim)
         check(interrupted.claimedAt == 100L)
+        try {
+            store.loadCommitted(claim.claimId)
+            error("an expired evaluating claim was reported committed")
+        } catch (e: StoreError.Classified) { check(e.errorClass == ErrorClass.CLAIM_LEASE_LOST) }
     }
 }

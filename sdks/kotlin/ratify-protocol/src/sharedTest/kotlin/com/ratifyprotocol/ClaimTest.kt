@@ -688,6 +688,39 @@ class ClaimTest {
         }
     }
 
+    private class VectorCommittedStore(private val record: CommittedClaim) : CommittedClaimStore {
+        override suspend fun loadCommitted(claimId: String): CommittedClaim = record
+    }
+
+    private fun committedClaimFromRecord(step: JSONObject): CommittedClaim {
+        val record = JSONObject(String(Base64.getDecoder().decode(step.getString("claim_record_b64"))))
+        assertEquals(setOf("agent_id", "bundle_hash", "challenge_digest", "claim_id",
+            "clock_skew_seconds", "constraint_evaluators", "context_policy_digest", "expires_at",
+            "issued_at", "issuer_ids", "max_age_seconds", "namespace", "proof_digest", "rate_batch",
+            "replay_epoch", "required_scope", "requires_rate", "stream_id", "stream_seq", "verifier_id"),
+            record.keys().asSequence().toSet())
+        val rateBatch = record.arr("rate_batch").map {
+            RateReservation(it.getString("issuer_id"), it.getString("cert_id"),
+                it.getLong("window_s"), it.getLong("limit"))
+        }
+        val evaluators = record.arr("constraint_evaluators").map {
+            ConstraintEvaluatorRef(it.getString("type"), it.getString("profile_digest"))
+        }
+        val claim = ChallengeClaim(record.getString("claim_id"), record.getString("namespace"),
+            record.getLong("replay_epoch"), record.getString("challenge_digest"),
+            record.getString("proof_digest"), record.getString("bundle_hash"),
+            record.strings("issuer_ids"), record.getString("required_scope"),
+            if (record.isNull("context_policy_digest")) "" else record.get("context_policy_digest") as String,
+            record.getString("verifier_id"), record.getString("agent_id"), record.getBoolean("requires_rate"),
+            rateBatch, record.getLong("issued_at"), record.getLong("expires_at"),
+            record.getLong("max_age_seconds"), record.getLong("clock_skew_seconds"),
+            if (record.isNull("stream_id")) null else Base64.getDecoder().decode(record.get("stream_id") as String),
+            if (record.isNull("stream_seq")) null else (record.get("stream_seq") as Number).toLong(), evaluators)
+        return CommittedClaim(claim, Base64.getDecoder().decode(step.getString("terminal_b64")),
+            Base64.getDecoder().decode(step.getString("body_b64")),
+            if (step.has("allow_valid_until")) step.getLong("allow_valid_until") else 0)
+    }
+
     @Test fun resumePreservesStoreErrorAndCallsOnce() = runBlocking {
         val store = MissingCommittedStore()
         try {
@@ -858,7 +891,22 @@ class ClaimTest {
             "recover_rejects_context_policy_digest_not_evaluated", "recover_rejects_other_decision",
             "recover_rejects_terminal_result_other_than_body", "recover_direct_accepts_canonical_interrupted_body",
             "recover_rejects_terminal_result_with_other_members", "recover_rejects_terminal_result_not_canonical",
-            "recover_rejects_terminal_result_without_identity_status", "recover_rejects_terminal_result_other_identity_status")
+            "recover_rejects_terminal_result_without_identity_status", "recover_rejects_terminal_result_other_identity_status",
+            "resume_rejects_record_for_another_claim", "resume_rejects_record_of_another_well_formed_claim",
+            "resume_rejects_record_claim_id_not_derived_from_replay_key", "resume_rejects_record_uppercase_challenge_digest",
+            "resume_rejects_record_non_sha384_challenge_digest", "resume_rejects_record_body_for_another_agent",
+            "resume_rejects_record_terminal_result_other_than_body", "resume_rejects_record_terminal_result_other_identity_status",
+            "resume_rejects_record_terminal_result_with_other_members", "resume_rejects_record_allow_without_allow_horizon",
+            "resume_rejects_record_allow_horizon_beyond_timestamp_domain", "resume_rejects_record_allow_horizon_on_non_allow",
+            "resume_rejects_record_body_for_another_verifier", "resume_rejects_record_body_for_another_bundle",
+            "resume_rejects_record_body_for_another_scope", "resume_rejects_record_body_with_another_context_policy_digest",
+            "resume_rejects_record_body_with_unsealed_constraint_evaluators", "resume_rejects_record_claim_without_context_policy",
+            "resume_rejects_record_negative_allow_horizon", "resume_rejects_record_negative_allow_horizon_on_non_allow",
+            "resume_accepts_interrupted_record", "resume_substituted_record_rejected_at_release",
+            "resume_accepts_allow_horizon_at_timestamp_domain_end", "resume_forged_record_longer_allow_horizon",
+            "resume_forged_record_later_challenge_expiry", "resume_forged_record_allow_for_unheld_claim",
+            "resume_forged_record_allow_over_evaluating_claim", "resume_forged_record_allow_over_interrupted_claim",
+            "resume_accepts_honest_record")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -892,7 +940,22 @@ class ClaimTest {
             "recover_rejects_context_policy_digest_not_evaluated" to 6, "recover_rejects_other_decision" to 6,
             "recover_rejects_terminal_result_other_than_body" to 6, "recover_direct_accepts_canonical_interrupted_body" to 7,
             "recover_rejects_terminal_result_with_other_members" to 6, "recover_rejects_terminal_result_not_canonical" to 6,
-            "recover_rejects_terminal_result_without_identity_status" to 6, "recover_rejects_terminal_result_other_identity_status" to 6)
+            "recover_rejects_terminal_result_without_identity_status" to 6, "recover_rejects_terminal_result_other_identity_status" to 6,
+            "resume_rejects_record_for_another_claim" to 5, "resume_rejects_record_of_another_well_formed_claim" to 5,
+            "resume_rejects_record_claim_id_not_derived_from_replay_key" to 5, "resume_rejects_record_uppercase_challenge_digest" to 5,
+            "resume_rejects_record_non_sha384_challenge_digest" to 5, "resume_rejects_record_body_for_another_agent" to 5,
+            "resume_rejects_record_terminal_result_other_than_body" to 5, "resume_rejects_record_terminal_result_other_identity_status" to 5,
+            "resume_rejects_record_terminal_result_with_other_members" to 5, "resume_rejects_record_allow_without_allow_horizon" to 5,
+            "resume_rejects_record_allow_horizon_beyond_timestamp_domain" to 5, "resume_rejects_record_allow_horizon_on_non_allow" to 5,
+            "resume_rejects_record_body_for_another_verifier" to 5, "resume_rejects_record_body_for_another_bundle" to 5,
+            "resume_rejects_record_body_for_another_scope" to 5, "resume_rejects_record_body_with_another_context_policy_digest" to 5,
+            "resume_rejects_record_body_with_unsealed_constraint_evaluators" to 5, "resume_rejects_record_claim_without_context_policy" to 5,
+            "resume_rejects_record_negative_allow_horizon" to 5, "resume_rejects_record_negative_allow_horizon_on_non_allow" to 5,
+            "resume_accepts_interrupted_record" to 1, "resume_substituted_record_rejected_at_release" to 6,
+            "resume_accepts_allow_horizon_at_timestamp_domain_end" to 1, "resume_forged_record_longer_allow_horizon" to 6,
+            "resume_forged_record_later_challenge_expiry" to 6, "resume_forged_record_allow_for_unheld_claim" to 3,
+            "resume_forged_record_allow_over_evaluating_claim" to 4, "resume_forged_record_allow_over_interrupted_claim" to 8,
+            "resume_accepts_honest_record" to 5)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -924,8 +987,14 @@ class ClaimTest {
                 val at = "$name step $index $op"
                 val expectedStepKeys = stepKeys[op].orEmpty() +
                     (if (op == "release" && step.has("receipt_of")) setOf("receipt_of") else emptySet()) +
+                    (if (op == "release" && step.has("mode")) setOf("mode") else emptySet()) +
                     (if (op == "verify" && step.has("mode")) setOf("mode", "time") else emptySet()) +
-                    (if (op == "finalize" && step.has("allow_valid_until")) setOf("allow_valid_until") else emptySet())
+                    (if (op == "finalize" && step.has("allow_valid_until")) setOf("allow_valid_until") else emptySet()) +
+                    (if (op == "resume" && step.has("claim_record_b64"))
+                        setOf("claim_record_b64", "terminal_b64", "body_b64") +
+                            (if (step.has("allow_valid_until")) setOf("allow_valid_until") else emptySet()) +
+                            (if (step.has("claim_id")) setOf("claim_id") else emptySet())
+                        else emptySet())
                 assertEquals(at, expectedStepKeys, step.keys().asSequence().toSet())
                 when (op) {
                     "set_time" -> {
@@ -1027,14 +1096,17 @@ class ClaimTest {
                         } else assertEquals(at, null, result.committed)
                     }
                     "resume" -> {
-                        val claimId = committed[requestName]?.claimId ?: claimed[requestName]?.claimId ?: run {
+                        val claimId = (if (step.has("claim_id")) step.getString("claim_id") else null)
+                            ?: committed[requestName]?.claimId ?: claimed[requestName]?.claimId ?: run {
                             val expected = checkNotNull(request(requestName, corpusName = "lifecycle-scenarios.json").expected) { at }
                             protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value)
                         }
+                        val resumeStore: CommittedClaimStore = if (step.has("claim_record_b64"))
+                            VectorCommittedStore(committedClaimFromRecord(step)) else store
                         if (want.has("error_class")) {
                             assertEquals(at, setOf("error_class"), want.keys().asSequence().toSet())
                             try {
-                                resumeCommittedClaim(store, claimId)
+                                resumeCommittedClaim(resumeStore, claimId)
                                 fail("$at: resume unexpectedly succeeded")
                             } catch (e: RatifyException.Protocol) {
                                 assertEquals(at, want.getString("error_class"), e.errorClass.spelling)
@@ -1044,7 +1116,7 @@ class ClaimTest {
                                 setOf("stage", "decision", "decision_reason", "allow_horizon")
                                 else setOf("stage", "decision", "decision_reason"), want.keys().asSequence().toSet())
                             assertEquals(at, "committed", want.getString("stage"))
-                            val value = resumeCommittedClaim(store, claimId)
+                            val value = resumeCommittedClaim(resumeStore, claimId)
                             committed[requestName] = value
                             val body = JSONObject(String(value.receiptBody))
                             assertEquals(at, want.getString("decision"), body.getString("decision"))
@@ -1064,14 +1136,16 @@ class ClaimTest {
                                 assertEquals(at, want.getString("error_class"), e.errorClass.spelling)
                             }
                         } else {
-                            assertEquals(at, setOf("stage", "decision", "decision_reason", "trust_assessment",
-                                "status_assessment", "context_assessment"), want.keys().asSequence().toSet())
+                            val fields = if (name == "resume_forged_record_allow_over_interrupted_claim" && index == 2)
+                                listOf("decision", "decision_reason") else
+                                listOf("decision", "decision_reason", "trust_assessment", "status_assessment", "context_assessment")
+                            assertEquals(at, (listOf("stage") + fields).toSet(), want.keys().asSequence().toSet())
                             assertEquals(at, "committed", want.getString("stage"))
                             val value = recoverInterruptedClaim(store, claimId)
                             committed[requestName]?.let { org.junit.Assert.assertArrayEquals(at, it.receiptBody, value.receiptBody) }
                             committed[requestName] = value
                             val body = JSONObject(String(value.receiptBody))
-                            for (field in listOf("decision", "decision_reason", "trust_assessment", "status_assessment", "context_assessment"))
+                            for (field in fields)
                                 assertEquals(at, want.getString(field), body.getString(field))
                             assertEquals(at, null, value.allowHorizon)
                         }
@@ -1118,6 +1192,10 @@ class ClaimTest {
                     }
                     "release" -> {
                         val checkpointMode = step.getString("checkpoint")
+                        if (step.has("mode")) {
+                            assertEquals(at, "no_receipt", step.getString("mode"))
+                            assertEquals(at, null, receipts[requestName])
+                        }
                         org.junit.Assert.assertTrue(at, checkpointMode == "reference" || checkpointMode == "wrong_entry")
                         assertEquals(at, if (want.has("decision"))
                             setOf("release_status", "decision", "release_time", "receipt_sequence")

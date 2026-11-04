@@ -723,6 +723,50 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    struct VectorCommittedStore: CommittedClaimStore {
+        let record: CommittedClaim
+        func loadCommitted(claimId: String) async throws -> CommittedClaim { record }
+    }
+
+    private func committedClaimFromRecord(_ step: [String: Any]) throws -> CommittedClaim {
+        let bytes = step.b64("claim_record_b64")
+        let record = try JSONSerialization.jsonObject(with: bytes) as! [String: Any]
+        XCTAssertEqual(Set(record.keys), ["agent_id", "bundle_hash", "challenge_digest", "claim_id",
+            "clock_skew_seconds", "constraint_evaluators", "context_policy_digest", "expires_at",
+            "issued_at", "issuer_ids", "max_age_seconds", "namespace", "proof_digest", "rate_batch",
+            "replay_epoch", "required_scope", "requires_rate", "stream_id", "stream_seq", "verifier_id"])
+        let contextPolicyDigest = record["context_policy_digest"] is NSNull
+            ? "" : try XCTUnwrap(record["context_policy_digest"] as? String)
+        let streamId: Data?
+        if record["stream_id"] is NSNull { streamId = nil }
+        else { streamId = try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(record["stream_id"] as? String))) }
+        let streamSeq: Int64?
+        if record["stream_seq"] is NSNull { streamSeq = nil }
+        else { streamSeq = try XCTUnwrap(record["stream_seq"] as? NSNumber).int64Value }
+        let rateBatch = record.arr("rate_batch").map {
+            RateReservation(issuerId: $0.s("issuer_id"), certId: $0.s("cert_id"),
+                windowSeconds: Int64($0.int("window_s")), limit: Int64($0.int("limit")))
+        }
+        let evaluators = record.arr("constraint_evaluators").map {
+            ConstraintEvaluatorRef(kind: $0.s("type"), profileDigest: $0.s("profile_digest"))
+        }
+        let claim = ChallengeClaim(claimId: record.s("claim_id"), namespace: record.s("namespace"),
+            replayEpoch: Int64(record.int("replay_epoch")), challengeDigest: record.s("challenge_digest"),
+            proofDigest: record.s("proof_digest"), bundleHash: record.s("bundle_hash"),
+            issuerIds: record.strings("issuer_ids"), requiredScope: record.s("required_scope"),
+            contextPolicyDigest: contextPolicyDigest,
+            verifierId: record.s("verifier_id"), agentId: record.s("agent_id"),
+            requiresRate: record.bool("requires_rate"), rateBatch: rateBatch,
+            issuedAt: Int64(record.int("issued_at")), expiresAt: Int64(record.int("expires_at")),
+            maxAgeSeconds: Int64(record.int("max_age_seconds")),
+            clockSkewSeconds: Int64(record.int("clock_skew_seconds")),
+            streamId: streamId, streamSeq: streamSeq,
+            constraintEvaluators: evaluators)
+        return CommittedClaim(claim: claim, terminalResult: step.b64("terminal_b64"),
+            receiptBody: step.b64("body_b64"), allowHorizon: step["allow_valid_until"] == nil
+                ? 0 : Int64(step.int("allow_valid_until")))
+    }
+
     func testResumePreservesStoreErrorAndCallsOnce() async throws {
         let store = MissingCommittedStore()
         do {
@@ -913,7 +957,22 @@ final class ClaimTests: XCTestCase {
             "recover_rejects_other_decision", "recover_rejects_terminal_result_other_than_body",
             "recover_direct_accepts_canonical_interrupted_body", "recover_rejects_terminal_result_with_other_members",
             "recover_rejects_terminal_result_not_canonical", "recover_rejects_terminal_result_without_identity_status",
-            "recover_rejects_terminal_result_other_identity_status"]
+            "recover_rejects_terminal_result_other_identity_status",
+            "resume_rejects_record_for_another_claim", "resume_rejects_record_of_another_well_formed_claim",
+            "resume_rejects_record_claim_id_not_derived_from_replay_key", "resume_rejects_record_uppercase_challenge_digest",
+            "resume_rejects_record_non_sha384_challenge_digest", "resume_rejects_record_body_for_another_agent",
+            "resume_rejects_record_terminal_result_other_than_body", "resume_rejects_record_terminal_result_other_identity_status",
+            "resume_rejects_record_terminal_result_with_other_members", "resume_rejects_record_allow_without_allow_horizon",
+            "resume_rejects_record_allow_horizon_beyond_timestamp_domain", "resume_rejects_record_allow_horizon_on_non_allow",
+            "resume_rejects_record_body_for_another_verifier", "resume_rejects_record_body_for_another_bundle",
+            "resume_rejects_record_body_for_another_scope", "resume_rejects_record_body_with_another_context_policy_digest",
+            "resume_rejects_record_body_with_unsealed_constraint_evaluators", "resume_rejects_record_claim_without_context_policy",
+            "resume_rejects_record_negative_allow_horizon", "resume_rejects_record_negative_allow_horizon_on_non_allow",
+            "resume_accepts_interrupted_record", "resume_substituted_record_rejected_at_release",
+            "resume_accepts_allow_horizon_at_timestamp_domain_end", "resume_forged_record_longer_allow_horizon",
+            "resume_forged_record_later_challenge_expiry", "resume_forged_record_allow_for_unheld_claim",
+            "resume_forged_record_allow_over_evaluating_claim", "resume_forged_record_allow_over_interrupted_claim",
+            "resume_accepts_honest_record"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -948,7 +1007,22 @@ final class ClaimTests: XCTestCase {
             "recover_rejects_other_decision": 6, "recover_rejects_terminal_result_other_than_body": 6,
             "recover_direct_accepts_canonical_interrupted_body": 7, "recover_rejects_terminal_result_with_other_members": 6,
             "recover_rejects_terminal_result_not_canonical": 6, "recover_rejects_terminal_result_without_identity_status": 6,
-            "recover_rejects_terminal_result_other_identity_status": 6]
+            "recover_rejects_terminal_result_other_identity_status": 6,
+            "resume_rejects_record_for_another_claim": 5, "resume_rejects_record_of_another_well_formed_claim": 5,
+            "resume_rejects_record_claim_id_not_derived_from_replay_key": 5, "resume_rejects_record_uppercase_challenge_digest": 5,
+            "resume_rejects_record_non_sha384_challenge_digest": 5, "resume_rejects_record_body_for_another_agent": 5,
+            "resume_rejects_record_terminal_result_other_than_body": 5, "resume_rejects_record_terminal_result_other_identity_status": 5,
+            "resume_rejects_record_terminal_result_with_other_members": 5, "resume_rejects_record_allow_without_allow_horizon": 5,
+            "resume_rejects_record_allow_horizon_beyond_timestamp_domain": 5, "resume_rejects_record_allow_horizon_on_non_allow": 5,
+            "resume_rejects_record_body_for_another_verifier": 5, "resume_rejects_record_body_for_another_bundle": 5,
+            "resume_rejects_record_body_for_another_scope": 5, "resume_rejects_record_body_with_another_context_policy_digest": 5,
+            "resume_rejects_record_body_with_unsealed_constraint_evaluators": 5, "resume_rejects_record_claim_without_context_policy": 5,
+            "resume_rejects_record_negative_allow_horizon": 5, "resume_rejects_record_negative_allow_horizon_on_non_allow": 5,
+            "resume_accepts_interrupted_record": 1, "resume_substituted_record_rejected_at_release": 6,
+            "resume_accepts_allow_horizon_at_timestamp_domain_end": 1, "resume_forged_record_longer_allow_horizon": 6,
+            "resume_forged_record_later_challenge_expiry": 6, "resume_forged_record_allow_for_unheld_claim": 3,
+            "resume_forged_record_allow_over_evaluating_claim": 4, "resume_forged_record_allow_over_interrupted_claim": 8,
+            "resume_accepts_honest_record": 5]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -975,8 +1049,14 @@ final class ClaimTests: XCTestCase {
                 let at = "\(name) step \(index) \(op)"
                 var expectedStepKeys = stepKeys[op] ?? []
                 if op == "release" && step["receipt_of"] != nil { expectedStepKeys.insert("receipt_of") }
+                if op == "release" && step["mode"] != nil { expectedStepKeys.insert("mode") }
                 if op == "verify" && step["mode"] != nil { expectedStepKeys.formUnion(["mode", "time"]) }
                 if op == "finalize" && step["allow_valid_until"] != nil { expectedStepKeys.insert("allow_valid_until") }
+                if op == "resume" && step["claim_record_b64"] != nil {
+                    expectedStepKeys.formUnion(["claim_record_b64", "terminal_b64", "body_b64"])
+                    if step["allow_valid_until"] != nil { expectedStepKeys.insert("allow_valid_until") }
+                    if step["claim_id"] != nil { expectedStepKeys.insert("claim_id") }
+                }
                 XCTAssertEqual(Set(step.keys), expectedStepKeys, at)
                 switch op {
                 case "set_time":
@@ -1088,17 +1168,21 @@ final class ClaimTests: XCTestCase {
                     } else { XCTAssertNil(result.committed, at) }
                 case "resume":
                     let claimId: String
-                    if let existing = committed[requestName]?.claimId ?? claimed[requestName]?.claimId {
+                    if let override = step["claim_id"] as? String {
+                        claimId = override
+                    } else if let existing = committed[requestName]?.claimId ?? claimed[requestName]?.claimId {
                         claimId = existing
                     } else {
                         let expected = try XCTUnwrap(request(requestName, corpusName: "lifecycle-scenarios.json").expected, at)
                         claimId = try Ratify.protocolClaimId(namespace: expected.verifierNamespace,
                             replayEpoch: expected.replayEpoch, challenge: expected.value)
                     }
+                    let resumeStore: any CommittedClaimStore = try step["claim_record_b64"] == nil
+                        ? store : VectorCommittedStore(record: committedClaimFromRecord(step))
                     if want.keys.contains("error_class") {
                         XCTAssertEqual(Set(want.keys), ["error_class"], at)
                         do {
-                            _ = try await Ratify.resumeCommittedClaim(store: store, claimId: claimId)
+                            _ = try await Ratify.resumeCommittedClaim(store: resumeStore, claimId: claimId)
                             XCTFail("\(at): resume unexpectedly succeeded")
                         } catch let error {
                             XCTAssertEqual(error.errorClass?.rawValue, want.s("error_class"), at)
@@ -1108,7 +1192,7 @@ final class ClaimTests: XCTestCase {
                             ? ["stage", "decision", "decision_reason", "allow_horizon"]
                             : ["stage", "decision", "decision_reason"], at)
                         XCTAssertEqual(want.s("stage"), "committed", at)
-                        let value = try await Ratify.resumeCommittedClaim(store: store, claimId: claimId)
+                        let value = try await Ratify.resumeCommittedClaim(store: resumeStore, claimId: claimId)
                         committed[requestName] = value
                         let body = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
                         XCTAssertEqual(body["decision"] as? String, want.s("decision"), at)
@@ -1127,14 +1211,16 @@ final class ClaimTests: XCTestCase {
                             XCTAssertEqual(error.errorClass?.rawValue, want.s("error_class"), at)
                         }
                     } else {
-                        XCTAssertEqual(Set(want.keys), ["stage", "decision", "decision_reason", "trust_assessment",
-                            "status_assessment", "context_assessment"], at)
+                        let fields = name == "resume_forged_record_allow_over_interrupted_claim" && index == 2
+                            ? ["decision", "decision_reason"]
+                            : ["decision", "decision_reason", "trust_assessment", "status_assessment", "context_assessment"]
+                        XCTAssertEqual(Set(want.keys), Set(["stage"] + fields), at)
                         XCTAssertEqual(want.s("stage"), "committed", at)
                         let value = try await Ratify.recoverInterruptedClaim(store: store, claimId: claimId)
                         if let previous = committed[requestName] { XCTAssertEqual(value.receiptBody, previous.receiptBody, at) }
                         committed[requestName] = value
                         let body = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
-                        for field in ["decision", "decision_reason", "trust_assessment", "status_assessment", "context_assessment"] {
+                        for field in fields {
                             XCTAssertEqual(body[field] as? String, want.s(field), at)
                         }
                         XCTAssertNil(value.allowHorizon, at)
@@ -1181,6 +1267,10 @@ final class ClaimTests: XCTestCase {
                     if mode == "signer_failure" { try store.setSignerFailure(false) }
                 case "release":
                     let checkpointMode = step.s("checkpoint")
+                    if let mode = step["mode"] as? String {
+                        XCTAssertEqual(mode, "no_receipt", at)
+                        XCTAssertNil(receipts[requestName], at)
+                    }
                     XCTAssertTrue(checkpointMode == "reference" || checkpointMode == "wrong_entry", at)
                     XCTAssertEqual(Set(want.keys), want["decision"] == nil
                         ? ["release_status", "release_reason"]

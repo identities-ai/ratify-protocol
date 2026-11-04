@@ -42,6 +42,13 @@ public struct ConstraintContext: Sendable {
             hasAmount: hasAmount, requestedResourceId: requestedResourceId, requestedPath: requestedPath,
             hasResource: hasResource, extensionCounts: extensionCounts, extensionValues: extensionValues)
     }
+
+    init(_ f: FfiConstraintContext) {
+        self.init(requestedAmountMicros: f.requestedAmountMicros, requestedCurrency: f.requestedCurrency,
+            hasAmount: f.hasAmount, requestedResourceId: f.requestedResourceId,
+            requestedPath: f.requestedPath, hasResource: f.hasResource,
+            extensionCounts: f.extensionCounts, extensionValues: f.extensionValues)
+    }
 }
 
 /// Complete input passed to a standard profile or registered evaluator.
@@ -73,6 +80,12 @@ public struct ConstraintEvaluationInput: Sendable {
             constraintIndex: constraintIndex, issuerId: issuerId, certId: certId, context: context.ffi,
             evaluationTime: evaluationTime)
     }
+
+    init(_ f: FfiConstraintEvaluationInput) {
+        self.init(type: f.kind, paramsJSON: f.paramsJson, delegationIndex: f.delegationIndex,
+            constraintIndex: f.constraintIndex, issuerId: f.issuerId, certId: f.certId,
+            context: ConstraintContext(f.context), evaluationTime: f.evaluationTime)
+    }
 }
 
 public struct ConstraintEvaluationResult: Sendable {
@@ -80,10 +93,55 @@ public struct ConstraintEvaluationResult: Sendable {
     public let validUntil: Int64
     public let detail: String
 
+    public init(outcome: ConstraintOutcome, validUntil: Int64 = 0, detail: String = "") {
+        self.outcome = outcome; self.validUntil = validUntil; self.detail = detail
+    }
+
     init(_ result: FfiConstraintEvaluationResult) {
         outcome = ConstraintOutcome(rawValue: result.outcome)!
         validUntil = result.validUntil
         detail = result.detail
+    }
+
+    var ffi: FfiConstraintEvaluationResult {
+        FfiConstraintEvaluationResult(outcome: outcome.rawValue, validUntil: validUntil, detail: detail)
+    }
+}
+
+/// A pure extension evaluator. A callback that never returns delays verification.
+public protocol ConstraintEvaluator: Sendable {
+    func evaluate(_ input: ConstraintEvaluationInput) async throws -> ConstraintEvaluationResult
+}
+
+public struct ConstraintEvaluatorRegistration: Sendable {
+    public let descriptor: ConstraintProfileDescriptor
+    public let evaluator: any ConstraintEvaluator
+    public init(descriptor: ConstraintProfileDescriptor, evaluator: any ConstraintEvaluator) {
+        self.descriptor = descriptor; self.evaluator = evaluator
+    }
+}
+
+final class ConstraintEvaluatorBridge: FfiConstraintEvaluator, @unchecked Sendable {
+    private let evaluator: any ConstraintEvaluator
+    init(_ evaluator: any ConstraintEvaluator) { self.evaluator = evaluator }
+    func evaluate(input: FfiConstraintEvaluationInput, context: FfiStoreContext) throws -> FfiConstraintEvaluationResult {
+        do { return try callbackWait(context: context) { try await self.evaluator.evaluate(ConstraintEvaluationInput(input)).ffi } }
+        catch { throw FfiEvaluatorError.Failed(detail: "\(error)") }
+    }
+}
+
+/// Immutable, caller-authenticated extension profiles validated by the core.
+public final class ConstraintEvaluatorRegistry: @unchecked Sendable {
+    let handle: FfiConstraintEvaluatorRegistry
+    public let timeoutMilliseconds: UInt64
+    public init(timeoutMilliseconds: UInt64, registrations: [ConstraintEvaluatorRegistration]) throws(RatifyError) {
+        handle = try ffi { try FfiConstraintEvaluatorRegistry(timeoutMillis: timeoutMilliseconds,
+            registrations: registrations.map { FfiConstraintEvaluatorRegistration(profile: $0.descriptor.profile,
+                kind: $0.descriptor.type, evaluator: ConstraintEvaluatorBridge($0.evaluator)) }) }
+        self.timeoutMilliseconds = timeoutMilliseconds
+    }
+    public func refs() throws(RatifyError) -> [ConstraintEvaluatorRef] {
+        try ffi { try handle.refs().map(ConstraintEvaluatorRef.init) }
     }
 }
 

@@ -189,6 +189,7 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "ConstraintEvaluator.evaluate": "callback operation of the mapped ConstraintEvaluatorFnV2",
     "ChallengeRandomSource.fill": "the V2RandomSource read callback",
     "StoreError.Classified.errorClass": "typed store error class",
     "StoreError.ClaimProofConflict.errorClass": "fixed claim_replay class",

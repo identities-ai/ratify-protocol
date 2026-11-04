@@ -2250,6 +2250,336 @@ func FfiConverterTypeFfiCommittedOutcome_lower(_ value: FfiCommittedOutcome) -> 
 
 
 
+protocol FfiConstraintEvaluator: AnyObject, Sendable {
+
+    func evaluate(input: FfiConstraintEvaluationInput, context: FfiStoreContext) throws  -> FfiConstraintEvaluationResult
+
+}
+class FfiConstraintEvaluatorImpl: FfiConstraintEvaluator, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_fficonstraintevaluator(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_fficonstraintevaluator(handle, $0) }
+    }
+
+
+
+
+func evaluate(input: FfiConstraintEvaluationInput, context: FfiStoreContext)throws  -> FfiConstraintEvaluationResult  {
+    return try  FfiConverterTypeFfiConstraintEvaluationResult_lift(try rustCallWithError(FfiConverterTypeFfiEvaluatorError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_fficonstraintevaluator_evaluate(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiConstraintEvaluationInput_lower(input),
+        FfiConverterTypeFfiStoreContext_lower(context),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceFfiConstraintEvaluator {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceFfiConstraintEvaluator = UniffiVTableCallbackInterfaceFfiConstraintEvaluator(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeFfiConstraintEvaluator.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface FfiConstraintEvaluator: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeFfiConstraintEvaluator.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface FfiConstraintEvaluator: handle missing in uniffiClone")
+            }
+        },
+        evaluate: { (
+            uniffiHandle: UInt64,
+            input: RustBuffer,
+            context: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> FfiConstraintEvaluationResult in
+                guard let uniffiObj = try? FfiConverterTypeFfiConstraintEvaluator.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.evaluate(
+                     input: try FfiConverterTypeFfiConstraintEvaluationInput_lift(input),
+                     context: try FfiConverterTypeFfiStoreContext_lift(context)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeFfiConstraintEvaluationResult_lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeFfiEvaluatorError_lower
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceFfiConstraintEvaluator> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceFfiConstraintEvaluator>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitFfiConstraintEvaluator() {
+    uniffi_ratify_protocol_ffi_fn_init_callback_vtable_fficonstraintevaluator(UniffiCallbackInterfaceFfiConstraintEvaluator.vtablePtr)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiConstraintEvaluator: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<FfiConstraintEvaluator>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiConstraintEvaluator
+
+    static func lift(_ handle: UInt64) throws -> FfiConstraintEvaluator {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return FfiConstraintEvaluatorImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    static func lower(_ value: FfiConstraintEvaluator) -> UInt64 {
+         if let rustImpl = value as? FfiConstraintEvaluatorImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiConstraintEvaluator {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiConstraintEvaluator, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluator_lift(_ handle: UInt64) throws -> FfiConstraintEvaluator {
+    return try FfiConverterTypeFfiConstraintEvaluator.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluator_lower(_ value: FfiConstraintEvaluator) -> UInt64 {
+    return FfiConverterTypeFfiConstraintEvaluator.lower(value)
+}
+
+
+
+
+
+
+protocol FfiConstraintEvaluatorRegistryProtocol: AnyObject, Sendable {
+
+    func refs() throws  -> [FfiConstraintEvaluatorRef]
+
+}
+class FfiConstraintEvaluatorRegistry: FfiConstraintEvaluatorRegistryProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_fficonstraintevaluatorregistry(self.handle, $0) }
+    }
+convenience init(timeoutMillis: UInt64, registrations: [FfiConstraintEvaluatorRegistration])throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_constructor_fficonstraintevaluatorregistry_new(
+        FfiConverterUInt64.lower(timeoutMillis),
+        FfiConverterSequenceTypeFfiConstraintEvaluatorRegistration.lower(registrations),uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_fficonstraintevaluatorregistry(handle, $0) }
+    }
+
+
+
+
+func refs()throws  -> [FfiConstraintEvaluatorRef]  {
+    return try  FfiConverterSequenceTypeFfiConstraintEvaluatorRef.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_fficonstraintevaluatorregistry_refs(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiConstraintEvaluatorRegistry: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiConstraintEvaluatorRegistry
+
+    static func lift(_ handle: UInt64) throws -> FfiConstraintEvaluatorRegistry {
+        return FfiConstraintEvaluatorRegistry(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiConstraintEvaluatorRegistry) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiConstraintEvaluatorRegistry {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiConstraintEvaluatorRegistry, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluatorRegistry_lift(_ handle: UInt64) throws -> FfiConstraintEvaluatorRegistry {
+    return try FfiConverterTypeFfiConstraintEvaluatorRegistry.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluatorRegistry_lower(_ value: FfiConstraintEvaluatorRegistry) -> UInt64 {
+    return FfiConverterTypeFfiConstraintEvaluatorRegistry.lower(value)
+}
+
+
+
+
+
+
 /**
  * A validated, fingerprinted context policy (SPEC-v2 context policy).
  */
@@ -6199,6 +6529,64 @@ func FfiConverterTypeFfiConstraintEvaluatorRef_lower(_ value: FfiConstraintEvalu
 }
 
 
+struct FfiConstraintEvaluatorRegistration {
+    var profile: String
+    var kind: String
+    var evaluator: FfiConstraintEvaluator
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(profile: String, kind: String, evaluator: FfiConstraintEvaluator) {
+        self.profile = profile
+        self.kind = kind
+        self.evaluator = evaluator
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiConstraintEvaluatorRegistration: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiConstraintEvaluatorRegistration: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiConstraintEvaluatorRegistration {
+        return
+            try FfiConstraintEvaluatorRegistration(
+                profile: FfiConverterString.read(from: &buf),
+                kind: FfiConverterString.read(from: &buf),
+                evaluator: FfiConverterTypeFfiConstraintEvaluator.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiConstraintEvaluatorRegistration, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.profile, into: &buf)
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterTypeFfiConstraintEvaluator.write(value.evaluator, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluatorRegistration_lift(_ buf: RustBuffer) throws -> FfiConstraintEvaluatorRegistration {
+    return try FfiConverterTypeFfiConstraintEvaluatorRegistration.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiConstraintEvaluatorRegistration_lower(_ value: FfiConstraintEvaluatorRegistration) -> RustBuffer {
+    return FfiConverterTypeFfiConstraintEvaluatorRegistration.lower(value)
+}
+
+
 struct FfiDeferredConstraint: Equatable, Hashable {
     var delegationIndex: UInt64
     var constraintIndex: UInt64
@@ -6868,10 +7256,11 @@ struct FfiLiveVerifyRequest {
     var tzdbVersion: String
     var statusKeys: [String: FfiStatusKeyConfig]
     var statusPolicy: FfiStatusPolicy
+    var constraintEvaluators: FfiConstraintEvaluatorRegistry?
 
     // Default memberwise initializers are never by default, so we
     // declare one manually.
-    init(bundle: Data, expected: FfiExpectedChallenge?, contextPolicy: FfiContextPolicy?, requiredScope: String, verifierNamespace: String, replayEpoch: Int64, verifierId: String, now: Int64, maxChallengeAgeSeconds: Int64, futureSkewSeconds: Int64, context: FfiConstraintContext, tzdbVersion: String, statusKeys: [String: FfiStatusKeyConfig], statusPolicy: FfiStatusPolicy) {
+    init(bundle: Data, expected: FfiExpectedChallenge?, contextPolicy: FfiContextPolicy?, requiredScope: String, verifierNamespace: String, replayEpoch: Int64, verifierId: String, now: Int64, maxChallengeAgeSeconds: Int64, futureSkewSeconds: Int64, context: FfiConstraintContext, tzdbVersion: String, statusKeys: [String: FfiStatusKeyConfig], statusPolicy: FfiStatusPolicy, constraintEvaluators: FfiConstraintEvaluatorRegistry?) {
         self.bundle = bundle
         self.expected = expected
         self.contextPolicy = contextPolicy
@@ -6886,6 +7275,7 @@ struct FfiLiveVerifyRequest {
         self.tzdbVersion = tzdbVersion
         self.statusKeys = statusKeys
         self.statusPolicy = statusPolicy
+        self.constraintEvaluators = constraintEvaluators
     }
 
     
@@ -6917,7 +7307,8 @@ struct FfiConverterTypeFfiLiveVerifyRequest: FfiConverterRustBuffer {
                 context: FfiConverterTypeFfiConstraintContext.read(from: &buf), 
                 tzdbVersion: FfiConverterString.read(from: &buf), 
                 statusKeys: FfiConverterDictionaryStringTypeFfiStatusKeyConfig.read(from: &buf), 
-                statusPolicy: FfiConverterTypeFfiStatusPolicy.read(from: &buf)
+                statusPolicy: FfiConverterTypeFfiStatusPolicy.read(from: &buf),
+                constraintEvaluators: FfiConverterOptionTypeFfiConstraintEvaluatorRegistry.read(from: &buf)
         )
     }
 
@@ -6936,6 +7327,7 @@ struct FfiConverterTypeFfiLiveVerifyRequest: FfiConverterRustBuffer {
         FfiConverterString.write(value.tzdbVersion, into: &buf)
         FfiConverterDictionaryStringTypeFfiStatusKeyConfig.write(value.statusKeys, into: &buf)
         FfiConverterTypeFfiStatusPolicy.write(value.statusPolicy, into: &buf)
+        FfiConverterOptionTypeFfiConstraintEvaluatorRegistry.write(value.constraintEvaluators, into: &buf)
     }
 }
 
@@ -9664,6 +10056,81 @@ func FfiConverterTypeFfiError_lower(_ value: FfiError) -> RustBuffer {
 
 
 
+enum FfiEvaluatorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    case Failed(detail: String
+    )
+
+
+
+
+
+
+    var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension FfiEvaluatorError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiEvaluatorError: FfiConverterRustBuffer {
+    typealias SwiftType = FfiEvaluatorError
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiEvaluatorError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .Failed(
+            detail: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    static func write(_ value: FfiEvaluatorError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case let .Failed(detail):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(detail, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiEvaluatorError_lift(_ buf: RustBuffer) throws -> FfiEvaluatorError {
+    return try FfiConverterTypeFfiEvaluatorError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiEvaluatorError_lower(_ value: FfiEvaluatorError) -> RustBuffer {
+    return FfiConverterTypeFfiEvaluatorError.lower(value)
+}
+
+
+
 enum FfiJournalStoreError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
@@ -10614,6 +11081,30 @@ fileprivate struct FfiConverterOptionTypeFfiCommittedOutcome: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiConstraintEvaluatorRegistry: FfiConverterRustBuffer {
+    typealias SwiftType = FfiConstraintEvaluatorRegistry?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiConstraintEvaluatorRegistry.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiConstraintEvaluatorRegistry.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiContextPolicy: FfiConverterRustBuffer {
     typealias SwiftType = FfiContextPolicy?
 
@@ -11211,6 +11702,31 @@ fileprivate struct FfiConverterSequenceTypeFfiConstraintEvaluatorRef: FfiConvert
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFfiConstraintEvaluatorRef.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFfiConstraintEvaluatorRegistration: FfiConverterRustBuffer {
+    typealias SwiftType = [FfiConstraintEvaluatorRegistration]
+
+    static func write(_ value: [FfiConstraintEvaluatorRegistration], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFfiConstraintEvaluatorRegistration.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FfiConstraintEvaluatorRegistration] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FfiConstraintEvaluatorRegistration]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFfiConstraintEvaluatorRegistration.read(from: &buf))
         }
         return seq
     }
@@ -13390,6 +13906,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_required_fields() != 36080) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficonstraintevaluator_evaluate() != 29540) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_fficonstraintevaluatorregistry_refs() != 18681) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffijournalcontext_is_cancelled() != 29433) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13498,6 +14020,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_constructor_fficontextpolicy_new() != 11610) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_constructor_fficonstraintevaluatorregistry_new() != 4565) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_from_seeds() != 62408) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13519,6 +14044,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitFfiChallengeIssuanceStore()
     uniffiCallbackInitFfiClaimStore()
     uniffiCallbackInitFfiCommittedClaimStore()
+    uniffiCallbackInitFfiConstraintEvaluator()
     uniffiCallbackInitFfiEd25519Signer()
     uniffiCallbackInitFfiJournalStore()
     uniffiCallbackInitFfiRandomSource()

@@ -216,9 +216,15 @@ public final class com/ratifyprotocol/ConstraintEvaluationInput {
 }
 
 public final class com/ratifyprotocol/ConstraintEvaluationResult {
+	public fun <init> (Lcom/ratifyprotocol/ConstraintOutcome;JLjava/lang/String;)V
+	public synthetic fun <init> (Lcom/ratifyprotocol/ConstraintOutcome;JLjava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getDetail ()Ljava/lang/String;
 	public final fun getOutcome ()Lcom/ratifyprotocol/ConstraintOutcome;
 	public final fun getValidUntil ()J
+}
+
+public abstract interface class com/ratifyprotocol/ConstraintEvaluator {
+	public abstract fun evaluate (Lcom/ratifyprotocol/ConstraintEvaluationInput;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/ratifyprotocol/ConstraintEvaluatorRef {
@@ -227,6 +233,18 @@ public final class com/ratifyprotocol/ConstraintEvaluatorRef {
 	public final fun getKind ()Ljava/lang/String;
 	public final fun getProfileDigest ()Ljava/lang/String;
 	public fun hashCode ()I
+}
+
+public final class com/ratifyprotocol/ConstraintEvaluatorRegistration {
+	public fun <init> (Lcom/ratifyprotocol/ConstraintProfileDescriptor;Lcom/ratifyprotocol/ConstraintEvaluator;)V
+	public final fun getDescriptor ()Lcom/ratifyprotocol/ConstraintProfileDescriptor;
+	public final fun getEvaluator ()Lcom/ratifyprotocol/ConstraintEvaluator;
+}
+
+public final class com/ratifyprotocol/ConstraintEvaluatorRegistry {
+	public synthetic fun <init> (JLjava/util/List;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getTimeoutMilliseconds-s-VKNKU ()J
+	public final fun refs ()Ljava/util/List;
 }
 
 public final class com/ratifyprotocol/ConstraintOutcome : java/lang/Enum {
@@ -1237,8 +1255,10 @@ public final class com/ratifyprotocol/VerifyOutcome {
 }
 
 public final class com/ratifyprotocol/VerifyRequest {
-	public fun <init> ([BLcom/ratifyprotocol/ExpectedChallenge;Lcom/ratifyprotocol/ContextPolicy;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;JJJLcom/ratifyprotocol/ConstraintContext;Ljava/lang/String;Ljava/util/Map;Lcom/ratifyprotocol/RevocationStatusPolicy;)V
+	public fun <init> ([BLcom/ratifyprotocol/ExpectedChallenge;Lcom/ratifyprotocol/ContextPolicy;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;JJJLcom/ratifyprotocol/ConstraintContext;Ljava/lang/String;Ljava/util/Map;Lcom/ratifyprotocol/RevocationStatusPolicy;Lcom/ratifyprotocol/ConstraintEvaluatorRegistry;)V
+	public synthetic fun <init> ([BLcom/ratifyprotocol/ExpectedChallenge;Lcom/ratifyprotocol/ContextPolicy;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;JJJLcom/ratifyprotocol/ConstraintContext;Ljava/lang/String;Ljava/util/Map;Lcom/ratifyprotocol/RevocationStatusPolicy;Lcom/ratifyprotocol/ConstraintEvaluatorRegistry;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getBundle ()[B
+	public final fun getConstraintEvaluators ()Lcom/ratifyprotocol/ConstraintEvaluatorRegistry;
 	public final fun getContext ()Lcom/ratifyprotocol/ConstraintContext;
 	public final fun getContextPolicy ()Lcom/ratifyprotocol/ContextPolicy;
 	public final fun getExpected ()Lcom/ratifyprotocol/ExpectedChallenge;

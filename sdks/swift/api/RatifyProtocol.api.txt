@@ -145,8 +145,11 @@ ConstraintEvaluationInput.paramsJSON [Var] -> Foundation.Data?
 ConstraintEvaluationInput.type [Var] -> Swift.String
 ConstraintEvaluationResult [Struct]
 ConstraintEvaluationResult.detail [Var] -> Swift.String
+ConstraintEvaluationResult.init(outcome:validUntil:detail:) [Constructor] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintOutcome, Swift.Int64, Swift.String
 ConstraintEvaluationResult.outcome [Var] -> RatifyProtocol.ConstraintOutcome
 ConstraintEvaluationResult.validUntil [Var] -> Swift.Int64
+ConstraintEvaluator [Protocol]
+ConstraintEvaluator.evaluate(_:) [Func] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintEvaluationInput
 ConstraintEvaluatorRef [Struct]
 ConstraintEvaluatorRef.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ConstraintEvaluatorRef, RatifyProtocol.ConstraintEvaluatorRef
 ConstraintEvaluatorRef.hash(into:) [Func] -> (), Swift.Hasher
@@ -154,6 +157,14 @@ ConstraintEvaluatorRef.hashValue [Var] -> Swift.Int
 ConstraintEvaluatorRef.init(kind:profileDigest:) [Constructor] -> RatifyProtocol.ConstraintEvaluatorRef, Swift.String, Swift.String
 ConstraintEvaluatorRef.kind [Var] -> Swift.String
 ConstraintEvaluatorRef.profileDigest [Var] -> Swift.String
+ConstraintEvaluatorRegistration [Struct]
+ConstraintEvaluatorRegistration.descriptor [Var] -> RatifyProtocol.ConstraintProfileDescriptor
+ConstraintEvaluatorRegistration.evaluator [Var] -> any RatifyProtocol.ConstraintEvaluator
+ConstraintEvaluatorRegistration.init(descriptor:evaluator:) [Constructor] -> RatifyProtocol.ConstraintEvaluatorRegistration, RatifyProtocol.ConstraintProfileDescriptor, any RatifyProtocol.ConstraintEvaluator
+ConstraintEvaluatorRegistry [Class]
+ConstraintEvaluatorRegistry.init(timeoutMilliseconds:registrations:) [Constructor] -> RatifyProtocol.ConstraintEvaluatorRegistry, Swift.UInt64, [RatifyProtocol.ConstraintEvaluatorRegistration]
+ConstraintEvaluatorRegistry.refs() [Func] -> [RatifyProtocol.ConstraintEvaluatorRef]
+ConstraintEvaluatorRegistry.timeoutMilliseconds [Var] -> Swift.UInt64
 ConstraintOutcome [Enum]
 ConstraintOutcome.RawValue [TypeAlias]
 ConstraintOutcome.denied [EnumElement] -> (RatifyProtocol.ConstraintOutcome.Type) -> RatifyProtocol.ConstraintOutcome
@@ -917,11 +928,12 @@ VerifyOutcome.errorDetail [Var] -> Swift.String?
 VerifyOutcome.stage [Var] -> RatifyProtocol.VerifyStage
 VerifyRequest [Struct]
 VerifyRequest.bundle [Var] -> Foundation.Data
+VerifyRequest.constraintEvaluators [Var] -> RatifyProtocol.ConstraintEvaluatorRegistry?
 VerifyRequest.context [Var] -> RatifyProtocol.ConstraintContext
 VerifyRequest.contextPolicy [Var] -> RatifyProtocol.ContextPolicy?
 VerifyRequest.expected [Var] -> RatifyProtocol.ExpectedChallenge?
 VerifyRequest.futureSkewSeconds [Var] -> Swift.Int64
-VerifyRequest.init(bundle:expected:contextPolicy:requiredScope:verifierNamespace:replayEpoch:verifierId:now:maxChallengeAgeSeconds:futureSkewSeconds:context:tzdbVersion:statusKeys:statusPolicy:) [Constructor] -> RatifyProtocol.VerifyRequest, Foundation.Data, RatifyProtocol.ExpectedChallenge?, RatifyProtocol.ContextPolicy?, Swift.String, Swift.String, Swift.Int64, Swift.String, Swift.Int64, Swift.Int64, Swift.Int64, RatifyProtocol.ConstraintContext, Swift.String, [Swift.String : RatifyProtocol.StatusKeyConfig], RatifyProtocol.RevocationStatusPolicy
+VerifyRequest.init(bundle:expected:contextPolicy:requiredScope:verifierNamespace:replayEpoch:verifierId:now:maxChallengeAgeSeconds:futureSkewSeconds:context:tzdbVersion:statusKeys:statusPolicy:constraintEvaluators:) [Constructor] -> RatifyProtocol.VerifyRequest, Foundation.Data, RatifyProtocol.ExpectedChallenge?, RatifyProtocol.ContextPolicy?, Swift.String, Swift.String, Swift.Int64, Swift.String, Swift.Int64, Swift.Int64, Swift.Int64, RatifyProtocol.ConstraintContext, Swift.String, [Swift.String : RatifyProtocol.StatusKeyConfig], RatifyProtocol.RevocationStatusPolicy, RatifyProtocol.ConstraintEvaluatorRegistry?
 VerifyRequest.maxChallengeAgeSeconds [Var] -> Swift.Int64
 VerifyRequest.now [Var] -> Swift.Int64
 VerifyRequest.replayEpoch [Var] -> Swift.Int64

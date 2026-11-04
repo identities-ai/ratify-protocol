@@ -23,18 +23,21 @@ public struct VerifyRequest: Sendable {
     public let tzdbVersion: String
     public let statusKeys: [String: StatusKeyConfig]
     public let statusPolicy: RevocationStatusPolicy
+    public let constraintEvaluators: ConstraintEvaluatorRegistry?
 
     public init(bundle: Data, expected: ExpectedChallenge?, contextPolicy: ContextPolicy?,
                 requiredScope: String, verifierNamespace: String, replayEpoch: Int64,
                 verifierId: String, now: Int64, maxChallengeAgeSeconds: Int64,
                 futureSkewSeconds: Int64, context: ConstraintContext, tzdbVersion: String,
-                statusKeys: [String: StatusKeyConfig], statusPolicy: RevocationStatusPolicy) {
+                statusKeys: [String: StatusKeyConfig], statusPolicy: RevocationStatusPolicy,
+                constraintEvaluators: ConstraintEvaluatorRegistry? = nil) {
         self.bundle = bundle; self.expected = expected; self.contextPolicy = contextPolicy
         self.requiredScope = requiredScope; self.verifierNamespace = verifierNamespace
         self.replayEpoch = replayEpoch; self.verifierId = verifierId; self.now = now
         self.maxChallengeAgeSeconds = maxChallengeAgeSeconds; self.futureSkewSeconds = futureSkewSeconds
         self.context = context; self.tzdbVersion = tzdbVersion
         self.statusKeys = statusKeys; self.statusPolicy = statusPolicy
+        self.constraintEvaluators = constraintEvaluators
     }
 
     var ffi: FfiLiveVerifyRequest {
@@ -42,7 +45,8 @@ public struct VerifyRequest: Sendable {
             requiredScope: requiredScope, verifierNamespace: verifierNamespace, replayEpoch: replayEpoch,
             verifierId: verifierId, now: now, maxChallengeAgeSeconds: maxChallengeAgeSeconds,
             futureSkewSeconds: futureSkewSeconds, context: context.ffi, tzdbVersion: tzdbVersion,
-            statusKeys: statusKeys.mapValues(\.ffi), statusPolicy: statusPolicy.ffi)
+            statusKeys: statusKeys.mapValues(\.ffi), statusPolicy: statusPolicy.ffi,
+            constraintEvaluators: constraintEvaluators?.handle)
     }
 }
 

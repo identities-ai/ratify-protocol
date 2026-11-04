@@ -9,7 +9,7 @@ use crate::challenge_issuance::FfiExpectedChallenge;
 use crate::claim::{FfiChallengeClaim, FfiClaimDisposition, FfiClaimStore, FfiCommittedOutcome, FfiRateReservationStore, ForeignBarrierClaimStore, ForeignClaimStore, ForeignRateReservationStore};
 use crate::context::{FfiCancelToken, FfiContextPolicy};
 use crate::error::{protocol, FfiResult};
-use crate::evaluator::FfiConstraintContext;
+use crate::evaluator::{FfiConstraintContext, FfiConstraintEvaluatorRegistry};
 use crate::guard::call;
 use crate::journal::{FfiJournalStore, ForeignJournalStore};
 use crate::keys::FfiPublicKey;
@@ -38,6 +38,7 @@ pub struct FfiLiveVerifyRequest {
     pub tzdb_version: String,
     pub status_keys: std::collections::HashMap<String, FfiStatusKeyConfig>,
     pub status_policy: FfiStatusPolicy,
+    pub constraint_evaluators: Option<Arc<FfiConstraintEvaluatorRegistry>>,
 }
 
 impl TryFrom<FfiLiveVerifyRequest> for V2VerifyRequest {
@@ -46,6 +47,9 @@ impl TryFrom<FfiLiveVerifyRequest> for V2VerifyRequest {
     fn try_from(r: FfiLiveVerifyRequest) -> Result<Self, Self::Error> {
         if r.context_policy.as_ref().is_some_and(|p| p.poison.is_set()) {
             return Err(protocol(core::V2ErrorClass::ConfigurationInvalid, "context policy handle is poisoned"));
+        }
+        if r.constraint_evaluators.as_ref().is_some_and(|p| p.poison.is_set()) {
+            return Err(protocol(core::V2ErrorClass::ConfigurationInvalid, "constraint evaluator registry is poisoned"));
         }
         let expected = r.expected.map(TryInto::try_into).transpose()
             .map_err(|_| protocol(core::V2ErrorClass::ConfigurationInvalid, "expected challenge is invalid"))?;
@@ -67,6 +71,7 @@ impl TryFrom<FfiLiveVerifyRequest> for V2VerifyRequest {
                 key: config.key.into(),
             })).collect::<BTreeMap<_, _>>(),
             status_policy: r.status_policy.into(),
+            constraint_evaluators: r.constraint_evaluators.map(|p| p.inner.clone()),
             ..Default::default()
         })
     }

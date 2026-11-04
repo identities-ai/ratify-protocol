@@ -678,8 +678,8 @@
  },
  "ConstraintEvaluatorError": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Mobile callbacks use host errors and the fixed calling-thread invocation mode",
+  "status": "rust-idiom"
  },
  "ConstraintEvaluatorError::clone": {
   "kind": "fn",
@@ -698,23 +698,24 @@
  },
  "ConstraintEvaluatorFnV2": {
   "kind": "type",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ConstraintEvaluator",
+  "status": "mapped",
+  "swift": "ConstraintEvaluator"
  },
  "ConstraintEvaluatorInvocationV2": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Mobile callbacks use host errors and the fixed calling-thread invocation mode",
+  "status": "rust-idiom"
  },
  "ConstraintEvaluatorInvocationV2::CallingThread": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Mobile callbacks use host errors and the fixed calling-thread invocation mode",
+  "status": "rust-idiom"
  },
  "ConstraintEvaluatorInvocationV2::WorkerThread": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Mobile callbacks use host errors and the fixed calling-thread invocation mode",
+  "status": "rust-idiom"
  },
  "ConstraintEvaluatorInvocationV2::clone": {
   "kind": "fn",
@@ -786,8 +787,9 @@
  },
  "ConstraintEvaluatorRegistrationV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ConstraintEvaluatorRegistration",
+  "status": "mapped",
+  "swift": "ConstraintEvaluatorRegistration"
  },
  "ConstraintEvaluatorRegistrationV2::clone": {
   "kind": "fn",
@@ -796,13 +798,15 @@
  },
  "ConstraintEvaluatorRegistrationV2::descriptor": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ConstraintEvaluatorRegistration.descriptor",
+  "status": "mapped",
+  "swift": "ConstraintEvaluatorRegistration.descriptor"
  },
  "ConstraintEvaluatorRegistrationV2::evaluate": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ConstraintEvaluatorRegistration.evaluator",
+  "status": "mapped",
+  "swift": "ConstraintEvaluatorRegistration.evaluator"
  },
  "ConstraintEvaluatorRegistrationV2::fmt": {
   "kind": "fn",
@@ -811,8 +815,9 @@
  },
  "ConstraintEvaluatorRegistryV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ConstraintEvaluatorRegistry",
+  "status": "mapped",
+  "swift": "ConstraintEvaluatorRegistry"
  },
  "ConstraintEvaluatorRegistryV2::clone": {
   "kind": "fn",
@@ -826,28 +831,31 @@
  },
  "ConstraintEvaluatorRegistryV2::invocation": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Mobile callbacks use host errors and the fixed calling-thread invocation mode",
+  "status": "rust-idiom"
  },
  "ConstraintEvaluatorRegistryV2::new": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ConstraintEvaluatorRegistry.init",
+  "status": "mapped",
+  "swift": "ConstraintEvaluatorRegistry.init"
  },
  "ConstraintEvaluatorRegistryV2::new_with_invocation": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Mobile callbacks use host errors and the fixed calling-thread invocation mode",
+  "status": "rust-idiom"
  },
  "ConstraintEvaluatorRegistryV2::refs": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ConstraintEvaluatorRegistry.refs",
+  "status": "mapped",
+  "swift": "ConstraintEvaluatorRegistry.refs"
  },
  "ConstraintEvaluatorRegistryV2::timeout": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ConstraintEvaluatorRegistry.timeoutMilliseconds",
+  "status": "mapped",
+  "swift": "ConstraintEvaluatorRegistry.timeoutMilliseconds"
  },
  "ConstraintOutcomeV2": {
   "kind": "enum",
@@ -8142,8 +8150,9 @@
  },
  "V2VerifyRequest::constraint_evaluators": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.constraintEvaluators",
+  "status": "mapped",
+  "swift": "VerifyRequest.constraintEvaluators"
  },
  "V2VerifyRequest::context": {
   "kind": "member",

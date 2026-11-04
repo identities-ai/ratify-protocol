@@ -27,13 +27,15 @@ public class VerifyRequest(
     public val tzdbVersion: String,
     statusKeys: Map<String, StatusKeyConfig>,
     public val statusPolicy: RevocationStatusPolicy,
+    public val constraintEvaluators: ConstraintEvaluatorRegistry? = null,
 ) {
     private val bytes = bundle.copyOf()
     public val bundle: ByteArray get() = bytes.copyOf()
     public val statusKeys: Map<String, StatusKeyConfig> = statusKeys.toMap()
     internal fun toFfi() = FfiLiveVerifyRequest(bytes.copyOf(), expected?.toFfi(), contextPolicy?.handle,
         requiredScope, verifierNamespace, replayEpoch, verifierId, now, maxChallengeAgeSeconds,
-        futureSkewSeconds, context.toFfi(), tzdbVersion, statusKeys.mapValues { it.value.toFfi() }, statusPolicy.toFfi())
+        futureSkewSeconds, context.toFfi(), tzdbVersion, statusKeys.mapValues { it.value.toFfi() },
+        statusPolicy.toFfi(), constraintEvaluators?.handle)
 }
 
 public enum class VerifyStage(public val spelling: String) {

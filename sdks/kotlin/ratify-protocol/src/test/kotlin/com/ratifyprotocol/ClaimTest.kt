@@ -198,6 +198,7 @@ class ClaimTest {
             assertEquals(name, callbacks.getInt("trust"), trust.calls.get())
             assertEquals(name, callbacks.getInt("status"), status.requests.size)
             assertEquals(name, callbacks.getInt("audience"), audience.calls.get())
+            assertEquals(name, vector.getJSONObject("expected").arr("status_requests").size, status.requests.size)
         }
     }
 
@@ -214,8 +215,9 @@ class ClaimTest {
             val (trust, status, journal) = vectorProviders(vector, req)
             val store = CreatedClaimStore(claimedAt = vector.getLong("now"),
                 finalizeTimeOffset = vector.getLong("finalize_time_offset"))
+            val audience = CountingAudience()
             val outcome = verifyProofBundle(req, store, trust = trust,
-                audience = CountingAudience(), statusEvidence = status, statusJournal = journal)
+                audience = audience, statusEvidence = status, statusJournal = journal)
             val expected = vector.getJSONObject("expected")
             val callbacks = expected.getJSONObject("callback_counts")
             assertEquals(name, VerifyStage.EVALUATING, outcome.stage)
@@ -226,13 +228,19 @@ class ClaimTest {
             assertEquals(name, callbacks.getInt("progress"), store.progressWrites)
             assertEquals(name, callbacks.getInt("trust"), trust.calls.get())
             assertEquals(name, callbacks.getInt("status"), status.requests.size)
+            assertEquals(name, callbacks.getInt("audience"), audience.calls.get())
             val expectedRequests = expected.arr("status_requests")
             assertEquals(name, expectedRequests.size, status.requests.size)
             for ((actual, scripted) in status.requests.zip(expectedRequests)) {
                 assertEquals(name, scripted.getString("issuer_id"), actual.issuerId)
                 assertEquals(name, scripted.getLong("status_key_epoch").toULong(), actual.statusKeyEpoch)
                 assertEquals(name, scripted.getString("status_key_id"), actual.statusKeyId)
-                assertEquals(name, scripted.arr("refs").map { it.getString("cert_id") }, actual.refs.map { it.certId })
+                val refs = scripted.arr("refs")
+                assertEquals(name, refs.size, actual.refs.size)
+                for ((actualRef, expectedRef) in actual.refs.zip(refs)) {
+                    assertEquals(name, expectedRef.getString("issuer_id"), actualRef.issuerId)
+                    assertEquals(name, expectedRef.getString("cert_id"), actualRef.certId)
+                }
             }
         }
     }

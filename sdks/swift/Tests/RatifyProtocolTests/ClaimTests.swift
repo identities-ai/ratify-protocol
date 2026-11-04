@@ -199,6 +199,7 @@ final class ClaimTests: XCTestCase {
             XCTAssertEqual(trustCalls, callbacks.int("trust"), name)
             XCTAssertEqual(statusCalls, callbacks.int("status"), name)
             XCTAssertEqual(audienceCalls, callbacks.int("audience"), name)
+            XCTAssertEqual(statusCalls, vector.obj("expected").arr("status_requests").count, name)
         }
     }
 
@@ -213,8 +214,9 @@ final class ClaimTests: XCTestCase {
             let (trust, status, journal) = try await vectorProviders(vector, request: req)
             let store = CreatedClaimStore(claimedAt: Int64(vector.int("now")),
                 finalizeTimeOffset: Int64(vector.int("finalize_time_offset")))
+            let audience = EmptyAudience()
             let outcome = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
-                audience: EmptyAudience(), statusEvidence: status, statusJournal: journal)
+                audience: audience, statusEvidence: status, statusJournal: journal)
             let expected = vector.obj("expected")
             let callbacks = expected.obj("callback_counts")
             XCTAssertEqual(outcome.stage, .evaluating, name)
@@ -225,18 +227,25 @@ final class ClaimTests: XCTestCase {
             let progress = await store.progressWrites
             let trustCalls = await trust.calls
             let requests = await status.requests
+            let audienceCalls = await audience.calls
             XCTAssertEqual(claims, callbacks.int("claim"), name)
             XCTAssertEqual(finalizations, callbacks.int("finalize"), name)
             XCTAssertEqual(progress, callbacks.int("progress"), name)
             XCTAssertEqual(trustCalls, callbacks.int("trust"), name)
             XCTAssertEqual(requests.count, callbacks.int("status"), name)
+            XCTAssertEqual(audienceCalls, callbacks.int("audience"), name)
             let expectedRequests = expected.arr("status_requests")
             XCTAssertEqual(requests.count, expectedRequests.count, name)
             for (actual, scripted) in zip(requests, expectedRequests) {
                 XCTAssertEqual(actual.issuerId, scripted.s("issuer_id"), name)
                 XCTAssertEqual(actual.statusKeyEpoch, UInt64(scripted.int("status_key_epoch")), name)
                 XCTAssertEqual(actual.statusKeyId, scripted.s("status_key_id"), name)
-                XCTAssertEqual(actual.refs.map(\.certId), scripted.arr("refs").map { $0.s("cert_id") }, name)
+                let refs = scripted.arr("refs")
+                XCTAssertEqual(actual.refs.count, refs.count, name)
+                for (actualRef, expectedRef) in zip(actual.refs, refs) {
+                    XCTAssertEqual(actualRef.issuerId, expectedRef.s("issuer_id"), name)
+                    XCTAssertEqual(actualRef.certId, expectedRef.s("cert_id"), name)
+                }
             }
         }
     }

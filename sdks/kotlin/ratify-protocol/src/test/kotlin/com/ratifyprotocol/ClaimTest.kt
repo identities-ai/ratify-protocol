@@ -191,7 +191,8 @@ class ClaimTest {
     }
 
     private suspend fun vectorProviders(vector: JSONObject, req: VerifyRequest): Triple<TrustProvider, StatusEvidenceProvider, VectorJournal> {
-        val trustKey = publicKeyOf(vector.getJSONObject("trust").getJSONObject("root_public_key"))
+        val trustKey = vector.getJSONObject("trust").optJSONObject("root_public_key")?.let(::publicKeyOf)
+            ?: HybridPublicKey(ByteArray(0), ByteArray(0))
         val trust = object : TrustProvider {
             override suspend fun resolve(chain: List<DelegationCert>) = TrustResolution(TrustOutcome.TRUSTED, trustKey)
         }
@@ -212,6 +213,48 @@ class ClaimTest {
             configureStatusKeyEpoch(journal, issuer, key.epoch, key.key)
         }
         return Triple(trust, status, journal)
+    }
+
+    @Test fun verifierCorpusCommittedReceipts() = runBlocking {
+        val root = File(System.getProperty("ratify.corpus")!!)
+        Corpus.read = { File(root, it).readBytes() }
+        val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter { vector ->
+            val trust = vector.optJSONObject("trust") ?: JSONObject()
+            val journal = vector.optJSONObject("journal") ?: JSONObject()
+            val evidence = vector.optJSONObject("status_evidence") ?: JSONObject()
+            vector.getJSONObject("expected").getString("stage") == "committed" &&
+                vector.getString("claim_store") == "create" &&
+                trust.optString("mode") == "ok" && trust.optString("outcome") == "trusted" &&
+                vector.getString("audience_mode") == "ok" && vector.getString("rate") == "absent" &&
+                journal.optString("mode") == "anchored" &&
+                (journal.optJSONArray("preload")?.length() ?: 0) == 0 &&
+                (journal.optJSONArray("setup")?.length() ?: 0) == 0 &&
+                (vector.optJSONArray("constraint_evaluators")?.length() ?: 0) == 0 &&
+                vector.getString("receiver_binding_hook") == "absent" &&
+                vector.optLong("claim_time_offset") == 0L && vector.optLong("finalize_time_offset") == 0L &&
+                vector.getLong("now") == 1_800_000_000L &&
+                (vector.optJSONArray("audience_memberships")?.length() ?: 0) == 0 &&
+                evidence.keys().asSequence().all { issuer ->
+                    evidence.getJSONObject(issuer).optString("mode") !in listOf("error", "panic")
+                }
+        }
+        assertEquals(201, vectors.size)
+        for (vector in vectors) {
+            val name = vector.getString("name")
+            val req = request(name)
+            val (trust, status, journal) = vectorProviders(vector, req)
+            val store = CreatedClaimStore()
+            val baseStore: ClaimStore = store
+            val outcome = verifyProofBundle(req, baseStore, trust = trust, audience = emptyAudience,
+                statusEvidence = status, statusJournal = journal)
+            assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)
+            org.junit.Assert.assertArrayEquals(name, vector.getJSONObject("expected").b64("receipt_body_b64"),
+                outcome.committed?.receiptBody)
+            assertEquals(name, 1, store.claims)
+            assertEquals(name, 1, store.finalizations)
+            assertEquals(name, vector.getJSONObject("expected").getJSONObject("callback_counts").getInt("progress"),
+                store.progressWrites)
+        }
     }
 
     private val emptyAudience = object : AudienceProvider {

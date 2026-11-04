@@ -206,8 +206,9 @@ final class ClaimTests: XCTestCase {
 
     private func vectorProviders(_ vector: [String: Any], request req: VerifyRequest) async throws
         -> (VectorTrust, VectorStatus, VectorJournal) {
-        let root = vector.obj("trust").obj("root_public_key")
-        let trust = VectorTrust(key: HybridPublicKey(ed25519: root.b64("ed25519"), mlDsa65: root.b64("ml_dsa_65")))
+        let root = vector.obj("trust")["root_public_key"] as? [String: Any]
+        let trust = VectorTrust(key: root.map { HybridPublicKey(ed25519: $0.b64("ed25519"), mlDsa65: $0.b64("ml_dsa_65")) }
+            ?? HybridPublicKey(ed25519: Data(), mlDsa65: Data()))
         let evidence = vector.obj("status_evidence").mapValues { value -> [StatusEvidenceObject] in
             let script = value as! [String: Any]
             return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }
@@ -218,6 +219,45 @@ final class ClaimTests: XCTestCase {
             _ = try await Ratify.configureStatusKeyEpoch(store: journal, issuerId: issuer, epoch: key.epoch, key: key.key)
         }
         return (trust, VectorStatus(byIssuer: evidence), journal)
+    }
+
+    func testVerifierCorpusCommittedReceipts() async throws {
+        let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter { vector in
+            let trust = vector["trust"] as? [String: Any] ?? [:]
+            let journal = vector["journal"] as? [String: Any] ?? [:]
+            let evidence = vector.obj("status_evidence") as! [String: [String: Any]]
+            return vector.obj("expected").s("stage") == "committed" &&
+                vector.s("claim_store") == "create" && trust["mode"] as? String == "ok" &&
+                trust["outcome"] as? String == "trusted" && vector.s("audience_mode") == "ok" &&
+                vector.s("rate") == "absent" && journal["mode"] as? String == "anchored" &&
+                (journal["preload"] as? [Any] ?? []).isEmpty && (journal["setup"] as? [Any] ?? []).isEmpty &&
+                (vector["constraint_evaluators"] as? [Any] ?? []).isEmpty &&
+                vector.s("receiver_binding_hook") == "absent" &&
+                (vector["claim_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
+                (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
+                vector.int("now") == 1_800_000_000 &&
+                (vector["audience_memberships"] as? [Any] ?? []).isEmpty &&
+                evidence.values.allSatisfy { !["error", "panic"].contains($0["mode"] as? String ?? "") }
+        }
+        XCTAssertEqual(vectors.count, 201)
+        for vector in vectors {
+            let name = vector.s("name")
+            let req = try request(name)
+            let (trust, status, journal) = try await vectorProviders(vector, request: req)
+            let store = CreatedClaimStore()
+            let baseStore: any ClaimStore = store
+            let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore, trust: trust,
+                audience: EmptyAudience(), statusEvidence: status, statusJournal: journal)
+            XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))
+            XCTAssertEqual(outcome.committed?.receiptBody,
+                Data(base64Encoded: vector.obj("expected").s("receipt_body_b64"))!, name)
+            let claims = await store.claims
+            let finalizations = await store.finalizations
+            let progressWrites = await store.progressWrites
+            XCTAssertEqual(claims, 1, name)
+            XCTAssertEqual(finalizations, 1, name)
+            XCTAssertEqual(progressWrites, vector.obj("expected").obj("callback_counts").int("progress"), name)
+        }
     }
 
     func testExtensionEvaluatorsRunThroughLiveVerifier() async throws {

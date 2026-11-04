@@ -150,7 +150,7 @@ public interface RateReservationStore {
         batch: List<RateReservation>)
 }
 
-private fun claimStoreError(error: Throwable, context: FfiStoreContext): FfiStoreException = when {
+internal fun claimStoreError(error: Throwable, context: FfiStoreContext): FfiStoreException = when {
     error is CancellationException && runCatching { context.isCancelled() }.getOrDefault(false) -> FfiStoreException.Cancelled()
     error is StoreError -> error.toFfi()
     else -> FfiStoreException.Unavailable(error.toString())

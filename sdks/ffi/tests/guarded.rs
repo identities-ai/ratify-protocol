@@ -1,5 +1,5 @@
 //! Every UniFFI export must return `FfiResult` and be exactly one call to the
-//! panic guard (`call(..)` or `call_on(..)`) as its whole body, so a Rust
+//! panic guard (`call(..)`, `call_on(..)`, or `call_with(..)`) as its whole body, so a Rust
 //! panic always surfaces as an internal error, never as UniFFI's trapping
 //! `try!` path. The sources are parsed with syn, and the set of exports found
 //! must equal the set UniFFI generated (one checksum per export in the
@@ -54,13 +54,14 @@ fn check(
     if !returns_ffi_result(&sig.output) {
         errors.push(format!("{name}: must return FfiResult"));
     }
-    // A function that receives an SDK key handle (besides its receiver) must
+    // A function that receives a poisonable SDK handle (besides its receiver) must
     // poison every participating handle on a panic.
-    let takes_key = sig.inputs.iter().any(|a| {
+    let takes_handle = sig.inputs.iter().any(|a| {
         let t = a.to_token_stream().to_string().replace(' ', "");
         t.contains("Arc<FfiSoftwareKey>") || t.contains("Arc<FfiSplitKey>")
+            || t.contains("FfiCommittedOutcome>")
     });
-    let want = if takes_key {
+    let want = if takes_handle {
         "call_with"
     } else if sig.receiver().is_some() {
         "call_on"

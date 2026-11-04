@@ -142,6 +142,7 @@ def cmd_check():
 # Public declarations that no inventory item maps, each with its reason.
 # Everything else public must be named by a mapped inventory entry.
 EXTRA_SWIFT = {
+    "Ratify.publishReceipt": "SDK helper invoking the mapped V2ReceiptPublisher callback",
     "SecurityJournalSnapshot": "SDK carrier for canonical snapshot bytes and an independent head",
     "Ratify.validateSecurityJournalSnapshot": "SDK boundary validation before a journal store load",
     "SecurityJournalStoreError": "host callback error signalling; core errors are RatifyError",
@@ -156,6 +157,7 @@ EXTRA_SWIFT = {
     "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
 }
 EXTRA_KOTLIN = {
+    "publishReceipt": "SDK helper invoking the mapped V2ReceiptPublisher callback",
     "SecurityJournalSnapshot": "SDK carrier for canonical snapshot bytes and an independent head",
     "validateSecurityJournalSnapshot": "SDK boundary validation before a journal store load",
     "SecurityJournalStoreError": "host callback error signalling; core errors are RatifyException",
@@ -189,6 +191,7 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "ReleaseStatus.spelling": "Kotlin spelling of the mapped release status enum",
     "ConstraintEvaluator.evaluate": "callback operation of the mapped ConstraintEvaluatorFnV2",
     "ChallengeRandomSource.fill": "the V2RandomSource read callback",
     "StoreError.Classified.errorClass": "typed store error class",

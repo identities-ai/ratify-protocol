@@ -524,8 +524,8 @@ impl V2CommittedClaimStore for ForeignCommittedClaimStore {
 /// Non-actionable handoff; only the release API can produce a released decision.
 #[derive(uniffi::Object)]
 pub struct FfiCommittedOutcome {
-    poison: Poison,
-    inner: CommittedV2Outcome,
+    pub(crate) poison: Poison,
+    pub(crate) inner: CommittedV2Outcome,
 }
 
 impl FfiCommittedOutcome {

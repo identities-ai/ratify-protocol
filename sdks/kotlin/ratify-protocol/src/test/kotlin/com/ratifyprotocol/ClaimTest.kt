@@ -320,4 +320,81 @@ class ClaimTest {
         }
         assertEquals(1, store.calls)
     }
+
+    private class PendingReleaseStore(private val committed: CommittedOutcome) : ReleaseClaimStore {
+        var loads = 0
+        override suspend fun authoritativeTime(): Long = error("no receipt means no clock read")
+        override suspend fun loadTerminal(claimId: String): TerminalClaimRecord {
+            assertEquals(committed.claimId, claimId)
+            loads++
+            return TerminalClaimRecord(true, committed.receiptBodyDigest, committed.challengeExpiresAt,
+                committed.allowHorizon ?: 0, 1_800_000_000, false, null)
+        }
+        override suspend fun recordRelease(record: ReleaseRecord): Unit = error("no receipt means no release record")
+    }
+
+    private class NoAcknowledgement : ReceiptCheckpoint {
+        override suspend fun acknowledge(logId: String, sequence: Long, previousEntryHash: ByteArray,
+            entryHash: ByteArray): CheckpointAcknowledgement = error("no receipt means no acknowledgement")
+        override suspend fun get(logId: String, sequence: Long): CheckpointAcknowledgement =
+            error("no receipt means no checkpoint read")
+    }
+
+    @Test fun committedHandoffCannotReleaseBeforeReceiptAppend() = runBlocking {
+        val verified = verifyProofBundle(request("trust_unavailable"), CreatedClaimStore(), trust = UnavailableTrust())
+        val committed = verified.committed!!
+        val root = File(System.getProperty("ratify.corpus")!!)
+        val keys = JSONObject(File(root, "v2/keys.json").readText()).getJSONArray("keys")
+        val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
+            .first { it.getString("name") == "verifier" }
+        val store = PendingReleaseStore(committed)
+        val result = releaseDecision(committed, null, publicKeyOf(verifier.getJSONObject("public_key")),
+            "0123456789abcdef0123456789abcdef", store, NoAcknowledgement())
+        assertEquals(ReleaseStatus.PENDING, result.status)
+        assertEquals("receipt_not_appended", result.reason)
+        assertEquals(null, result.decision)
+        assertEquals(1, store.loads)
+    }
+
+    private class ReleasedStore(private val committed: CommittedOutcome) : ReleaseClaimStore {
+        var recorded: ReleaseRecord? = null
+        override suspend fun authoritativeTime(): Long = 1_800_000_000
+        override suspend fun loadTerminal(claimId: String): TerminalClaimRecord =
+            TerminalClaimRecord(true, committed.receiptBodyDigest, committed.challengeExpiresAt,
+                committed.allowHorizon ?: 0, 1_800_000_000, false, recorded)
+        override suspend fun recordRelease(record: ReleaseRecord) { recorded = record }
+    }
+
+    private class AcknowledgedReceipt(private val digest: ByteArray) : ReceiptCheckpoint {
+        override suspend fun acknowledge(logId: String, sequence: Long, previousEntryHash: ByteArray,
+            entryHash: ByteArray): CheckpointAcknowledgement = error("release only reads acknowledgement")
+        override suspend fun get(logId: String, sequence: Long): CheckpointAcknowledgement =
+            CheckpointAcknowledgement(logId, sequence, digest, 1_800_000_000)
+    }
+
+    @Test fun signedReceiptNeedsIndependentCheckpointToRelease() = runBlocking {
+        val verified = verifyProofBundle(request("trust_unavailable"), CreatedClaimStore(), trust = UnavailableTrust())
+        val committed = verified.committed!!
+        val root = File(System.getProperty("ratify.corpus")!!)
+        val keys = JSONObject(File(root, "v2/keys.json").readText()).getJSONArray("keys")
+        val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
+            .first { it.getString("name") == "verifier" }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val logId = "0123456789abcdef0123456789abcdef"
+        val head = ReceiptHead(logId, key.keyId, 0, ByteArray(48))
+        val receipt = signPreparedVerificationReceipt(committed.receiptBody, head, key)
+        val wire = encodeVerificationReceipt(receipt)
+        val digest = verificationReceiptDigest(receipt)
+        val store = ReleasedStore(committed)
+        val pending = releaseDecision(committed, wire, key.publicKey, logId, store, NoAcknowledgement())
+        assertEquals(ReleaseStatus.PENDING, pending.status)
+        assertEquals("acknowledgement_unavailable", pending.reason)
+        assertEquals(null, pending.decision)
+        assertEquals(null, store.recorded)
+        val released = releaseDecision(committed, wire, key.publicKey, logId, store, AcknowledgedReceipt(digest))
+        assertEquals(ReleaseStatus.RELEASED, released.status)
+        org.junit.Assert.assertArrayEquals(wire, released.decision!!.receiptWire)
+        assertEquals(false, released.decision!!.isAllowed(store))
+        assertEquals(ReleaseStatus.RELEASED, store.recorded?.outcome)
+    }
 }

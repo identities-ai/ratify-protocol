@@ -5644,7 +5644,9 @@
  "V2CheckpointAcknowledgement": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CheckpointAcknowledgement",
+  "kotlin": "CheckpointAcknowledgement"
  },
  "V2CheckpointAcknowledgement::clone": {
   "kind": "fn",
@@ -5659,7 +5661,9 @@
  "V2CheckpointAcknowledgement::entry_hash": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CheckpointAcknowledgement.entryHash",
+  "kotlin": "CheckpointAcknowledgement.entryHash"
  },
  "V2CheckpointAcknowledgement::eq": {
   "kind": "fn",
@@ -5674,17 +5678,23 @@
  "V2CheckpointAcknowledgement::log_id": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CheckpointAcknowledgement.logId",
+  "kotlin": "CheckpointAcknowledgement.logId"
  },
  "V2CheckpointAcknowledgement::sequence": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CheckpointAcknowledgement.sequence",
+  "kotlin": "CheckpointAcknowledgement.sequence"
  },
  "V2CheckpointAcknowledgement::timestamp": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CheckpointAcknowledgement.timestamp",
+  "kotlin": "CheckpointAcknowledgement.timestamp"
  },
  "V2ClaimDisposition": {
   "kind": "enum",
@@ -7046,27 +7056,37 @@
  "V2ReceiptCheckpoint": {
   "kind": "trait",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReceiptCheckpoint",
+  "kotlin": "ReceiptCheckpoint"
  },
  "V2ReceiptCheckpoint::acknowledge_v2_receipt": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReceiptCheckpoint.acknowledge",
+  "kotlin": "ReceiptCheckpoint.acknowledge"
  },
  "V2ReceiptCheckpoint::get_v2_acknowledgement": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReceiptCheckpoint.get",
+  "kotlin": "ReceiptCheckpoint.get"
  },
  "V2ReceiptPublisher": {
   "kind": "trait",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReceiptPublisher",
+  "kotlin": "ReceiptPublisher"
  },
  "V2ReceiptPublisher::publish_v2_receipt": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReceiptPublisher.publish",
+  "kotlin": "ReceiptPublisher.publish"
  },
  "V2ReceiverBindingHook": {
   "kind": "type",
@@ -7077,32 +7097,41 @@
  "V2ReleaseClaimStore": {
   "kind": "trait",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseClaimStore",
+  "kotlin": "ReleaseClaimStore"
  },
  "V2ReleaseClaimStore::load_v2_terminal_claim": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseClaimStore.loadTerminal",
+  "kotlin": "ReleaseClaimStore.loadTerminal"
  },
  "V2ReleaseClaimStore::record_v2_release": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseClaimStore.recordRelease",
+  "kotlin": "ReleaseClaimStore.recordRelease"
  },
  "V2ReleaseConfig": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Release configuration is flattened into the releaseDecision arguments"
  },
  "V2ReleaseConfig::checkpoint": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Release configuration is flattened into the releaseDecision arguments"
  },
  "V2ReleaseConfig::claim_store": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Release configuration is flattened into the releaseDecision arguments"
  },
  "V2ReleaseConfig::clone": {
   "kind": "fn",
@@ -7112,27 +7141,35 @@
  "V2ReleaseConfig::log_id": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Release configuration is flattened into the releaseDecision arguments"
  },
  "V2ReleaseConfig::verifier_public_key": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Release configuration is flattened into the releaseDecision arguments"
  },
  "V2ReleaseRecord": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseRecord",
+  "kotlin": "ReleaseRecord"
  },
  "V2ReleaseRecord::ack_timestamp": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseRecord.ackTimestamp",
+  "kotlin": "ReleaseRecord.ackTimestamp"
  },
  "V2ReleaseRecord::claim_id": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseRecord.claimId",
+  "kotlin": "ReleaseRecord.claimId"
  },
  "V2ReleaseRecord::clone": {
   "kind": "fn",
@@ -7142,7 +7179,9 @@
  "V2ReleaseRecord::entry_hash": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseRecord.entryHash",
+  "kotlin": "ReleaseRecord.entryHash"
  },
  "V2ReleaseRecord::eq": {
   "kind": "fn",
@@ -7157,22 +7196,30 @@
  "V2ReleaseRecord::outcome": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseRecord.outcome",
+  "kotlin": "ReleaseRecord.outcome"
  },
  "V2ReleaseRecord::reason": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseRecord.reason",
+  "kotlin": "ReleaseRecord.reason"
  },
  "V2ReleaseResult": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseResult",
+  "kotlin": "ReleaseResult"
  },
  "V2ReleaseResult::decision": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseResult.decision",
+  "kotlin": "ReleaseResult.decision"
  },
  "V2ReleaseResult::fmt": {
   "kind": "fn",
@@ -7181,48 +7228,62 @@
  },
  "V2ReleaseResult::into_decision": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Rust ownership transfer; SDK result exposes the optional decision property",
+  "status": "rust-idiom"
  },
  "V2ReleaseResult::reason": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseResult.reason",
+  "kotlin": "ReleaseResult.reason"
  },
  "V2ReleaseResult::status": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseResult.status",
+  "kotlin": "ReleaseResult.status"
  },
  "V2ReleaseStatus": {
   "kind": "enum",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseStatus",
+  "kotlin": "ReleaseStatus"
  },
  "V2ReleaseStatus::Pending": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseStatus.pending",
+  "kotlin": "ReleaseStatus.PENDING"
  },
  "V2ReleaseStatus::Rejected": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseStatus.rejected",
+  "kotlin": "ReleaseStatus.REJECTED"
  },
  "V2ReleaseStatus::Released": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseStatus.released",
+  "kotlin": "ReleaseStatus.RELEASED"
  },
  "V2ReleaseStatus::Withheld": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleaseStatus.withheld",
+  "kotlin": "ReleaseStatus.WITHHELD"
  },
  "V2ReleaseStatus::as_str": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "reason": "Enum spelling is exposed by Swift rawValue and Kotlin spelling",
+  "status": "rust-idiom"
  },
  "V2ReleaseStatus::clone": {
   "kind": "fn",
@@ -7247,32 +7308,44 @@
  "V2ReleasedDecision": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision",
+  "kotlin": "ReleasedDecision"
  },
  "V2ReleasedDecision::allow_horizon": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.allowHorizon",
+  "kotlin": "ReleasedDecision.allowHorizon"
  },
  "V2ReleasedDecision::allowed": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.isAllowed",
+  "kotlin": "ReleasedDecision.isAllowed"
  },
  "V2ReleasedDecision::challenge_expires_at": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.challengeExpiresAt",
+  "kotlin": "ReleasedDecision.challengeExpiresAt"
  },
  "V2ReleasedDecision::claim_id": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.claimId",
+  "kotlin": "ReleasedDecision.claimId"
  },
  "V2ReleasedDecision::decision": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.decision",
+  "kotlin": "ReleasedDecision.decision"
  },
  "V2ReleasedDecision::fmt": {
   "kind": "fn",
@@ -7282,32 +7355,44 @@
  "V2ReleasedDecision::granted_scope": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.grantedScope",
+  "kotlin": "ReleasedDecision.grantedScope"
  },
  "V2ReleasedDecision::identity_status": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.identityStatus",
+  "kotlin": "ReleasedDecision.identityStatus"
  },
  "V2ReleasedDecision::reason": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.reason",
+  "kotlin": "ReleasedDecision.reason"
  },
  "V2ReleasedDecision::receipt": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.receipt",
+  "kotlin": "ReleasedDecision.receipt"
  },
  "V2ReleasedDecision::receipt_wire": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.receiptWire",
+  "kotlin": "ReleasedDecision.receiptWire"
  },
  "V2ReleasedDecision::release_time": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "ReleasedDecision.releaseTime",
+  "kotlin": "ReleasedDecision.releaseTime"
  },
  "V2Result": {
   "kind": "type",
@@ -7867,17 +7952,23 @@
  "V2TerminalClaimRecord": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TerminalClaimRecord",
+  "kotlin": "TerminalClaimRecord"
  },
  "V2TerminalClaimRecord::allow_horizon": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TerminalClaimRecord.allowHorizon",
+  "kotlin": "TerminalClaimRecord.allowHorizon"
  },
  "V2TerminalClaimRecord::challenge_expires_at": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TerminalClaimRecord.challengeExpiresAt",
+  "kotlin": "TerminalClaimRecord.challengeExpiresAt"
  },
  "V2TerminalClaimRecord::clone": {
   "kind": "fn",
@@ -7897,7 +7988,9 @@
  "V2TerminalClaimRecord::finalized_at": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TerminalClaimRecord.finalizedAt",
+  "kotlin": "TerminalClaimRecord.finalizedAt"
  },
  "V2TerminalClaimRecord::fmt": {
   "kind": "fn",
@@ -7907,22 +8000,30 @@
  "V2TerminalClaimRecord::receipt_abandoned": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TerminalClaimRecord.receiptAbandoned",
+  "kotlin": "TerminalClaimRecord.receiptAbandoned"
  },
  "V2TerminalClaimRecord::receipt_outbox_digest": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TerminalClaimRecord.receiptOutboxDigest",
+  "kotlin": "TerminalClaimRecord.receiptOutboxDigest"
  },
  "V2TerminalClaimRecord::release": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TerminalClaimRecord.release",
+  "kotlin": "TerminalClaimRecord.release"
  },
  "V2TerminalClaimRecord::terminal": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TerminalClaimRecord.terminal",
+  "kotlin": "TerminalClaimRecord.terminal"
  },
  "V2TrustOutcome": {
   "kind": "enum",
@@ -9092,7 +9193,9 @@
  "receipt_outbox_digest_v2": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.receiptOutboxDigest",
+  "kotlin": "receiptOutboxDigest"
  },
  "record_security_key_role_v2": {
   "kind": "fn",
@@ -9124,7 +9227,9 @@
  "release_v2_decision": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.releaseDecision",
+  "kotlin": "releaseDecision"
  },
  "resolve_claim_proof_bundle_v2_after_audience": {
   "kind": "fn",
@@ -9391,7 +9496,9 @@
  "valid_v2_release_record_outcome": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.validReleaseRecordOutcome",
+  "kotlin": "validReleaseRecordOutcome"
  },
  "valid_v2_timestamp": {
   "kind": "fn",

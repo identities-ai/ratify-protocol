@@ -187,7 +187,7 @@ public protocol RateReservationStore: Sendable {
                  batch: [RateReservation]) async throws
 }
 
-private func claimStoreError(_ error: Error, context: FfiStoreContext) -> FfiStoreError {
+func claimStoreError(_ error: Error, context: FfiStoreContext) -> FfiStoreError {
     if error is CancellationError, (try? context.isCancelled()) == true { return .Cancelled }
     return (error as? StoreError)?.ffi ?? .Unavailable(detail: "\(error)")
 }

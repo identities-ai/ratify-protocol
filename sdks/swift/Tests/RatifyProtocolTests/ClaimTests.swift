@@ -328,4 +328,102 @@ final class ClaimTests: XCTestCase {
         let calls = await store.calls
         XCTAssertEqual(calls, 1)
     }
+
+    actor PendingReleaseStore: ReleaseClaimStore {
+        let committed: CommittedOutcome
+        private(set) var loads = 0
+        init(_ committed: CommittedOutcome) { self.committed = committed }
+        func authoritativeTime() -> Int64 { XCTFail("no receipt means no clock read"); return 0 }
+        func loadTerminal(claimId: String) -> TerminalClaimRecord {
+            XCTAssertEqual(claimId, committed.claimId)
+            loads += 1
+            return TerminalClaimRecord(terminal: true, receiptOutboxDigest: committed.receiptBodyDigest,
+                challengeExpiresAt: committed.challengeExpiresAt, allowHorizon: committed.allowHorizon ?? 0,
+                finalizedAt: 1_800_000_000, receiptAbandoned: false, release: nil)
+        }
+        func recordRelease(_ record: ReleaseRecord) { XCTFail("no receipt means no release record") }
+    }
+
+    struct NoAcknowledgement: ReceiptCheckpoint {
+        func acknowledge(logId: String, sequence: Int64, previousEntryHash: Data,
+                         entryHash: Data) throws -> CheckpointAcknowledgement {
+            throw StoreError.unavailable("checkpoint unavailable")
+        }
+        func get(logId: String, sequence: Int64) throws -> CheckpointAcknowledgement {
+            throw StoreError.unavailable("checkpoint unavailable")
+        }
+    }
+
+    func testCommittedHandoffCannotReleaseBeforeReceiptAppend() async throws {
+        let verified = try await Ratify.verifyProofBundle(request("trust_unavailable"),
+            claimStore: CreatedClaimStore(), trust: UnavailableTrust())
+        let committed = try XCTUnwrap(verified.committed)
+        let key = Corpus.load("keys.json").arr("keys").first { $0.s("name") == "verifier" }!.obj("public_key")
+        let verifierKey = HybridPublicKey(ed25519: key.b64("ed25519"), mlDsa65: key.b64("ml_dsa_65"))
+        let store = PendingReleaseStore(committed)
+        let result = try await Ratify.releaseDecision(committed, signedReceipt: nil,
+            verifierPublicKey: verifierKey, logId: "0123456789abcdef0123456789abcdef",
+            claimStore: store, checkpoint: NoAcknowledgement())
+        XCTAssertEqual(result.status, .pending)
+        XCTAssertEqual(result.reason, "receipt_not_appended")
+        XCTAssertNil(result.decision)
+        let loads = await store.loads
+        XCTAssertEqual(loads, 1)
+    }
+
+    actor ReleasedStore: ReleaseClaimStore {
+        let committed: CommittedOutcome
+        private(set) var recorded: ReleaseRecord?
+        init(_ committed: CommittedOutcome) { self.committed = committed }
+        func authoritativeTime() -> Int64 { 1_800_000_000 }
+        func loadTerminal(claimId: String) -> TerminalClaimRecord {
+            TerminalClaimRecord(terminal: true, receiptOutboxDigest: committed.receiptBodyDigest,
+                challengeExpiresAt: committed.challengeExpiresAt, allowHorizon: committed.allowHorizon ?? 0,
+                finalizedAt: 1_800_000_000, receiptAbandoned: false, release: recorded)
+        }
+        func recordRelease(_ record: ReleaseRecord) { recorded = record }
+    }
+
+    struct AcknowledgedReceipt: ReceiptCheckpoint {
+        let receipt: VerificationReceipt
+        let digest: Data
+        func acknowledge(logId: String, sequence: Int64, previousEntryHash: Data,
+                         entryHash: Data) throws -> CheckpointAcknowledgement {
+            throw StoreError.unavailable("release only reads acknowledgement")
+        }
+        func get(logId: String, sequence: Int64) -> CheckpointAcknowledgement {
+            CheckpointAcknowledgement(logId: logId, sequence: sequence, entryHash: digest,
+                timestamp: 1_800_000_000)
+        }
+    }
+
+    func testSignedReceiptNeedsIndependentCheckpointToRelease() async throws {
+        let verified = try await Ratify.verifyProofBundle(request("trust_unavailable"),
+            claimStore: CreatedClaimStore(), trust: UnavailableTrust())
+        let committed = try XCTUnwrap(verified.committed)
+        let key = Fixture.shared.privateKey("verifier")
+        let logId = "0123456789abcdef0123456789abcdef"
+        let head = ReceiptHead(logId: logId, verifierId: key.keyId, sequence: 0,
+            headHash: Data(repeating: 0, count: 48))
+        let receipt = try Ratify.signPreparedVerificationReceipt(committed.receiptBody, head: head, key: key)
+        let wire = try Ratify.encodeVerificationReceipt(receipt)
+        let digest = try Ratify.verificationReceiptDigest(receipt)
+        let store = ReleasedStore(committed)
+        let pending = try await Ratify.releaseDecision(committed, signedReceipt: wire,
+            verifierPublicKey: key.publicKey, logId: logId, claimStore: store, checkpoint: NoAcknowledgement())
+        XCTAssertEqual(pending.status, .pending)
+        XCTAssertEqual(pending.reason, "acknowledgement_unavailable")
+        XCTAssertNil(pending.decision)
+        let beforeCheckpoint = await store.recorded
+        XCTAssertNil(beforeCheckpoint)
+        let released = try await Ratify.releaseDecision(committed, signedReceipt: wire,
+            verifierPublicKey: key.publicKey, logId: logId, claimStore: store,
+            checkpoint: AcknowledgedReceipt(receipt: receipt, digest: digest))
+        XCTAssertEqual(released.status, .released)
+        XCTAssertEqual(released.decision?.receiptWire, wire)
+        let allowed = try await released.decision!.isAllowed(clock: store)
+        XCTAssertFalse(allowed)
+        let recorded = await store.recorded
+        XCTAssertEqual(recorded?.outcome, .released)
+    }
 }

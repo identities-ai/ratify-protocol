@@ -119,6 +119,14 @@ public abstract interface class com/ratifyprotocol/ChallengeRandomSource {
 	public abstract fun fill (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
+public final class com/ratifyprotocol/CheckpointAcknowledgement {
+	public fun <init> (Ljava/lang/String;J[BJ)V
+	public final fun getEntryHash ()[B
+	public final fun getLogId ()Ljava/lang/String;
+	public final fun getSequence ()J
+	public final fun getTimestamp ()J
+}
+
 public final class com/ratifyprotocol/ClaimDisposition : java/lang/Enum {
 	public static final field CREATED Lcom/ratifyprotocol/ClaimDisposition;
 	public static final field IN_PROGRESS Lcom/ratifyprotocol/ClaimDisposition;
@@ -716,6 +724,11 @@ public final class com/ratifyprotocol/RatifyException$Signing : com/ratifyprotoc
 	public final fun getKind ()Lcom/ratifyprotocol/SigningErrorKind;
 }
 
+public abstract interface class com/ratifyprotocol/ReceiptCheckpoint {
+	public abstract fun acknowledge (Ljava/lang/String;J[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun get (Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public final class com/ratifyprotocol/ReceiptHead {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;J[BLjava/util/Map;Z)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;J[BLjava/util/Map;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -727,8 +740,68 @@ public final class com/ratifyprotocol/ReceiptHead {
 	public final fun getVerifierId ()Ljava/lang/String;
 }
 
+public abstract interface class com/ratifyprotocol/ReceiptPublisher {
+	public abstract fun publish (Ljava/lang/String;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public abstract interface class com/ratifyprotocol/ReceiverBindingHook {
 	public abstract fun validate (Lcom/ratifyprotocol/ProofBundle;Lcom/ratifyprotocol/ExpectedChallenge;)V
+}
+
+public abstract interface class com/ratifyprotocol/ReleaseClaimStore : com/ratifyprotocol/AuthoritativeClock {
+	public abstract fun loadTerminal (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun recordRelease (Lcom/ratifyprotocol/ReleaseRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/ReleaseKt {
+	public static final fun publishReceipt-5_5nbZA (Lcom/ratifyprotocol/CommittedOutcome;Lcom/ratifyprotocol/ReceiptPublisher;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun publishReceipt-5_5nbZA$default (Lcom/ratifyprotocol/CommittedOutcome;Lcom/ratifyprotocol/ReceiptPublisher;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun receiptOutboxDigest ([B)Ljava/lang/String;
+	public static final fun releaseDecision-rl3MWlM (Lcom/ratifyprotocol/CommittedOutcome;[BLcom/ratifyprotocol/HybridPublicKey;Ljava/lang/String;Lcom/ratifyprotocol/ReleaseClaimStore;Lcom/ratifyprotocol/ReceiptCheckpoint;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun releaseDecision-rl3MWlM$default (Lcom/ratifyprotocol/CommittedOutcome;[BLcom/ratifyprotocol/HybridPublicKey;Ljava/lang/String;Lcom/ratifyprotocol/ReleaseClaimStore;Lcom/ratifyprotocol/ReceiptCheckpoint;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun validReleaseRecordOutcome (Lcom/ratifyprotocol/ReleaseStatus;Ljava/lang/String;)Z
+}
+
+public final class com/ratifyprotocol/ReleaseRecord {
+	public fun <init> (Ljava/lang/String;[BJLcom/ratifyprotocol/ReleaseStatus;Ljava/lang/String;)V
+	public final fun getAckTimestamp ()J
+	public final fun getClaimId ()Ljava/lang/String;
+	public final fun getEntryHash ()[B
+	public final fun getOutcome ()Lcom/ratifyprotocol/ReleaseStatus;
+	public final fun getReason ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/ReleaseResult {
+	public final fun getDecision ()Lcom/ratifyprotocol/ReleasedDecision;
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getStatus ()Lcom/ratifyprotocol/ReleaseStatus;
+}
+
+public final class com/ratifyprotocol/ReleaseStatus : java/lang/Enum {
+	public static final field PENDING Lcom/ratifyprotocol/ReleaseStatus;
+	public static final field REJECTED Lcom/ratifyprotocol/ReleaseStatus;
+	public static final field RELEASED Lcom/ratifyprotocol/ReleaseStatus;
+	public static final field WITHHELD Lcom/ratifyprotocol/ReleaseStatus;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getSpelling ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/ReleaseStatus;
+	public static fun values ()[Lcom/ratifyprotocol/ReleaseStatus;
+}
+
+public final class com/ratifyprotocol/ReleasedDecision {
+	public synthetic fun <init> (Lcom/ratifyprotocol/internal/ffi/FfiReleasedDecision;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAllowHorizon ()Ljava/lang/Long;
+	public final fun getChallengeExpiresAt ()J
+	public final fun getClaimId ()Ljava/lang/String;
+	public final fun getDecision ()Ljava/lang/String;
+	public final fun getGrantedScope ()Ljava/util/List;
+	public final fun getIdentityStatus ()Ljava/lang/String;
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getReceiptWire ()[B
+	public final fun getReleaseTime ()J
+	public final fun isAllowed-Kx4hsE0 (Lcom/ratifyprotocol/AuthoritativeClock;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun isAllowed-Kx4hsE0$default (Lcom/ratifyprotocol/ReleasedDecision;Lcom/ratifyprotocol/AuthoritativeClock;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun receipt ()Lcom/ratifyprotocol/VerificationReceipt;
 }
 
 public final class com/ratifyprotocol/RevocationList {
@@ -1107,6 +1180,17 @@ public final class com/ratifyprotocol/StoreError$ReleaseStateMismatch : com/rati
 
 public final class com/ratifyprotocol/StoreError$Unavailable : com/ratifyprotocol/StoreError {
 	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/ratifyprotocol/TerminalClaimRecord {
+	public fun <init> (ZLjava/lang/String;JJJZLcom/ratifyprotocol/ReleaseRecord;)V
+	public final fun getAllowHorizon ()J
+	public final fun getChallengeExpiresAt ()J
+	public final fun getFinalizedAt ()J
+	public final fun getReceiptAbandoned ()Z
+	public final fun getReceiptOutboxDigest ()Ljava/lang/String;
+	public final fun getRelease ()Lcom/ratifyprotocol/ReleaseRecord;
+	public final fun getTerminal ()Z
 }
 
 public final class com/ratifyprotocol/TransactionReceipt {

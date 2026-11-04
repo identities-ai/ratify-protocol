@@ -79,8 +79,14 @@ pub fn ffi_decode_payload_digest(encoded: Option<String>) -> FfiResult<Option<Ve
 /// A validated, fingerprinted context policy (SPEC-v2 context policy).
 #[derive(uniffi::Object)]
 pub struct FfiContextPolicy {
-    poison: Poison,
+    pub(crate) poison: Poison,
     pub(crate) inner: V2ContextPolicy,
+}
+
+impl FfiContextPolicy {
+    pub(crate) fn from_inner(inner: V2ContextPolicy) -> Arc<Self> {
+        Arc::new(Self { poison: Poison::default(), inner })
+    }
 }
 
 #[uniffi::export]

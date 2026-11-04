@@ -80,6 +80,15 @@ public final class ContextPolicy: Sendable {
     public let requiredFields: [String]
     public let expectedSessionContext: Data
 
+    init(_ handle: FfiContextPolicy) throws(RatifyError) {
+        self.handle = handle
+        digest = try ffi { try handle.digest() }
+        profile = try ffi { try handle.profile() }
+        requireBound = try ffi { try handle.requireBound() }
+        requiredFields = try ffi { try handle.requiredFields() }
+        expectedSessionContext = try ffi { try handle.expectedSessionContext() }
+    }
+
     public init(profile: String, requireBound: Bool, requiredFields: [String],
                 expectedSessionContext: Data = Data()) throws(RatifyError) {
         let h = try ffi {

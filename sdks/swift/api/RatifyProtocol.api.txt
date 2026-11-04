@@ -19,6 +19,23 @@ ArchivalVerification.hash(into:) [Func] -> (), Swift.Hasher
 ArchivalVerification.hashValue [Var] -> Swift.Int
 ArchivalVerification.objectType [Var] -> Swift.UInt16
 ArchivalVerification.signerKeyIds [Var] -> [Swift.String]
+AuthoritativeClock [Protocol]
+AuthoritativeClock.authoritativeTime() [Func] -> Swift.Int64
+ChallengeIssuanceStore [Protocol]
+ChallengeIssuanceStore.load(namespace:replayEpoch:claimDigest:) [Func] -> RatifyProtocol.ExpectedChallenge, Swift.String, Swift.Int64, Foundation.Data
+ChallengeIssuanceStore.persist(_:) [Func] -> (), RatifyProtocol.ExpectedChallenge
+ChallengeIssueRequest [Struct]
+ChallengeIssueRequest.expectedAgentId [Var] -> Swift.String
+ChallengeIssueRequest.expectedAgentPublicKey [Var] -> RatifyProtocol.HybridPublicKey?
+ChallengeIssueRequest.expectedReceiverId [Var] -> Swift.String
+ChallengeIssueRequest.expectedSessionContext [Var] -> Foundation.Data?
+ChallengeIssueRequest.init(verifierNamespace:replayEpoch:verifierId:lifetimeSeconds:expectedAgentId:expectedAgentPublicKey:expectedReceiverId:expectedSessionContext:) [Constructor] -> RatifyProtocol.ChallengeIssueRequest, Swift.String, Swift.Int64, Swift.String, Swift.Int64, Swift.String, RatifyProtocol.HybridPublicKey?, Swift.String, Foundation.Data?
+ChallengeIssueRequest.lifetimeSeconds [Var] -> Swift.Int64
+ChallengeIssueRequest.replayEpoch [Var] -> Swift.Int64
+ChallengeIssueRequest.verifierId [Var] -> Swift.String
+ChallengeIssueRequest.verifierNamespace [Var] -> Swift.String
+ChallengeRandomSource [Protocol]
+ChallengeRandomSource.fill(count:) [Func] -> Foundation.Data, Swift.Int
 Constraint [Struct]
 Constraint.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.Constraint, RatifyProtocol.Constraint
 Constraint.count [Var] -> Swift.Int64
@@ -120,6 +137,19 @@ ErrorClass.transactionPartyMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.
 ErrorClass.transactionSignatureSetInvalid [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
 ErrorClass.unsupportedObjectType [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
 ErrorClass.verifierIdMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ExpectedChallenge [Struct]
+ExpectedChallenge.contextPolicy [Var] -> RatifyProtocol.ContextPolicy?
+ExpectedChallenge.expectedAgentId [Var] -> Swift.String
+ExpectedChallenge.expectedAgentPublicKey [Var] -> RatifyProtocol.HybridPublicKey?
+ExpectedChallenge.expectedReceiverId [Var] -> Swift.String
+ExpectedChallenge.expectedSessionContext [Var] -> Foundation.Data?
+ExpectedChallenge.expiresAt [Var] -> Swift.Int64
+ExpectedChallenge.init(value:issuedAt:expiresAt:verifierNamespace:replayEpoch:verifierId:expectedAgentId:expectedAgentPublicKey:expectedReceiverId:expectedSessionContext:contextPolicy:) [Constructor] -> RatifyProtocol.ExpectedChallenge, Foundation.Data, Swift.Int64, Swift.Int64, Swift.String, Swift.Int64, Swift.String, Swift.String, RatifyProtocol.HybridPublicKey?, Swift.String, Foundation.Data?, RatifyProtocol.ContextPolicy?
+ExpectedChallenge.issuedAt [Var] -> Swift.Int64
+ExpectedChallenge.replayEpoch [Var] -> Swift.Int64
+ExpectedChallenge.value [Var] -> Foundation.Data
+ExpectedChallenge.verifierId [Var] -> Swift.String
+ExpectedChallenge.verifierNamespace [Var] -> Swift.String
 ExternalSigner [Protocol]
 ExternalSigner.mode [Var] -> RatifyProtocol.SignerMode
 ExternalSigner.publicKey [Var] -> RatifyProtocol.HybridPublicKey
@@ -287,9 +317,11 @@ Ratify.expandScopes(_:) [Func] -> [Swift.String], [Swift.String]
 Ratify.externalMu(mlDsaPublicKey:mlDsaContext:message:) [Func] -> Foundation.Data, Foundation.Data, Foundation.Data, Foundation.Data
 Ratify.intersectScopes(_:) [Func] -> [Swift.String], [[Swift.String]]
 Ratify.isSensitiveScope(_:) [Func] -> Swift.Bool, Swift.String
+Ratify.issueChallenge(request:clock:store:random:timeout:) [Func] -> RatifyProtocol.ExpectedChallenge, RatifyProtocol.ChallengeIssueRequest, any RatifyProtocol.AuthoritativeClock, any RatifyProtocol.ChallengeIssuanceStore, (any RatifyProtocol.ChallengeRandomSource)?, Swift.Duration?
 Ratify.keyId(_:) [Func] -> Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.keyRotationStatementDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
 Ratify.keyRotationStatementSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
+Ratify.loadExpectedChallenge(store:namespace:replayEpoch:challenge:timeout:) [Func] -> RatifyProtocol.ExpectedChallenge, any RatifyProtocol.ChallengeIssuanceStore, Swift.String, Swift.Int64, Foundation.Data, Swift.Duration?
 Ratify.migrateSecurityJournalJSON(_:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, Foundation.Data
 Ratify.mldsaContext(_:) [Func] -> Foundation.Data, RatifyProtocol.ObjectType
 Ratify.newKeyRotationJournal(authorityId:recoveryEpoch:role:genesisKey:) [Func] -> RatifyProtocol.RotationJournal, Swift.String, Swift.Int64, Swift.String, RatifyProtocol.HybridPublicKey
@@ -628,6 +660,16 @@ StatusPublisherState.revoked [Var] -> [Swift.String]
 StatusPublisherState.sequence [Var] -> Swift.Int64
 StatusPublisherState.statusKeyId [Var] -> Swift.String
 StatusPublisherState.updatedAt [Var] -> Swift.Int64
+StoreError [Enum]
+StoreError.acknowledgementNotFound [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.challengeIssuanceConflict [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.challengeIssuanceNotFound [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.claimProofConflict [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.classified [EnumElement] -> (RatifyProtocol.StoreError.Type) -> (RatifyProtocol.ErrorClass, Swift.String) -> RatifyProtocol.StoreError
+StoreError.errorClass [Var] -> RatifyProtocol.ErrorClass?
+StoreError.rateLimitExceeded [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.releaseStateMismatch [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.unavailable [EnumElement] -> (RatifyProtocol.StoreError.Type) -> (Swift.String) -> RatifyProtocol.StoreError
 TransactionReceipt [Struct]
 TransactionReceipt.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.TransactionReceipt, RatifyProtocol.TransactionReceipt
 TransactionReceipt.createdAt [Var] -> Swift.Int64

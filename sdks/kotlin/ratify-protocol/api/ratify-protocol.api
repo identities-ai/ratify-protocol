@@ -40,6 +40,39 @@ public final class com/ratifyprotocol/ArchivalVerification {
 	public final fun getSignerKeyIds ()Ljava/util/List;
 }
 
+public abstract interface class com/ratifyprotocol/AuthoritativeClock {
+	public abstract fun authoritativeTime (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/ChallengeIssuanceKt {
+	public static final fun issueChallenge-yV_PMig (Lcom/ratifyprotocol/ChallengeIssueRequest;Lcom/ratifyprotocol/AuthoritativeClock;Lcom/ratifyprotocol/ChallengeIssuanceStore;Lcom/ratifyprotocol/ChallengeRandomSource;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun issueChallenge-yV_PMig$default (Lcom/ratifyprotocol/ChallengeIssueRequest;Lcom/ratifyprotocol/AuthoritativeClock;Lcom/ratifyprotocol/ChallengeIssuanceStore;Lcom/ratifyprotocol/ChallengeRandomSource;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun loadExpectedChallenge-yV_PMig (Lcom/ratifyprotocol/ChallengeIssuanceStore;Ljava/lang/String;J[BLkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun loadExpectedChallenge-yV_PMig$default (Lcom/ratifyprotocol/ChallengeIssuanceStore;Ljava/lang/String;J[BLkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public abstract interface class com/ratifyprotocol/ChallengeIssuanceStore {
+	public abstract fun load (Ljava/lang/String;J[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun persist (Lcom/ratifyprotocol/ExpectedChallenge;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/ChallengeIssueRequest {
+	public fun <init> (Ljava/lang/String;JLjava/lang/String;JLjava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Ljava/lang/String;[B)V
+	public synthetic fun <init> (Ljava/lang/String;JLjava/lang/String;JLjava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Ljava/lang/String;[BILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getExpectedAgentId ()Ljava/lang/String;
+	public final fun getExpectedAgentPublicKey ()Lcom/ratifyprotocol/HybridPublicKey;
+	public final fun getExpectedReceiverId ()Ljava/lang/String;
+	public final fun getExpectedSessionContext ()[B
+	public final fun getLifetimeSeconds ()J
+	public final fun getReplayEpoch ()J
+	public final fun getVerifierId ()Ljava/lang/String;
+	public final fun getVerifierNamespace ()Ljava/lang/String;
+}
+
+public abstract interface class com/ratifyprotocol/ChallengeRandomSource {
+	public abstract fun fill (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public final class com/ratifyprotocol/Constraint {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJJLjava/lang/String;Ljava/lang/String;Ljava/util/Map;)V
 	public fun equals (Ljava/lang/Object;)Z
@@ -171,6 +204,22 @@ public final class com/ratifyprotocol/ErrorClass : java/lang/Enum {
 
 public final class com/ratifyprotocol/ErrorClass$Companion {
 	public final fun fromSpelling (Ljava/lang/String;)Lcom/ratifyprotocol/ErrorClass;
+}
+
+public final class com/ratifyprotocol/ExpectedChallenge {
+	public fun <init> ([BJJLjava/lang/String;JLjava/lang/String;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Ljava/lang/String;[BLcom/ratifyprotocol/ContextPolicy;)V
+	public synthetic fun <init> ([BJJLjava/lang/String;JLjava/lang/String;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Ljava/lang/String;[BLcom/ratifyprotocol/ContextPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getContextPolicy ()Lcom/ratifyprotocol/ContextPolicy;
+	public final fun getExpectedAgentId ()Ljava/lang/String;
+	public final fun getExpectedAgentPublicKey ()Lcom/ratifyprotocol/HybridPublicKey;
+	public final fun getExpectedReceiverId ()Ljava/lang/String;
+	public final fun getExpectedSessionContext ()[B
+	public final fun getExpiresAt ()J
+	public final fun getIssuedAt ()J
+	public final fun getReplayEpoch ()J
+	public final fun getValue ()[B
+	public final fun getVerifierId ()Ljava/lang/String;
+	public final fun getVerifierNamespace ()Ljava/lang/String;
 }
 
 public abstract interface class com/ratifyprotocol/ExternalSigner {
@@ -774,6 +823,46 @@ public final class com/ratifyprotocol/StatusPublisherState {
 	public final fun getStatusKeyId ()Ljava/lang/String;
 	public final fun getUpdatedAt ()J
 	public fun hashCode ()I
+}
+
+public abstract class com/ratifyprotocol/StoreError : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getErrorClass ()Lcom/ratifyprotocol/ErrorClass;
+}
+
+public final class com/ratifyprotocol/StoreError$AcknowledgementNotFound : com/ratifyprotocol/StoreError {
+	public fun <init> ()V
+}
+
+public final class com/ratifyprotocol/StoreError$ChallengeIssuanceConflict : com/ratifyprotocol/StoreError {
+	public fun <init> ()V
+}
+
+public final class com/ratifyprotocol/StoreError$ChallengeIssuanceNotFound : com/ratifyprotocol/StoreError {
+	public fun <init> ()V
+}
+
+public final class com/ratifyprotocol/StoreError$ClaimProofConflict : com/ratifyprotocol/StoreError {
+	public fun <init> ()V
+	public fun getErrorClass ()Lcom/ratifyprotocol/ErrorClass;
+}
+
+public final class com/ratifyprotocol/StoreError$Classified : com/ratifyprotocol/StoreError {
+	public fun <init> (Lcom/ratifyprotocol/ErrorClass;Ljava/lang/String;)V
+	public fun getErrorClass ()Lcom/ratifyprotocol/ErrorClass;
+}
+
+public final class com/ratifyprotocol/StoreError$RateLimitExceeded : com/ratifyprotocol/StoreError {
+	public fun <init> ()V
+	public fun getErrorClass ()Lcom/ratifyprotocol/ErrorClass;
+}
+
+public final class com/ratifyprotocol/StoreError$ReleaseStateMismatch : com/ratifyprotocol/StoreError {
+	public fun <init> ()V
+}
+
+public final class com/ratifyprotocol/StoreError$Unavailable : com/ratifyprotocol/StoreError {
+	public fun <init> (Ljava/lang/String;)V
 }
 
 public final class com/ratifyprotocol/TransactionReceipt {

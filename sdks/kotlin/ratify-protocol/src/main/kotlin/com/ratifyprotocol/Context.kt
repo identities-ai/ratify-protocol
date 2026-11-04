@@ -56,14 +56,13 @@ public fun buildSessionContext(inputs: SessionContextInputs): ByteArray =
 public fun decodePayloadDigest(encoded: String?): ByteArray? = ffi { ffiDecodePayloadDigest(encoded) }
 
 /** A validated, fingerprinted context policy. */
-public class ContextPolicy(
-    profile: String,
-    requireBound: Boolean,
-    requiredFields: List<String>,
-    expectedSessionContext: ByteArray = ByteArray(0),
-) {
-    private val handle: FfiContextPolicy =
-        ffi { FfiContextPolicy(profile, requireBound, requiredFields.toList(), expectedSessionContext.copyOf()) }
+public class ContextPolicy internal constructor(internal val handle: FfiContextPolicy) {
+    public constructor(
+        profile: String,
+        requireBound: Boolean,
+        requiredFields: List<String>,
+        expectedSessionContext: ByteArray = ByteArray(0),
+    ) : this(ffi { FfiContextPolicy(profile, requireBound, requiredFields.toList(), expectedSessionContext.copyOf()) })
 
     /** `sha384:` + 96 lowercase hex characters. */
     public val digest: String = ffi { handle.digest() }

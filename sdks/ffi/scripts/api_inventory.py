@@ -189,6 +189,10 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "ChallengeRandomSource.fill": "the V2RandomSource read callback",
+    "StoreError.Classified.errorClass": "typed store error class",
+    "StoreError.ClaimProofConflict.errorClass": "fixed claim_replay class",
+    "StoreError.RateLimitExceeded.errorClass": "fixed claim_store_unavailable class",
     "SecurityJournalSnapshot.snapshot": "canonical bytes supplied by the core",
     "SecurityJournalSnapshot.head": "independently anchored head paired with the bytes",
     "SecurityJournalStoreError.conflict": "host compare-and-swap conflict",

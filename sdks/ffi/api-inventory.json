@@ -361,13 +361,15 @@
  },
  "CertificateRefV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CertificateRef",
+  "status": "mapped",
+  "swift": "CertificateRef"
  },
  "CertificateRefV2::cert_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CertificateRef.certId",
+  "status": "mapped",
+  "swift": "CertificateRef.certId"
  },
  "CertificateRefV2::clone": {
   "kind": "fn",
@@ -401,8 +403,9 @@
  },
  "CertificateRefV2::issuer_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CertificateRef.issuerId",
+  "status": "mapped",
+  "swift": "CertificateRef.issuerId"
  },
  "CertificateRefV2::partial_cmp": {
   "kind": "fn",
@@ -411,23 +414,27 @@
  },
  "ClaimStoreV2": {
   "kind": "trait",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimStore",
+  "status": "mapped",
+  "swift": "ClaimStore"
  },
  "ClaimStoreV2::claim_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimStore.claim",
+  "status": "mapped",
+  "swift": "ClaimStore.claim"
  },
  "ClaimStoreV2::finalize_v2_claim": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimStore.finalize",
+  "status": "mapped",
+  "swift": "ClaimStore.finalize"
  },
  "ClaimStoreV2::load_v2_interrupted_claim": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimStore.loadInterrupted",
+  "status": "mapped",
+  "swift": "ClaimStore.loadInterrupted"
  },
  "ClaimStoreV2::rate_at_finalization_view": {
   "kind": "fn",
@@ -436,33 +443,39 @@
  },
  "ClaimStoreV2::record_v2_evaluation_progress": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimStore.recordProgress",
+  "status": "mapped",
+  "swift": "ClaimStore.recordProgress"
  },
  "ClaimStoreV2::recover_interrupted_v2_claim": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimStore.recoverInterrupted",
+  "status": "mapped",
+  "swift": "ClaimStore.recoverInterrupted"
  },
  "CommittedV2Outcome": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedOutcome",
+  "status": "mapped",
+  "swift": "CommittedOutcome"
  },
  "CommittedV2Outcome::allow_horizon": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedOutcome.allowHorizon",
+  "status": "mapped",
+  "swift": "CommittedOutcome.allowHorizon"
  },
  "CommittedV2Outcome::challenge_expires_at": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedOutcome.challengeExpiresAt",
+  "status": "mapped",
+  "swift": "CommittedOutcome.challengeExpiresAt"
  },
  "CommittedV2Outcome::claim_id": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedOutcome.claimId",
+  "status": "mapped",
+  "swift": "CommittedOutcome.claimId"
  },
  "CommittedV2Outcome::fmt": {
   "kind": "fn",
@@ -471,19 +484,21 @@
  },
  "CommittedV2Outcome::receipt_body": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedOutcome.receiptBody",
+  "status": "mapped",
+  "swift": "CommittedOutcome.receiptBody"
  },
  "CommittedV2Outcome::receipt_body_digest": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedOutcome.receiptBodyDigest",
+  "status": "mapped",
+  "swift": "CommittedOutcome.receiptBodyDigest"
  },
  "ConstraintContextV2": {
   "kind": "struct",
+  "kotlin": "ConstraintContext",
   "status": "mapped",
-  "swift": "ConstraintContext",
-  "kotlin": "ConstraintContext"
+  "swift": "ConstraintContext"
  },
  "ConstraintContextV2::clone": {
   "kind": "fn",
@@ -502,15 +517,15 @@
  },
  "ConstraintContextV2::extension_counts": {
   "kind": "member",
+  "kotlin": "ConstraintContext.extensionCounts",
   "status": "mapped",
-  "swift": "ConstraintContext.extensionCounts",
-  "kotlin": "ConstraintContext.extensionCounts"
+  "swift": "ConstraintContext.extensionCounts"
  },
  "ConstraintContextV2::extension_values": {
   "kind": "member",
+  "kotlin": "ConstraintContext.extensionValues",
   "status": "mapped",
-  "swift": "ConstraintContext.extensionValues",
-  "kotlin": "ConstraintContext.extensionValues"
+  "swift": "ConstraintContext.extensionValues"
  },
  "ConstraintContextV2::fmt": {
   "kind": "fn",
@@ -519,51 +534,51 @@
  },
  "ConstraintContextV2::has_amount": {
   "kind": "member",
+  "kotlin": "ConstraintContext.hasAmount",
   "status": "mapped",
-  "swift": "ConstraintContext.hasAmount",
-  "kotlin": "ConstraintContext.hasAmount"
+  "swift": "ConstraintContext.hasAmount"
  },
  "ConstraintContextV2::has_resource": {
   "kind": "member",
+  "kotlin": "ConstraintContext.hasResource",
   "status": "mapped",
-  "swift": "ConstraintContext.hasResource",
-  "kotlin": "ConstraintContext.hasResource"
+  "swift": "ConstraintContext.hasResource"
  },
  "ConstraintContextV2::requested_amount_micros": {
   "kind": "member",
+  "kotlin": "ConstraintContext.requestedAmountMicros",
   "status": "mapped",
-  "swift": "ConstraintContext.requestedAmountMicros",
-  "kotlin": "ConstraintContext.requestedAmountMicros"
+  "swift": "ConstraintContext.requestedAmountMicros"
  },
  "ConstraintContextV2::requested_currency": {
   "kind": "member",
+  "kotlin": "ConstraintContext.requestedCurrency",
   "status": "mapped",
-  "swift": "ConstraintContext.requestedCurrency",
-  "kotlin": "ConstraintContext.requestedCurrency"
+  "swift": "ConstraintContext.requestedCurrency"
  },
  "ConstraintContextV2::requested_path": {
   "kind": "member",
+  "kotlin": "ConstraintContext.requestedPath",
   "status": "mapped",
-  "swift": "ConstraintContext.requestedPath",
-  "kotlin": "ConstraintContext.requestedPath"
+  "swift": "ConstraintContext.requestedPath"
  },
  "ConstraintContextV2::requested_resource_id": {
   "kind": "member",
+  "kotlin": "ConstraintContext.requestedResourceId",
   "status": "mapped",
-  "swift": "ConstraintContext.requestedResourceId",
-  "kotlin": "ConstraintContext.requestedResourceId"
+  "swift": "ConstraintContext.requestedResourceId"
  },
  "ConstraintEvaluationInputV2": {
   "kind": "struct",
+  "kotlin": "ConstraintEvaluationInput",
   "status": "mapped",
-  "swift": "ConstraintEvaluationInput",
-  "kotlin": "ConstraintEvaluationInput"
+  "swift": "ConstraintEvaluationInput"
  },
  "ConstraintEvaluationInputV2::cert_id": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationInput.certId",
   "status": "mapped",
-  "swift": "ConstraintEvaluationInput.certId",
-  "kotlin": "ConstraintEvaluationInput.certId"
+  "swift": "ConstraintEvaluationInput.certId"
  },
  "ConstraintEvaluationInputV2::clone": {
   "kind": "fn",
@@ -572,21 +587,21 @@
  },
  "ConstraintEvaluationInputV2::constraint_index": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationInput.constraintIndex",
   "status": "mapped",
-  "swift": "ConstraintEvaluationInput.constraintIndex",
-  "kotlin": "ConstraintEvaluationInput.constraintIndex"
+  "swift": "ConstraintEvaluationInput.constraintIndex"
  },
  "ConstraintEvaluationInputV2::context": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationInput.context",
   "status": "mapped",
-  "swift": "ConstraintEvaluationInput.context",
-  "kotlin": "ConstraintEvaluationInput.context"
+  "swift": "ConstraintEvaluationInput.context"
  },
  "ConstraintEvaluationInputV2::delegation_index": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationInput.delegationIndex",
   "status": "mapped",
-  "swift": "ConstraintEvaluationInput.delegationIndex",
-  "kotlin": "ConstraintEvaluationInput.delegationIndex"
+  "swift": "ConstraintEvaluationInput.delegationIndex"
  },
  "ConstraintEvaluationInputV2::eq": {
   "kind": "fn",
@@ -595,9 +610,9 @@
  },
  "ConstraintEvaluationInputV2::evaluation_time": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationInput.evaluationTime",
   "status": "mapped",
-  "swift": "ConstraintEvaluationInput.evaluationTime",
-  "kotlin": "ConstraintEvaluationInput.evaluationTime"
+  "swift": "ConstraintEvaluationInput.evaluationTime"
  },
  "ConstraintEvaluationInputV2::fmt": {
   "kind": "fn",
@@ -606,27 +621,27 @@
  },
  "ConstraintEvaluationInputV2::issuer_id": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationInput.issuerId",
   "status": "mapped",
-  "swift": "ConstraintEvaluationInput.issuerId",
-  "kotlin": "ConstraintEvaluationInput.issuerId"
+  "swift": "ConstraintEvaluationInput.issuerId"
  },
  "ConstraintEvaluationInputV2::kind": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationInput.type",
   "status": "mapped",
-  "swift": "ConstraintEvaluationInput.type",
-  "kotlin": "ConstraintEvaluationInput.type"
+  "swift": "ConstraintEvaluationInput.type"
  },
  "ConstraintEvaluationInputV2::params_json": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationInput.paramsJson",
   "status": "mapped",
-  "swift": "ConstraintEvaluationInput.paramsJSON",
-  "kotlin": "ConstraintEvaluationInput.paramsJson"
+  "swift": "ConstraintEvaluationInput.paramsJSON"
  },
  "ConstraintEvaluationResultV2": {
   "kind": "struct",
+  "kotlin": "ConstraintEvaluationResult",
   "status": "mapped",
-  "swift": "ConstraintEvaluationResult",
-  "kotlin": "ConstraintEvaluationResult"
+  "swift": "ConstraintEvaluationResult"
  },
  "ConstraintEvaluationResultV2::clone": {
   "kind": "fn",
@@ -635,9 +650,9 @@
  },
  "ConstraintEvaluationResultV2::detail": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationResult.detail",
   "status": "mapped",
-  "swift": "ConstraintEvaluationResult.detail",
-  "kotlin": "ConstraintEvaluationResult.detail"
+  "swift": "ConstraintEvaluationResult.detail"
  },
  "ConstraintEvaluationResultV2::eq": {
   "kind": "fn",
@@ -651,15 +666,15 @@
  },
  "ConstraintEvaluationResultV2::outcome": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationResult.outcome",
   "status": "mapped",
-  "swift": "ConstraintEvaluationResult.outcome",
-  "kotlin": "ConstraintEvaluationResult.outcome"
+  "swift": "ConstraintEvaluationResult.outcome"
  },
  "ConstraintEvaluationResultV2::valid_until": {
   "kind": "member",
+  "kotlin": "ConstraintEvaluationResult.validUntil",
   "status": "mapped",
-  "swift": "ConstraintEvaluationResult.validUntil",
-  "kotlin": "ConstraintEvaluationResult.validUntil"
+  "swift": "ConstraintEvaluationResult.validUntil"
  },
  "ConstraintEvaluatorError": {
   "kind": "struct",
@@ -836,33 +851,33 @@
  },
  "ConstraintOutcomeV2": {
   "kind": "enum",
+  "kotlin": "ConstraintOutcome",
   "status": "mapped",
-  "swift": "ConstraintOutcome",
-  "kotlin": "ConstraintOutcome"
+  "swift": "ConstraintOutcome"
  },
  "ConstraintOutcomeV2::Denied": {
   "kind": "member",
+  "kotlin": "ConstraintOutcome.DENIED",
   "status": "mapped",
-  "swift": "ConstraintOutcome.denied",
-  "kotlin": "ConstraintOutcome.DENIED"
+  "swift": "ConstraintOutcome.denied"
  },
  "ConstraintOutcomeV2::Invalid": {
   "kind": "member",
+  "kotlin": "ConstraintOutcome.INVALID",
   "status": "mapped",
-  "swift": "ConstraintOutcome.invalid",
-  "kotlin": "ConstraintOutcome.INVALID"
+  "swift": "ConstraintOutcome.invalid"
  },
  "ConstraintOutcomeV2::Pass": {
   "kind": "member",
+  "kotlin": "ConstraintOutcome.PASS",
   "status": "mapped",
-  "swift": "ConstraintOutcome.pass",
-  "kotlin": "ConstraintOutcome.PASS"
+  "swift": "ConstraintOutcome.pass"
  },
  "ConstraintOutcomeV2::Unverifiable": {
   "kind": "member",
+  "kotlin": "ConstraintOutcome.UNVERIFIABLE",
   "status": "mapped",
-  "swift": "ConstraintOutcome.unverifiable",
-  "kotlin": "ConstraintOutcome.UNVERIFIABLE"
+  "swift": "ConstraintOutcome.unverifiable"
  },
  "ConstraintOutcomeV2::clone": {
   "kind": "fn",
@@ -881,9 +896,9 @@
  },
  "ConstraintProfileDescriptorV2": {
   "kind": "struct",
+  "kotlin": "ConstraintProfileDescriptor",
   "status": "mapped",
-  "swift": "ConstraintProfileDescriptor",
-  "kotlin": "ConstraintProfileDescriptor"
+  "swift": "ConstraintProfileDescriptor"
  },
  "ConstraintProfileDescriptorV2::clone": {
   "kind": "fn",
@@ -902,15 +917,15 @@
  },
  "ConstraintProfileDescriptorV2::kind": {
   "kind": "member",
+  "kotlin": "ConstraintProfileDescriptor.type",
   "status": "mapped",
-  "swift": "ConstraintProfileDescriptor.type",
-  "kotlin": "ConstraintProfileDescriptor.type"
+  "swift": "ConstraintProfileDescriptor.type"
  },
  "ConstraintProfileDescriptorV2::profile": {
   "kind": "member",
+  "kotlin": "ConstraintProfileDescriptor.profile",
   "status": "mapped",
-  "swift": "ConstraintProfileDescriptor.profile",
-  "kotlin": "ConstraintProfileDescriptor.profile"
+  "swift": "ConstraintProfileDescriptor.profile"
  },
  "ConstraintV2": {
   "kind": "struct",
@@ -5201,8 +5216,9 @@
  },
  "V2AudienceMembership": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceMembership",
+  "status": "mapped",
+  "swift": "AudienceMembership"
  },
  "V2AudienceMembership::clone": {
   "kind": "fn",
@@ -5211,8 +5227,9 @@
  },
  "V2AudienceMembership::constraint_index": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceMembership.constraintIndex",
+  "status": "mapped",
+  "swift": "AudienceMembership.constraintIndex"
  },
  "V2AudienceMembership::default": {
   "kind": "fn",
@@ -5221,8 +5238,9 @@
  },
  "V2AudienceMembership::delegation_index": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceMembership.delegationIndex",
+  "status": "mapped",
+  "swift": "AudienceMembership.delegationIndex"
  },
  "V2AudienceMembership::eq": {
   "kind": "fn",
@@ -5231,13 +5249,15 @@
  },
  "V2AudienceMembership::evidence_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceMembership.evidenceDigest",
+  "status": "mapped",
+  "swift": "AudienceMembership.evidenceDigest"
  },
  "V2AudienceMembership::expires_at": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceMembership.expiresAt",
+  "status": "mapped",
+  "swift": "AudienceMembership.expiresAt"
  },
  "V2AudienceMembership::fmt": {
   "kind": "fn",
@@ -5246,23 +5266,27 @@
  },
  "V2AudienceMembership::issued_at": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceMembership.issuedAt",
+  "status": "mapped",
+  "swift": "AudienceMembership.issuedAt"
  },
  "V2AudienceMembership::receiver_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceMembership.receiverId",
+  "status": "mapped",
+  "swift": "AudienceMembership.receiverId"
  },
  "V2AudienceMembership::trust_domain_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceMembership.trustDomainIds",
+  "status": "mapped",
+  "swift": "AudienceMembership.trustDomainIds"
  },
  "V2AudienceProvider": {
   "kind": "type",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceProvider",
+  "status": "mapped",
+  "swift": "AudienceProvider"
  },
  "V2AuthoritativeClock": {
   "kind": "trait",
@@ -5338,33 +5362,39 @@
  },
  "V2ChallengeClaim": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim",
+  "status": "mapped",
+  "swift": "ChallengeClaim"
  },
  "V2ChallengeClaim::agent_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.agentId",
+  "status": "mapped",
+  "swift": "ChallengeClaim.agentId"
  },
  "V2ChallengeClaim::bundle_hash": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.bundleHash",
+  "status": "mapped",
+  "swift": "ChallengeClaim.bundleHash"
  },
  "V2ChallengeClaim::challenge_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.challengeDigest",
+  "status": "mapped",
+  "swift": "ChallengeClaim.challengeDigest"
  },
  "V2ChallengeClaim::claim_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.claimId",
+  "status": "mapped",
+  "swift": "ChallengeClaim.claimId"
  },
  "V2ChallengeClaim::clock_skew_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.clockSkewSeconds",
+  "status": "mapped",
+  "swift": "ChallengeClaim.clockSkewSeconds"
  },
  "V2ChallengeClaim::clone": {
   "kind": "fn",
@@ -5373,13 +5403,15 @@
  },
  "V2ChallengeClaim::constraint_evaluators": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.constraintEvaluators",
+  "status": "mapped",
+  "swift": "ChallengeClaim.constraintEvaluators"
  },
  "V2ChallengeClaim::context_policy_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.contextPolicyDigest",
+  "status": "mapped",
+  "swift": "ChallengeClaim.contextPolicyDigest"
  },
  "V2ChallengeClaim::default": {
   "kind": "fn",
@@ -5393,8 +5425,9 @@
  },
  "V2ChallengeClaim::expires_at": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.expiresAt",
+  "status": "mapped",
+  "swift": "ChallengeClaim.expiresAt"
  },
  "V2ChallengeClaim::fmt": {
   "kind": "fn",
@@ -5403,63 +5436,75 @@
  },
  "V2ChallengeClaim::issued_at": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.issuedAt",
+  "status": "mapped",
+  "swift": "ChallengeClaim.issuedAt"
  },
  "V2ChallengeClaim::issuer_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.issuerIds",
+  "status": "mapped",
+  "swift": "ChallengeClaim.issuerIds"
  },
  "V2ChallengeClaim::max_age_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.maxAgeSeconds",
+  "status": "mapped",
+  "swift": "ChallengeClaim.maxAgeSeconds"
  },
  "V2ChallengeClaim::namespace": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.namespace",
+  "status": "mapped",
+  "swift": "ChallengeClaim.namespace"
  },
  "V2ChallengeClaim::proof_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.proofDigest",
+  "status": "mapped",
+  "swift": "ChallengeClaim.proofDigest"
  },
  "V2ChallengeClaim::rate_batch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.rateBatch",
+  "status": "mapped",
+  "swift": "ChallengeClaim.rateBatch"
  },
  "V2ChallengeClaim::replay_epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.replayEpoch",
+  "status": "mapped",
+  "swift": "ChallengeClaim.replayEpoch"
  },
  "V2ChallengeClaim::required_scope": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.requiredScope",
+  "status": "mapped",
+  "swift": "ChallengeClaim.requiredScope"
  },
  "V2ChallengeClaim::requires_rate": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.requiresRate",
+  "status": "mapped",
+  "swift": "ChallengeClaim.requiresRate"
  },
  "V2ChallengeClaim::stream_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.streamId",
+  "status": "mapped",
+  "swift": "ChallengeClaim.streamId"
  },
  "V2ChallengeClaim::stream_seq": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.streamSeq",
+  "status": "mapped",
+  "swift": "ChallengeClaim.streamSeq"
  },
  "V2ChallengeClaim::verifier_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ChallengeClaim.verifierId",
+  "status": "mapped",
+  "swift": "ChallengeClaim.verifierId"
  },
  "V2ChallengeIssuanceStore": {
   "kind": "trait",
@@ -5635,28 +5680,33 @@
  },
  "V2ClaimDisposition": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimDisposition",
+  "status": "mapped",
+  "swift": "ClaimDisposition"
  },
  "V2ClaimDisposition::Created": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimDisposition.CREATED",
+  "status": "mapped",
+  "swift": "ClaimDisposition.created"
  },
  "V2ClaimDisposition::InProgress": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimDisposition.IN_PROGRESS",
+  "status": "mapped",
+  "swift": "ClaimDisposition.inProgress"
  },
  "V2ClaimDisposition::TerminalReplay": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimDisposition.TERMINAL_REPLAY",
+  "status": "mapped",
+  "swift": "ClaimDisposition.terminalReplay"
  },
  "V2ClaimDisposition::as_str": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimDisposition.spelling",
+  "status": "mapped",
+  "swift": "ClaimDisposition.rawValue"
  },
  "V2ClaimDisposition::clone": {
   "kind": "fn",
@@ -5680,13 +5730,15 @@
  },
  "V2ClaimResult": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimResult",
+  "status": "mapped",
+  "swift": "ClaimResult"
  },
  "V2ClaimResult::claimed_at": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimResult.claimedAt",
+  "status": "mapped",
+  "swift": "ClaimResult.claimedAt"
  },
  "V2ClaimResult::clone": {
   "kind": "fn",
@@ -5695,8 +5747,9 @@
  },
  "V2ClaimResult::disposition": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimResult.disposition",
+  "status": "mapped",
+  "swift": "ClaimResult.disposition"
  },
  "V2ClaimResult::eq": {
   "kind": "fn",
@@ -5710,23 +5763,27 @@
  },
  "V2ClaimResult::owner_token": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ClaimResult.ownerToken",
+  "status": "mapped",
+  "swift": "ClaimResult.ownerToken"
  },
  "V2CommittedClaim": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedClaim",
+  "status": "mapped",
+  "swift": "CommittedClaim"
  },
  "V2CommittedClaim::allow_horizon": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedClaim.allowHorizon",
+  "status": "mapped",
+  "swift": "CommittedClaim.allowHorizon"
  },
  "V2CommittedClaim::claim": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedClaim.claim",
+  "status": "mapped",
+  "swift": "CommittedClaim.claim"
  },
  "V2CommittedClaim::clone": {
   "kind": "fn",
@@ -5750,23 +5807,27 @@
  },
  "V2CommittedClaim::receipt_body": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedClaim.receiptBody",
+  "status": "mapped",
+  "swift": "CommittedClaim.receiptBody"
  },
  "V2CommittedClaim::terminal_result": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedClaim.terminalResult",
+  "status": "mapped",
+  "swift": "CommittedClaim.terminalResult"
  },
  "V2CommittedClaimStore": {
   "kind": "trait",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedClaimStore",
+  "status": "mapped",
+  "swift": "CommittedClaimStore"
  },
  "V2CommittedClaimStore::load_v2_committed_claim": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CommittedClaimStore.loadCommitted",
+  "status": "mapped",
+  "swift": "CommittedClaimStore.loadCommitted"
  },
  "V2Context": {
   "kind": "struct",
@@ -5917,18 +5978,21 @@
  },
  "V2DeferredConstraint": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "DeferredConstraint",
+  "status": "mapped",
+  "swift": "DeferredConstraint"
  },
  "V2DeferredConstraint::canonical_json": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "DeferredConstraint.canonicalJson",
+  "status": "mapped",
+  "swift": "DeferredConstraint.canonicalJSON"
  },
  "V2DeferredConstraint::cert_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "DeferredConstraint.certId",
+  "status": "mapped",
+  "swift": "DeferredConstraint.certId"
  },
  "V2DeferredConstraint::clone": {
   "kind": "fn",
@@ -5937,8 +6001,9 @@
  },
  "V2DeferredConstraint::constraint_index": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "DeferredConstraint.constraintIndex",
+  "status": "mapped",
+  "swift": "DeferredConstraint.constraintIndex"
  },
  "V2DeferredConstraint::default": {
   "kind": "fn",
@@ -5947,8 +6012,9 @@
  },
  "V2DeferredConstraint::delegation_index": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "DeferredConstraint.delegationIndex",
+  "status": "mapped",
+  "swift": "DeferredConstraint.delegationIndex"
  },
  "V2DeferredConstraint::eq": {
   "kind": "fn",
@@ -5962,13 +6028,15 @@
  },
  "V2DeferredConstraint::issuer_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "DeferredConstraint.issuerId",
+  "status": "mapped",
+  "swift": "DeferredConstraint.issuerId"
  },
  "V2DeferredConstraint::kind": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "DeferredConstraint.kind",
+  "status": "mapped",
+  "swift": "DeferredConstraint.kind"
  },
  "V2Error": {
   "kind": "struct",
@@ -6368,8 +6436,9 @@
  },
  "V2EvaluationProgress": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "EvaluationProgress",
+  "status": "mapped",
+  "swift": "EvaluationProgress"
  },
  "V2EvaluationProgress::clone": {
   "kind": "fn",
@@ -6378,13 +6447,15 @@
  },
  "V2EvaluationProgress::context_assessment": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "EvaluationProgress.contextAssessment",
+  "status": "mapped",
+  "swift": "EvaluationProgress.contextAssessment"
  },
  "V2EvaluationProgress::context_policy_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "EvaluationProgress.contextPolicyDigest",
+  "status": "mapped",
+  "swift": "EvaluationProgress.contextPolicyDigest"
  },
  "V2EvaluationProgress::default": {
   "kind": "fn",
@@ -6403,18 +6474,21 @@
  },
  "V2EvaluationProgress::status_assessment": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "EvaluationProgress.statusAssessment",
+  "status": "mapped",
+  "swift": "EvaluationProgress.statusAssessment"
  },
  "V2EvaluationProgress::status_evidence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "EvaluationProgress.statusEvidence",
+  "status": "mapped",
+  "swift": "EvaluationProgress.statusEvidence"
  },
  "V2EvaluationProgress::trust_assessment": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "EvaluationProgress.trustAssessment",
+  "status": "mapped",
+  "swift": "EvaluationProgress.trustAssessment"
  },
  "V2EvaluationToken": {
   "kind": "struct",
@@ -6433,18 +6507,21 @@
  },
  "V2InterruptedClaim": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "InterruptedClaim",
+  "status": "mapped",
+  "swift": "InterruptedClaim"
  },
  "V2InterruptedClaim::claim": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "InterruptedClaim.claim",
+  "status": "mapped",
+  "swift": "InterruptedClaim.claim"
  },
  "V2InterruptedClaim::claimed_at": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "InterruptedClaim.claimedAt",
+  "status": "mapped",
+  "swift": "InterruptedClaim.claimedAt"
  },
  "V2InterruptedClaim::clone": {
   "kind": "fn",
@@ -6468,8 +6545,9 @@
  },
  "V2InterruptedClaim::progress": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "InterruptedClaim.progress",
+  "status": "mapped",
+  "swift": "InterruptedClaim.progress"
  },
  "V2LocalAuthorizationAssessment": {
   "kind": "struct",
@@ -6886,13 +6964,15 @@
  },
  "V2RateReservation": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RateReservation",
+  "status": "mapped",
+  "swift": "RateReservation"
  },
  "V2RateReservation::cert_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RateReservation.certId",
+  "status": "mapped",
+  "swift": "RateReservation.certId"
  },
  "V2RateReservation::clone": {
   "kind": "fn",
@@ -6921,23 +7001,27 @@
  },
  "V2RateReservation::issuer_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RateReservation.issuerId",
+  "status": "mapped",
+  "swift": "RateReservation.issuerId"
  },
  "V2RateReservation::limit": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RateReservation.limit",
+  "status": "mapped",
+  "swift": "RateReservation.limit"
  },
  "V2RateReservation::window_s": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RateReservation.windowSeconds",
+  "status": "mapped",
+  "swift": "RateReservation.windowSeconds"
  },
  "V2RateReservationStore": {
   "kind": "trait",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RateReservationStore",
+  "status": "mapped",
+  "swift": "RateReservationStore"
  },
  "V2RateReservationStore::rate_at_finalization_view": {
   "kind": "fn",
@@ -6946,8 +7030,9 @@
  },
  "V2RateReservationStore::reserve_v2_rate_batch": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "RateReservationStore.reserve",
+  "status": "mapped",
+  "swift": "RateReservationStore.reserve"
  },
  "V2ReceiptCheckpoint": {
   "kind": "trait",
@@ -6976,8 +7061,9 @@
  },
  "V2ReceiverBindingHook": {
   "kind": "type",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ReceiverBindingHook",
+  "status": "mapped",
+  "swift": "ReceiverBindingHook"
  },
  "V2ReleaseClaimStore": {
   "kind": "trait",
@@ -7411,13 +7497,15 @@
  },
  "V2StatusEvidenceProvider": {
   "kind": "type",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusEvidenceProvider",
+  "status": "mapped",
+  "swift": "StatusEvidenceProvider"
  },
  "V2StatusEvidenceRequest": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusEvidenceRequest",
+  "status": "mapped",
+  "swift": "StatusEvidenceRequest"
  },
  "V2StatusEvidenceRequest::clone": {
   "kind": "fn",
@@ -7436,28 +7524,33 @@
  },
  "V2StatusEvidenceRequest::issuer_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusEvidenceRequest.issuerId",
+  "status": "mapped",
+  "swift": "StatusEvidenceRequest.issuerId"
  },
  "V2StatusEvidenceRequest::refs": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusEvidenceRequest.refs",
+  "status": "mapped",
+  "swift": "StatusEvidenceRequest.refs"
  },
  "V2StatusEvidenceRequest::status_key_epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusEvidenceRequest.statusKeyEpoch",
+  "status": "mapped",
+  "swift": "StatusEvidenceRequest.statusKeyEpoch"
  },
  "V2StatusEvidenceRequest::status_key_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusEvidenceRequest.statusKeyId",
+  "status": "mapped",
+  "swift": "StatusEvidenceRequest.statusKeyId"
  },
  "V2StatusKeyConfig": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusKeyConfig",
+  "status": "mapped",
+  "swift": "StatusKeyConfig"
  },
  "V2StatusKeyConfig::clone": {
   "kind": "fn",
@@ -7466,8 +7559,9 @@
  },
  "V2StatusKeyConfig::epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusKeyConfig.epoch",
+  "status": "mapped",
+  "swift": "StatusKeyConfig.epoch"
  },
  "V2StatusKeyConfig::eq": {
   "kind": "fn",
@@ -7481,8 +7575,9 @@
  },
  "V2StatusKeyConfig::key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusKeyConfig.key",
+  "status": "mapped",
+  "swift": "StatusKeyConfig.key"
  },
  "V2StatusProviderError": {
   "kind": "struct",
@@ -7822,33 +7917,39 @@
  },
  "V2TrustOutcome": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustOutcome",
+  "status": "mapped",
+  "swift": "TrustOutcome"
  },
  "V2TrustOutcome::Ambiguous": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustOutcome.AMBIGUOUS",
+  "status": "mapped",
+  "swift": "TrustOutcome.ambiguous"
  },
  "V2TrustOutcome::Trusted": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustOutcome.TRUSTED",
+  "status": "mapped",
+  "swift": "TrustOutcome.trusted"
  },
  "V2TrustOutcome::Unavailable": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustOutcome.UNAVAILABLE",
+  "status": "mapped",
+  "swift": "TrustOutcome.unavailable"
  },
  "V2TrustOutcome::Untrusted": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustOutcome.UNTRUSTED",
+  "status": "mapped",
+  "swift": "TrustOutcome.untrusted"
  },
  "V2TrustOutcome::as_str": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustOutcome.spelling",
+  "status": "mapped",
+  "swift": "TrustOutcome.rawValue"
  },
  "V2TrustOutcome::clone": {
   "kind": "fn",
@@ -7872,18 +7973,21 @@
  },
  "V2TrustOutcome::parse": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustOutcome.fromSpelling",
+  "status": "mapped",
+  "swift": "TrustOutcome.init"
  },
  "V2TrustProvider": {
   "kind": "type",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustProvider",
+  "status": "mapped",
+  "swift": "TrustProvider"
  },
  "V2TrustResolution": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustResolution",
+  "status": "mapped",
+  "swift": "TrustResolution"
  },
  "V2TrustResolution::clone": {
   "kind": "fn",
@@ -7902,13 +8006,15 @@
  },
  "V2TrustResolution::outcome": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustResolution.outcome",
+  "status": "mapped",
+  "swift": "TrustResolution.outcome"
  },
  "V2TrustResolution::root_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustResolution.rootKey",
+  "status": "mapped",
+  "swift": "TrustResolution.rootKey"
  },
  "V2VerifyCallbacks": {
   "kind": "struct",
@@ -7917,8 +8023,9 @@
  },
  "V2VerifyCallbacks::audience": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "AudienceProvider.memberships",
+  "status": "mapped",
+  "swift": "AudienceProvider.memberships"
  },
  "V2VerifyCallbacks::claim_store": {
   "kind": "member",
@@ -7947,13 +8054,15 @@
  },
  "V2VerifyCallbacks::receiver_binding": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "ReceiverBindingHook.validate",
+  "status": "mapped",
+  "swift": "ReceiverBindingHook.validate"
  },
  "V2VerifyCallbacks::status_evidence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusEvidenceProvider.provide",
+  "status": "mapped",
+  "swift": "StatusEvidenceProvider.provide"
  },
  "V2VerifyCallbacks::status_journal": {
   "kind": "member",
@@ -7962,38 +8071,45 @@
  },
  "V2VerifyCallbacks::trust": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TrustProvider.resolve",
+  "status": "mapped",
+  "swift": "TrustProvider.resolve"
  },
  "V2VerifyOutcome": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyOutcome",
+  "status": "mapped",
+  "swift": "VerifyOutcome"
  },
  "V2VerifyOutcome::claim": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyOutcome.claim",
+  "status": "mapped",
+  "swift": "VerifyOutcome.claim"
  },
  "V2VerifyOutcome::committed": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyOutcome.committed",
+  "status": "mapped",
+  "swift": "VerifyOutcome.committed"
  },
  "V2VerifyOutcome::disposition": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyOutcome.disposition",
+  "status": "mapped",
+  "swift": "VerifyOutcome.disposition"
  },
  "V2VerifyOutcome::error": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyOutcome.errorDetail",
+  "status": "mapped",
+  "swift": "VerifyOutcome.errorDetail"
  },
  "V2VerifyOutcome::error_class": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyOutcome.errorClass",
+  "status": "mapped",
+  "swift": "VerifyOutcome.errorClass"
  },
  "V2VerifyOutcome::fmt": {
   "kind": "fn",
@@ -8002,18 +8118,21 @@
  },
  "V2VerifyOutcome::stage": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyOutcome.stage",
+  "status": "mapped",
+  "swift": "VerifyOutcome.stage"
  },
  "V2VerifyRequest": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest",
+  "status": "mapped",
+  "swift": "VerifyRequest"
  },
  "V2VerifyRequest::bundle": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.bundle",
+  "status": "mapped",
+  "swift": "VerifyRequest.bundle"
  },
  "V2VerifyRequest::clone": {
   "kind": "fn",
@@ -8027,13 +8146,15 @@
  },
  "V2VerifyRequest::context": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.context",
+  "status": "mapped",
+  "swift": "VerifyRequest.context"
  },
  "V2VerifyRequest::context_policy": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.contextPolicy",
+  "status": "mapped",
+  "swift": "VerifyRequest.contextPolicy"
  },
  "V2VerifyRequest::default": {
   "kind": "fn",
@@ -8042,8 +8163,9 @@
  },
  "V2VerifyRequest::expected": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.expected",
+  "status": "mapped",
+  "swift": "VerifyRequest.expected"
  },
  "V2VerifyRequest::fmt": {
   "kind": "fn",
@@ -8052,83 +8174,99 @@
  },
  "V2VerifyRequest::future_skew_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.futureSkewSeconds",
+  "status": "mapped",
+  "swift": "VerifyRequest.futureSkewSeconds"
  },
  "V2VerifyRequest::max_challenge_age_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.maxChallengeAgeSeconds",
+  "status": "mapped",
+  "swift": "VerifyRequest.maxChallengeAgeSeconds"
  },
  "V2VerifyRequest::now": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.now",
+  "status": "mapped",
+  "swift": "VerifyRequest.now"
  },
  "V2VerifyRequest::replay_epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.replayEpoch",
+  "status": "mapped",
+  "swift": "VerifyRequest.replayEpoch"
  },
  "V2VerifyRequest::required_scope": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.requiredScope",
+  "status": "mapped",
+  "swift": "VerifyRequest.requiredScope"
  },
  "V2VerifyRequest::status_keys": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.statusKeys",
+  "status": "mapped",
+  "swift": "VerifyRequest.statusKeys"
  },
  "V2VerifyRequest::status_policy": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.statusPolicy",
+  "status": "mapped",
+  "swift": "VerifyRequest.statusPolicy"
  },
  "V2VerifyRequest::tzdb_version": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.tzdbVersion",
+  "status": "mapped",
+  "swift": "VerifyRequest.tzdbVersion"
  },
  "V2VerifyRequest::verifier_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.verifierId",
+  "status": "mapped",
+  "swift": "VerifyRequest.verifierId"
  },
  "V2VerifyRequest::verifier_namespace": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyRequest.verifierNamespace",
+  "status": "mapped",
+  "swift": "VerifyRequest.verifierNamespace"
  },
  "V2VerifyStage": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyStage",
+  "status": "mapped",
+  "swift": "VerifyStage"
  },
  "V2VerifyStage::Committed": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyStage.COMMITTED",
+  "status": "mapped",
+  "swift": "VerifyStage.committed"
  },
  "V2VerifyStage::Evaluating": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyStage.EVALUATING",
+  "status": "mapped",
+  "swift": "VerifyStage.evaluating"
  },
  "V2VerifyStage::Preflight": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyStage.PREFLIGHT",
+  "status": "mapped",
+  "swift": "VerifyStage.preflight"
  },
  "V2VerifyStage::Replay": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyStage.REPLAY",
+  "status": "mapped",
+  "swift": "VerifyStage.replay"
  },
  "V2VerifyStage::as_str": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "VerifyStage.spelling",
+  "status": "mapped",
+  "swift": "VerifyStage.rawValue"
  },
  "V2VerifyStage::clone": {
   "kind": "fn",
@@ -8595,9 +8733,9 @@
  },
  "constraint_profile_digest_v2": {
   "kind": "fn",
+  "kotlin": "constraintProfileDigest",
   "status": "mapped",
-  "swift": "Ratify.constraintProfileDigest",
-  "kotlin": "constraintProfileDigest"
+  "swift": "Ratify.constraintProfileDigest"
  },
  "decode_delegation_cert_v2": {
   "kind": "fn",
@@ -8757,15 +8895,15 @@
  },
  "evaluate_allowed_values_v2": {
   "kind": "fn",
+  "kotlin": "evaluateAllowedValues",
   "status": "mapped",
-  "swift": "Ratify.evaluateAllowedValues",
-  "kotlin": "evaluateAllowedValues"
+  "swift": "Ratify.evaluateAllowedValues"
  },
  "evaluate_max_count_v2": {
   "kind": "fn",
+  "kotlin": "evaluateMaxCount",
   "status": "mapped",
-  "swift": "Ratify.evaluateMaxCount",
-  "kotlin": "evaluateMaxCount"
+  "swift": "Ratify.evaluateMaxCount"
  },
  "evaluate_proof_bundle_v2_context_policy": {
   "kind": "fn",
@@ -8990,8 +9128,9 @@
  },
  "resume_committed_claim_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "resumeCommittedClaim",
+  "status": "mapped",
+  "swift": "Ratify.resumeCommittedClaim"
  },
  "revocation_list_v2_signable_bytes": {
   "kind": "fn",
@@ -9288,9 +9427,9 @@
  },
  "validate_v2_request_context": {
   "kind": "fn",
+  "kotlin": "validateRequestContext",
   "status": "mapped",
-  "swift": "Ratify.validateRequestContext",
-  "kotlin": "validateRequestContext"
+  "swift": "Ratify.validateRequestContext"
  },
  "verification_receipt_v2_body": {
   "kind": "fn",
@@ -9382,8 +9521,9 @@
  },
  "verify_proof_bundle_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "verifyProofBundle",
+  "status": "mapped",
+  "swift": "Ratify.verifyProofBundle"
  },
  "verify_proof_bundle_v2_signatures": {
   "kind": "fn",

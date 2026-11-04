@@ -10,6 +10,9 @@ uniffi::setup_scaffolding!("ratify_ffi");
 
 mod archival;
 mod context;
+mod claim;
+mod live_verify;
+mod live_providers;
 mod error;
 mod evaluator;
 mod guard;
@@ -29,6 +32,9 @@ mod verify;
 
 pub use archival::*;
 pub use context::*;
+pub use claim::*;
+pub use live_verify::*;
+pub use live_providers::*;
 pub use error::*;
 pub use evaluator::*;
 pub use keys::*;

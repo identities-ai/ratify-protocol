@@ -11,8 +11,8 @@ import com.ratifyprotocol.internal.ffi.FfiStoreException
 import com.ratifyprotocol.internal.ffi.ffiIssueChallenge
 import com.ratifyprotocol.internal.ffi.ffiLoadExpectedChallenge
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -107,18 +107,22 @@ public interface ChallengeRandomSource {
     public suspend fun fill(count: Int): ByteArray
 }
 
-private fun <T> callbackWait(context: FfiStoreContext, operation: suspend () -> T): T = runBlocking {
-    val job = CoroutineScope(Dispatchers.Default).async { operation() }
+internal fun <T> callbackWait(context: FfiStoreContext, operation: suspend () -> T): T =
+    callbackWait(cancelled = { context.isCancelled() }, operation = operation)
+
+internal fun <T> callbackWait(cancelled: () -> Boolean, operation: suspend () -> T): T = runBlocking {
+    val done = kotlinx.coroutines.CompletableDeferred<Result<T>>()
+    val job = CoroutineScope(Dispatchers.Default).launch(start = CoroutineStart.ATOMIC) {
+        done.complete(runCatching { operation() })
+    }
     val watcher = launch(Dispatchers.Default) {
         while (isActive && !job.isCompleted) {
-            if (runCatching { context.isCancelled() }.getOrDefault(false)) { job.cancel(); break }
+            if (runCatching { cancelled() }.getOrDefault(false)) { job.cancel(); break }
             delay(5)
         }
     }
     try {
-        val value = job.await()
-        if (context.isCancelled()) throw kotlinx.coroutines.CancellationException("challenge callback cancelled")
-        value
+        done.await().getOrThrow()
     } finally { watcher.cancel() }
 }
 

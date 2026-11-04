@@ -129,7 +129,7 @@ public protocol ChallengeRandomSource: Sendable {
     func fill(count: Int) async throws -> Data
 }
 
-private func callbackWait<T: Sendable>(context: FfiStoreContext,
+func callbackWait<T: Sendable>(context: FfiStoreContext,
                                        _ operation: @escaping @Sendable () async throws -> T) throws -> T {
     let box = ResultBox<T>()
     let done = DispatchSemaphore(value: 0)
@@ -140,7 +140,6 @@ private func callbackWait<T: Sendable>(context: FfiStoreContext,
     while done.wait(timeout: .now() + .milliseconds(5)) == .timedOut {
         if (try? context.isCancelled()) == true { task.cancel() }
     }
-    if try context.isCancelled() { throw CancellationError() }
     return try box.value!.get()
 }
 

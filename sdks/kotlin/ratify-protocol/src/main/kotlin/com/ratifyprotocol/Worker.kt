@@ -33,14 +33,13 @@ internal suspend fun <T> onWorker(timeout: Duration? = null, body: (FfiCancelTok
     // deferred, so the body's completion can still be awaited afterwards.
     val done = CompletableDeferred<Result<T>>()
     Workers.pool.execute { done.complete(runCatching { body(token) }) }
-    try {
-        return done.await().getOrThrow()
+    val outcome = try {
+        done.await()
     } catch (e: CancellationException) {
         runCatching { token.cancel() }
-        val outcome = withContext(NonCancellable) { done.await() }
-        // Kotlin reports a cancelled call as CancellationException; the core's
-        // own outcome (normally evaluation_cancelled) is kept as its cause.
-        outcome.exceptionOrNull()?.let { if (e.cause == null) e.initCause(it) }
-        throw e
+        withContext(NonCancellable) { done.await() }
     }
+    // A completed commit or store write keeps its result even if cancellation
+    // arrived while the worker was finishing it.
+    return outcome.getOrThrow()
 }

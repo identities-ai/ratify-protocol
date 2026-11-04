@@ -40,8 +40,54 @@ public final class com/ratifyprotocol/ArchivalVerification {
 	public final fun getSignerKeyIds ()Ljava/util/List;
 }
 
+public final class com/ratifyprotocol/AudienceMembership {
+	public synthetic fun <init> (JJLjava/lang/String;Ljava/util/List;JJLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getConstraintIndex-s-VKNKU ()J
+	public final fun getDelegationIndex-s-VKNKU ()J
+	public final fun getEvidenceDigest ()Ljava/lang/String;
+	public final fun getExpiresAt ()J
+	public final fun getIssuedAt ()J
+	public final fun getReceiverId ()Ljava/lang/String;
+	public final fun getTrustDomainIds ()Ljava/util/List;
+}
+
+public abstract interface class com/ratifyprotocol/AudienceProvider {
+	public abstract fun memberships (Ljava/util/List;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public abstract interface class com/ratifyprotocol/AuthoritativeClock {
 	public abstract fun authoritativeTime (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/CertificateRef {
+	public final fun getCertId ()Ljava/lang/String;
+	public final fun getIssuerId ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/ChallengeClaim {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZLjava/util/List;JJJJ[BLjava/lang/Long;Ljava/util/List;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAgentId ()Ljava/lang/String;
+	public final fun getBundleHash ()Ljava/lang/String;
+	public final fun getChallengeDigest ()Ljava/lang/String;
+	public final fun getClaimId ()Ljava/lang/String;
+	public final fun getClockSkewSeconds ()J
+	public final fun getConstraintEvaluators ()Ljava/util/List;
+	public final fun getContextPolicyDigest ()Ljava/lang/String;
+	public final fun getExpiresAt ()J
+	public final fun getIssuedAt ()J
+	public final fun getIssuerIds ()Ljava/util/List;
+	public final fun getMaxAgeSeconds ()J
+	public final fun getNamespace ()Ljava/lang/String;
+	public final fun getProofDigest ()Ljava/lang/String;
+	public final fun getRateBatch ()Ljava/util/List;
+	public final fun getReplayEpoch ()J
+	public final fun getRequiredScope ()Ljava/lang/String;
+	public final fun getRequiresRate ()Z
+	public final fun getStreamId ()[B
+	public final fun getStreamSeq ()Ljava/lang/Long;
+	public final fun getVerifierId ()Ljava/lang/String;
+	public fun hashCode ()I
 }
 
 public final class com/ratifyprotocol/ChallengeIssuanceKt {
@@ -71,6 +117,58 @@ public final class com/ratifyprotocol/ChallengeIssueRequest {
 
 public abstract interface class com/ratifyprotocol/ChallengeRandomSource {
 	public abstract fun fill (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/ClaimDisposition : java/lang/Enum {
+	public static final field CREATED Lcom/ratifyprotocol/ClaimDisposition;
+	public static final field IN_PROGRESS Lcom/ratifyprotocol/ClaimDisposition;
+	public static final field TERMINAL_REPLAY Lcom/ratifyprotocol/ClaimDisposition;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getSpelling ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/ClaimDisposition;
+	public static fun values ()[Lcom/ratifyprotocol/ClaimDisposition;
+}
+
+public final class com/ratifyprotocol/ClaimKt {
+	public static final fun resumeCommittedClaim-5_5nbZA (Lcom/ratifyprotocol/CommittedClaimStore;Ljava/lang/String;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun resumeCommittedClaim-5_5nbZA$default (Lcom/ratifyprotocol/CommittedClaimStore;Ljava/lang/String;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/ClaimResult {
+	public fun <init> (Lcom/ratifyprotocol/ClaimDisposition;J[B)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getClaimedAt ()J
+	public final fun getDisposition ()Lcom/ratifyprotocol/ClaimDisposition;
+	public final fun getOwnerToken ()[B
+	public fun hashCode ()I
+}
+
+public abstract interface class com/ratifyprotocol/ClaimStore : com/ratifyprotocol/AuthoritativeClock {
+	public abstract fun claim (Lcom/ratifyprotocol/ChallengeClaim;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun finalize (Ljava/lang/String;[B[B[BJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun loadInterrupted (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun recordProgress (Ljava/lang/String;[BLcom/ratifyprotocol/EvaluationProgress;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun recoverInterrupted (Ljava/lang/String;[B[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/CommittedClaim {
+	public fun <init> (Lcom/ratifyprotocol/ChallengeClaim;[B[BJ)V
+	public final fun getAllowHorizon ()J
+	public final fun getClaim ()Lcom/ratifyprotocol/ChallengeClaim;
+	public final fun getReceiptBody ()[B
+	public final fun getTerminalResult ()[B
+}
+
+public abstract interface class com/ratifyprotocol/CommittedClaimStore {
+	public abstract fun loadCommitted (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/CommittedOutcome {
+	public final fun getAllowHorizon ()Ljava/lang/Long;
+	public final fun getChallengeExpiresAt ()J
+	public final fun getClaimId ()Ljava/lang/String;
+	public final fun getReceiptBody ()[B
+	public final fun getReceiptBodyDigest ()Ljava/lang/String;
 }
 
 public final class com/ratifyprotocol/Constraint {
@@ -177,6 +275,15 @@ public final class com/ratifyprotocol/DecodeKt {
 	public static final fun decodeWitnessEntry ([B)Lcom/ratifyprotocol/WitnessEntry;
 }
 
+public final class com/ratifyprotocol/DeferredConstraint {
+	public final fun getCanonicalJson ()[B
+	public final fun getCertId ()Ljava/lang/String;
+	public final fun getConstraintIndex-s-VKNKU ()J
+	public final fun getDelegationIndex-s-VKNKU ()J
+	public final fun getIssuerId ()Ljava/lang/String;
+	public final fun getKind ()Ljava/lang/String;
+}
+
 public final class com/ratifyprotocol/DelegationCert {
 	public fun <init> (JLjava/lang/String;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Ljava/util/List;Ljava/util/List;JJLcom/ratifyprotocol/HybridSignature;)V
 	public fun equals (Ljava/lang/Object;)Z
@@ -255,6 +362,17 @@ public final class com/ratifyprotocol/ErrorClass$Companion {
 	public final fun fromSpelling (Ljava/lang/String;)Lcom/ratifyprotocol/ErrorClass;
 }
 
+public final class com/ratifyprotocol/EvaluationProgress {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getContextAssessment ()Ljava/lang/String;
+	public final fun getContextPolicyDigest ()Ljava/lang/String;
+	public final fun getStatusAssessment ()Ljava/lang/String;
+	public final fun getStatusEvidence ()Ljava/util/List;
+	public final fun getTrustAssessment ()Ljava/lang/String;
+	public fun hashCode ()I
+}
+
 public final class com/ratifyprotocol/EvaluatorKt {
 	public static final fun constraintProfileDigest (Lcom/ratifyprotocol/ConstraintProfileDescriptor;)Ljava/lang/String;
 	public static final fun evaluateAllowedValues (Lcom/ratifyprotocol/ConstraintEvaluationInput;)Lcom/ratifyprotocol/ConstraintEvaluationResult;
@@ -308,6 +426,13 @@ public final class com/ratifyprotocol/InternalErrorKind : java/lang/Enum {
 	public final fun getSpelling ()Ljava/lang/String;
 	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/InternalErrorKind;
 	public static fun values ()[Lcom/ratifyprotocol/InternalErrorKind;
+}
+
+public final class com/ratifyprotocol/InterruptedClaim {
+	public fun <init> (Lcom/ratifyprotocol/ChallengeClaim;JLcom/ratifyprotocol/EvaluationProgress;)V
+	public final fun getClaim ()Lcom/ratifyprotocol/ChallengeClaim;
+	public final fun getClaimedAt ()J
+	public final fun getProgress ()Lcom/ratifyprotocol/EvaluationProgress;
 }
 
 public final class com/ratifyprotocol/JournalKt {
@@ -409,6 +534,11 @@ public final class com/ratifyprotocol/KeystoreKey$Custody : java/lang/Enum {
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/KeystoreKey$Custody;
 	public static fun values ()[Lcom/ratifyprotocol/KeystoreKey$Custody;
+}
+
+public final class com/ratifyprotocol/LiveVerifyKt {
+	public static final fun verifyProofBundle-7-Fau3A (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RateReservationStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun verifyProofBundle-7-Fau3A$default (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RateReservationStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class com/ratifyprotocol/LogResult : java/lang/Enum {
@@ -524,6 +654,20 @@ public final class com/ratifyprotocol/ProofBundle {
 	public fun hashCode ()I
 }
 
+public final class com/ratifyprotocol/RateReservation {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JJ)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCertId ()Ljava/lang/String;
+	public final fun getIssuerId ()Ljava/lang/String;
+	public final fun getLimit ()J
+	public final fun getWindowSeconds ()J
+	public fun hashCode ()I
+}
+
+public abstract interface class com/ratifyprotocol/RateReservationStore {
+	public abstract fun reserve (Ljava/lang/String;[BLjava/lang/String;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public abstract class com/ratifyprotocol/RatifyException : java/lang/Exception {
 	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public abstract fun getErrorClass ()Lcom/ratifyprotocol/ErrorClass;
@@ -558,6 +702,10 @@ public final class com/ratifyprotocol/ReceiptHead {
 	public final fun getLogId ()Ljava/lang/String;
 	public final fun getSequence ()J
 	public final fun getVerifierId ()Ljava/lang/String;
+}
+
+public abstract interface class com/ratifyprotocol/ReceiverBindingHook {
+	public abstract fun validate (Lcom/ratifyprotocol/ProofBundle;Lcom/ratifyprotocol/ExpectedChallenge;)V
 }
 
 public final class com/ratifyprotocol/RevocationList {
@@ -822,6 +970,23 @@ public final class com/ratifyprotocol/StatusEvidenceObject {
 	public fun hashCode ()I
 }
 
+public abstract interface class com/ratifyprotocol/StatusEvidenceProvider {
+	public abstract fun provide (Lcom/ratifyprotocol/StatusEvidenceRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/StatusEvidenceRequest {
+	public final fun getIssuerId ()Ljava/lang/String;
+	public final fun getRefs ()Ljava/util/List;
+	public final fun getStatusKeyEpoch-s-VKNKU ()J
+	public final fun getStatusKeyId ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/StatusKeyConfig {
+	public synthetic fun <init> (JLcom/ratifyprotocol/HybridPublicKey;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getEpoch-s-VKNKU ()J
+	public final fun getKey ()Lcom/ratifyprotocol/HybridPublicKey;
+}
+
 public final class com/ratifyprotocol/StatusKt {
 	public static final fun applyRevocationList-GPQ0J6g (Lcom/ratifyprotocol/RevocationStatusState;Lcom/ratifyprotocol/RevocationList;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;J)Lcom/ratifyprotocol/RevocationStatusState;
 	public static final fun applyRevocationPush-GPQ0J6g (Lcom/ratifyprotocol/RevocationStatusState;Lcom/ratifyprotocol/RevocationPush;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;J)Lcom/ratifyprotocol/RevocationStatusState;
@@ -959,6 +1124,32 @@ public final class com/ratifyprotocol/TransactionReceiptSignature {
 	public fun hashCode ()I
 }
 
+public final class com/ratifyprotocol/TrustOutcome : java/lang/Enum {
+	public static final field AMBIGUOUS Lcom/ratifyprotocol/TrustOutcome;
+	public static final field Companion Lcom/ratifyprotocol/TrustOutcome$Companion;
+	public static final field TRUSTED Lcom/ratifyprotocol/TrustOutcome;
+	public static final field UNAVAILABLE Lcom/ratifyprotocol/TrustOutcome;
+	public static final field UNTRUSTED Lcom/ratifyprotocol/TrustOutcome;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getSpelling ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/TrustOutcome;
+	public static fun values ()[Lcom/ratifyprotocol/TrustOutcome;
+}
+
+public final class com/ratifyprotocol/TrustOutcome$Companion {
+	public final fun fromSpelling (Ljava/lang/String;)Lcom/ratifyprotocol/TrustOutcome;
+}
+
+public abstract interface class com/ratifyprotocol/TrustProvider {
+	public abstract fun resolve (Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/TrustResolution {
+	public fun <init> (Lcom/ratifyprotocol/TrustOutcome;Lcom/ratifyprotocol/HybridPublicKey;)V
+	public final fun getOutcome ()Lcom/ratifyprotocol/TrustOutcome;
+	public final fun getRootKey ()Lcom/ratifyprotocol/HybridPublicKey;
+}
+
 public final class com/ratifyprotocol/VerificationReceipt {
 	public fun <init> (JLjava/lang/String;JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;Ljava/util/List;Ljava/util/List;[BLcom/ratifyprotocol/HybridSignature;)V
 	public fun equals (Ljava/lang/Object;)Z
@@ -1029,6 +1220,44 @@ public final class com/ratifyprotocol/VerifyKt {
 	public static final fun verifyWitnessEntry (Lcom/ratifyprotocol/WitnessEntry;Lcom/ratifyprotocol/WitnessHead;Lcom/ratifyprotocol/HybridPublicKey;)Lcom/ratifyprotocol/LogResult;
 	public static final fun witnessEntryDigest (Lcom/ratifyprotocol/WitnessEntry;)[B
 	public static final fun witnessEntrySignableBytes (Lcom/ratifyprotocol/WitnessEntry;)[B
+}
+
+public final class com/ratifyprotocol/VerifyOutcome {
+	public final fun getClaim ()Lcom/ratifyprotocol/ChallengeClaim;
+	public final fun getCommitted ()Lcom/ratifyprotocol/CommittedOutcome;
+	public final fun getDisposition ()Lcom/ratifyprotocol/ClaimDisposition;
+	public final fun getErrorClass ()Lcom/ratifyprotocol/ErrorClass;
+	public final fun getErrorDetail ()Ljava/lang/String;
+	public final fun getStage ()Lcom/ratifyprotocol/VerifyStage;
+}
+
+public final class com/ratifyprotocol/VerifyRequest {
+	public fun <init> ([BLcom/ratifyprotocol/ExpectedChallenge;Lcom/ratifyprotocol/ContextPolicy;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;JJJLcom/ratifyprotocol/ConstraintContext;Ljava/lang/String;Ljava/util/Map;Lcom/ratifyprotocol/RevocationStatusPolicy;)V
+	public final fun getBundle ()[B
+	public final fun getContext ()Lcom/ratifyprotocol/ConstraintContext;
+	public final fun getContextPolicy ()Lcom/ratifyprotocol/ContextPolicy;
+	public final fun getExpected ()Lcom/ratifyprotocol/ExpectedChallenge;
+	public final fun getFutureSkewSeconds ()J
+	public final fun getMaxChallengeAgeSeconds ()J
+	public final fun getNow ()J
+	public final fun getReplayEpoch ()J
+	public final fun getRequiredScope ()Ljava/lang/String;
+	public final fun getStatusKeys ()Ljava/util/Map;
+	public final fun getStatusPolicy ()Lcom/ratifyprotocol/RevocationStatusPolicy;
+	public final fun getTzdbVersion ()Ljava/lang/String;
+	public final fun getVerifierId ()Ljava/lang/String;
+	public final fun getVerifierNamespace ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/VerifyStage : java/lang/Enum {
+	public static final field COMMITTED Lcom/ratifyprotocol/VerifyStage;
+	public static final field EVALUATING Lcom/ratifyprotocol/VerifyStage;
+	public static final field PREFLIGHT Lcom/ratifyprotocol/VerifyStage;
+	public static final field REPLAY Lcom/ratifyprotocol/VerifyStage;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getSpelling ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lcom/ratifyprotocol/VerifyStage;
+	public static fun values ()[Lcom/ratifyprotocol/VerifyStage;
 }
 
 public final class com/ratifyprotocol/WitnessEntry {

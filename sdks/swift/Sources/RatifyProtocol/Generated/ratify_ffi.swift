@@ -10530,6 +10530,92 @@ func FfiConverterTypeFfiTerminalClaimRecord_lower(_ value: FfiTerminalClaimRecor
 }
 
 
+struct FfiTransactionPartyVerification: Equatable, Hashable {
+    var partyId: String
+    var agentId: String
+    var requiredScope: String
+    var trustAssessment: String
+    var delegationAssessment: String
+    var delegationExpiresAt: Int64?
+    var statusAssessment: String
+    var scopeAssessment: String
+    var freshness: String
+    var statusEvidence: [FfiStatusEvidenceEntry]
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(partyId: String, agentId: String, requiredScope: String, trustAssessment: String, delegationAssessment: String, delegationExpiresAt: Int64?, statusAssessment: String, scopeAssessment: String, freshness: String, statusEvidence: [FfiStatusEvidenceEntry]) {
+        self.partyId = partyId
+        self.agentId = agentId
+        self.requiredScope = requiredScope
+        self.trustAssessment = trustAssessment
+        self.delegationAssessment = delegationAssessment
+        self.delegationExpiresAt = delegationExpiresAt
+        self.statusAssessment = statusAssessment
+        self.scopeAssessment = scopeAssessment
+        self.freshness = freshness
+        self.statusEvidence = statusEvidence
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiTransactionPartyVerification: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiTransactionPartyVerification: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiTransactionPartyVerification {
+        return
+            try FfiTransactionPartyVerification(
+                partyId: FfiConverterString.read(from: &buf),
+                agentId: FfiConverterString.read(from: &buf),
+                requiredScope: FfiConverterString.read(from: &buf),
+                trustAssessment: FfiConverterString.read(from: &buf),
+                delegationAssessment: FfiConverterString.read(from: &buf),
+                delegationExpiresAt: FfiConverterOptionInt64.read(from: &buf),
+                statusAssessment: FfiConverterString.read(from: &buf),
+                scopeAssessment: FfiConverterString.read(from: &buf),
+                freshness: FfiConverterString.read(from: &buf),
+                statusEvidence: FfiConverterSequenceTypeFfiStatusEvidenceEntry.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiTransactionPartyVerification, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.partyId, into: &buf)
+        FfiConverterString.write(value.agentId, into: &buf)
+        FfiConverterString.write(value.requiredScope, into: &buf)
+        FfiConverterString.write(value.trustAssessment, into: &buf)
+        FfiConverterString.write(value.delegationAssessment, into: &buf)
+        FfiConverterOptionInt64.write(value.delegationExpiresAt, into: &buf)
+        FfiConverterString.write(value.statusAssessment, into: &buf)
+        FfiConverterString.write(value.scopeAssessment, into: &buf)
+        FfiConverterString.write(value.freshness, into: &buf)
+        FfiConverterSequenceTypeFfiStatusEvidenceEntry.write(value.statusEvidence, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiTransactionPartyVerification_lift(_ buf: RustBuffer) throws -> FfiTransactionPartyVerification {
+    return try FfiConverterTypeFfiTransactionPartyVerification.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiTransactionPartyVerification_lower(_ value: FfiTransactionPartyVerification) -> RustBuffer {
+    return FfiConverterTypeFfiTransactionPartyVerification.lower(value)
+}
+
+
 struct FfiTransactionReceipt: Equatable, Hashable {
     var version: Int64
     var transactionId: String
@@ -10745,6 +10831,130 @@ func FfiConverterTypeFfiTransactionReceiptSignature_lift(_ buf: RustBuffer) thro
 #endif
 func FfiConverterTypeFfiTransactionReceiptSignature_lower(_ value: FfiTransactionReceiptSignature) -> RustBuffer {
     return FfiConverterTypeFfiTransactionReceiptSignature.lower(value)
+}
+
+
+struct FfiTransactionVerification: Equatable, Hashable {
+    var transactionId: String
+    var actionable: Bool
+    var parties: [FfiTransactionPartyVerification]
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(transactionId: String, actionable: Bool, parties: [FfiTransactionPartyVerification]) {
+        self.transactionId = transactionId
+        self.actionable = actionable
+        self.parties = parties
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiTransactionVerification: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiTransactionVerification: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiTransactionVerification {
+        return
+            try FfiTransactionVerification(
+                transactionId: FfiConverterString.read(from: &buf),
+                actionable: FfiConverterBool.read(from: &buf),
+                parties: FfiConverterSequenceTypeFfiTransactionPartyVerification.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiTransactionVerification, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.transactionId, into: &buf)
+        FfiConverterBool.write(value.actionable, into: &buf)
+        FfiConverterSequenceTypeFfiTransactionPartyVerification.write(value.parties, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiTransactionVerification_lift(_ buf: RustBuffer) throws -> FfiTransactionVerification {
+    return try FfiConverterTypeFfiTransactionVerification.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiTransactionVerification_lower(_ value: FfiTransactionVerification) -> RustBuffer {
+    return FfiConverterTypeFfiTransactionVerification.lower(value)
+}
+
+
+struct FfiTransactionVerifyRequest: Equatable, Hashable {
+    var receipt: Data
+    var now: Int64
+    var futureSkewSeconds: Int64
+    var statusKeys: [String: FfiStatusKeyConfig]
+    var statusPolicy: FfiStatusPolicy
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(receipt: Data, now: Int64, futureSkewSeconds: Int64, statusKeys: [String: FfiStatusKeyConfig], statusPolicy: FfiStatusPolicy) {
+        self.receipt = receipt
+        self.now = now
+        self.futureSkewSeconds = futureSkewSeconds
+        self.statusKeys = statusKeys
+        self.statusPolicy = statusPolicy
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiTransactionVerifyRequest: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiTransactionVerifyRequest: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiTransactionVerifyRequest {
+        return
+            try FfiTransactionVerifyRequest(
+                receipt: FfiConverterData.read(from: &buf),
+                now: FfiConverterInt64.read(from: &buf),
+                futureSkewSeconds: FfiConverterInt64.read(from: &buf),
+                statusKeys: FfiConverterDictionaryStringTypeFfiStatusKeyConfig.read(from: &buf),
+                statusPolicy: FfiConverterTypeFfiStatusPolicy.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiTransactionVerifyRequest, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.receipt, into: &buf)
+        FfiConverterInt64.write(value.now, into: &buf)
+        FfiConverterInt64.write(value.futureSkewSeconds, into: &buf)
+        FfiConverterDictionaryStringTypeFfiStatusKeyConfig.write(value.statusKeys, into: &buf)
+        FfiConverterTypeFfiStatusPolicy.write(value.statusPolicy, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiTransactionVerifyRequest_lift(_ buf: RustBuffer) throws -> FfiTransactionVerifyRequest {
+    return try FfiConverterTypeFfiTransactionVerifyRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiTransactionVerifyRequest_lower(_ value: FfiTransactionVerifyRequest) -> RustBuffer {
+    return FfiConverterTypeFfiTransactionVerifyRequest.lower(value)
 }
 
 
@@ -13212,6 +13422,31 @@ fileprivate struct FfiConverterSequenceTypeFfiStorageField: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFfiTransactionPartyVerification: FfiConverterRustBuffer {
+    typealias SwiftType = [FfiTransactionPartyVerification]
+
+    static func write(_ value: [FfiTransactionPartyVerification], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFfiTransactionPartyVerification.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FfiTransactionPartyVerification] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FfiTransactionPartyVerification]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFfiTransactionPartyVerification.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFfiTransactionReceiptParty: FfiConverterRustBuffer {
     typealias SwiftType = [FfiTransactionReceiptParty]
 
@@ -14401,6 +14636,18 @@ func ffiStorageRecordKeystoreAlias(data: Data)throws  -> String?  {
     )
 })
 }
+func ffiVerifyTransactionReceipt(request: FfiTransactionVerifyRequest, trust: FfiTrustProvider?, statusEvidence: FfiStatusEvidenceProvider?, statusJournal: FfiJournalStore?, token: FfiCancelToken)throws  -> FfiTransactionVerification  {
+    return try  FfiConverterTypeFfiTransactionVerification_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_verify_transaction_receipt(
+        FfiConverterTypeFfiTransactionVerifyRequest_lower(request),
+        FfiConverterOptionTypeFfiTrustProvider.lower(trust),
+        FfiConverterOptionTypeFfiStatusEvidenceProvider.lower(statusEvidence),
+        FfiConverterOptionTypeFfiJournalStore.lower(statusJournal),
+        FfiConverterTypeFfiCancelToken_lower(token),uniffiCallStatus
+    )
+})
+}
 func ffiBundleHash(bundle: FfiProofBundle)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -15043,6 +15290,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_storage_record_keystore_alias() != 5441) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_verify_transaction_receipt() != 19000) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_bundle_hash() != 51989) {

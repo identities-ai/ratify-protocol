@@ -1193,6 +1193,19 @@ public final class com/ratifyprotocol/TerminalClaimRecord {
 	public final fun getTerminal ()Z
 }
 
+public final class com/ratifyprotocol/TransactionPartyVerification {
+	public final fun getAgentId ()Ljava/lang/String;
+	public final fun getDelegationAssessment ()Ljava/lang/String;
+	public final fun getDelegationExpiresAt ()Ljava/lang/Long;
+	public final fun getFreshness ()Ljava/lang/String;
+	public final fun getPartyId ()Ljava/lang/String;
+	public final fun getRequiredScope ()Ljava/lang/String;
+	public final fun getScopeAssessment ()Ljava/lang/String;
+	public final fun getStatusAssessment ()Ljava/lang/String;
+	public final fun getStatusEvidence ()Ljava/util/List;
+	public final fun getTrustAssessment ()Ljava/lang/String;
+}
+
 public final class com/ratifyprotocol/TransactionReceipt {
 	public fun <init> (JLjava/lang/String;JLjava/lang/String;[BLjava/util/List;Ljava/util/List;)V
 	public fun equals (Ljava/lang/Object;)Z
@@ -1229,6 +1242,26 @@ public final class com/ratifyprotocol/TransactionReceiptSignature {
 	public final fun getPartyId ()Ljava/lang/String;
 	public final fun getSignature ()Lcom/ratifyprotocol/HybridSignature;
 	public fun hashCode ()I
+}
+
+public final class com/ratifyprotocol/TransactionReceiptVerification {
+	public final fun getActionable ()Z
+	public final fun getParties ()Ljava/util/List;
+	public final fun getTransactionId ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/TransactionVerifyKt {
+	public static final fun verifyTransactionReceipt-yV_PMig (Lcom/ratifyprotocol/TransactionVerifyRequest;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun verifyTransactionReceipt-yV_PMig$default (Lcom/ratifyprotocol/TransactionVerifyRequest;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/TransactionVerifyRequest {
+	public fun <init> ([BJJLjava/util/Map;Lcom/ratifyprotocol/RevocationStatusPolicy;)V
+	public final fun getFutureSkewSeconds ()J
+	public final fun getNow ()J
+	public final fun getReceipt ()[B
+	public final fun getStatusKeys ()Ljava/util/Map;
+	public final fun getStatusPolicy ()Lcom/ratifyprotocol/RevocationStatusPolicy;
 }
 
 public final class com/ratifyprotocol/TrustOutcome : java/lang/Enum {

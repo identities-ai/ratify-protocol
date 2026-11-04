@@ -566,6 +566,7 @@ Ratify.verifyProofBundleSignatures(_:) [Func] -> (), RatifyProtocol.ProofBundle
 Ratify.verifyRevocationListSignature(_:trustedIssuerId:statusKey:) [Func] -> (), RatifyProtocol.RevocationList, Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.verifyRevocationPushSignature(_:trustedIssuerId:statusKey:) [Func] -> (), RatifyProtocol.RevocationPush, Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.verifyStatement(_:signable:signature:publicKey:) [Func] -> (), RatifyProtocol.ObjectType, Foundation.Data, RatifyProtocol.HybridSignature, RatifyProtocol.HybridPublicKey
+Ratify.verifyTransactionReceipt(_:trust:statusEvidence:statusJournal:timeout:) [Func] -> RatifyProtocol.TransactionReceiptVerification, RatifyProtocol.TransactionVerifyRequest, (any RatifyProtocol.TrustProvider)?, (any RatifyProtocol.StatusEvidenceProvider)?, (any RatifyProtocol.SecurityJournalStore)?, Swift.Duration?
 Ratify.verifyTransactionReceiptSignatures(_:) [Func] -> (), RatifyProtocol.TransactionReceipt
 Ratify.verifyVerificationReceipt(_:verifierKey:head:) [Func] -> RatifyProtocol.LogResult, RatifyProtocol.VerificationReceipt, RatifyProtocol.HybridPublicKey, RatifyProtocol.ReceiptHead
 Ratify.verifyWitnessEntry(_:head:witnessKey:) [Func] -> RatifyProtocol.LogResult, RatifyProtocol.WitnessEntry, RatifyProtocol.WitnessHead, RatifyProtocol.HybridPublicKey
@@ -900,6 +901,17 @@ TerminalClaimRecord.receiptAbandoned [Var] -> Swift.Bool
 TerminalClaimRecord.receiptOutboxDigest [Var] -> Swift.String
 TerminalClaimRecord.release [Var] -> RatifyProtocol.ReleaseRecord?
 TerminalClaimRecord.terminal [Var] -> Swift.Bool
+TransactionPartyVerification [Struct]
+TransactionPartyVerification.agentId [Var] -> Swift.String
+TransactionPartyVerification.delegationAssessment [Var] -> Swift.String
+TransactionPartyVerification.delegationExpiresAt [Var] -> Swift.Int64?
+TransactionPartyVerification.freshness [Var] -> Swift.String
+TransactionPartyVerification.partyId [Var] -> Swift.String
+TransactionPartyVerification.requiredScope [Var] -> Swift.String
+TransactionPartyVerification.scopeAssessment [Var] -> Swift.String
+TransactionPartyVerification.statusAssessment [Var] -> Swift.String
+TransactionPartyVerification.statusEvidence [Var] -> [RatifyProtocol.StatusEvidenceEntry]
+TransactionPartyVerification.trustAssessment [Var] -> Swift.String
 TransactionReceipt [Struct]
 TransactionReceipt.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.TransactionReceipt, RatifyProtocol.TransactionReceipt
 TransactionReceipt.createdAt [Var] -> Swift.Int64
@@ -935,6 +947,17 @@ TransactionReceiptSignature.hashValue [Var] -> Swift.Int
 TransactionReceiptSignature.init(partyId:signature:) [Constructor] -> RatifyProtocol.TransactionReceiptSignature, Swift.String, RatifyProtocol.HybridSignature
 TransactionReceiptSignature.partyId [Var] -> Swift.String
 TransactionReceiptSignature.signature [Var] -> RatifyProtocol.HybridSignature
+TransactionReceiptVerification [Struct]
+TransactionReceiptVerification.actionable [Var] -> Swift.Bool
+TransactionReceiptVerification.parties [Var] -> [RatifyProtocol.TransactionPartyVerification]
+TransactionReceiptVerification.transactionId [Var] -> Swift.String
+TransactionVerifyRequest [Struct]
+TransactionVerifyRequest.futureSkewSeconds [Var] -> Swift.Int64
+TransactionVerifyRequest.init(receipt:now:futureSkewSeconds:statusKeys:statusPolicy:) [Constructor] -> RatifyProtocol.TransactionVerifyRequest, Foundation.Data, Swift.Int64, Swift.Int64, [Swift.String : RatifyProtocol.StatusKeyConfig], RatifyProtocol.RevocationStatusPolicy
+TransactionVerifyRequest.now [Var] -> Swift.Int64
+TransactionVerifyRequest.receipt [Var] -> Foundation.Data
+TransactionVerifyRequest.statusKeys [Var] -> [Swift.String : RatifyProtocol.StatusKeyConfig]
+TransactionVerifyRequest.statusPolicy [Var] -> RatifyProtocol.RevocationStatusPolicy
 TrustOutcome [Enum]
 TrustOutcome.RawValue [TypeAlias]
 TrustOutcome.ambiguous [EnumElement] -> (RatifyProtocol.TrustOutcome.Type) -> RatifyProtocol.TrustOutcome

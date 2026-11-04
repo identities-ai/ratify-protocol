@@ -30,6 +30,7 @@ final class CorpusTests: XCTestCase {
         "security-journal.json": JournalRunner.run,
         "status-publisher.json": PublisherRunner.run,
         "evaluator-profiles.json": EvaluatorRunner.run,
+        "transaction-verification.json": TransactionVerifyRunner.run,
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).
@@ -40,7 +41,6 @@ final class CorpusTests: XCTestCase {
         "cross-sdk": "M4",
         "device-state.json": "M3",
         "lifecycle-scenarios.json": "M3",
-        "transaction-verification.json": "M3",
         "verifier-ordering.json": "M3",
     ]
 

@@ -4797,12 +4797,16 @@
  "TransactionPartyVerificationV2": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification",
+  "kotlin": "TransactionPartyVerification"
  },
  "TransactionPartyVerificationV2::agent_id": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.agentId",
+  "kotlin": "TransactionPartyVerification.agentId"
  },
  "TransactionPartyVerificationV2::clone": {
   "kind": "fn",
@@ -4817,12 +4821,16 @@
  "TransactionPartyVerificationV2::delegation_assessment": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.delegationAssessment",
+  "kotlin": "TransactionPartyVerification.delegationAssessment"
  },
  "TransactionPartyVerificationV2::delegation_expires_at": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.delegationExpiresAt",
+  "kotlin": "TransactionPartyVerification.delegationExpiresAt"
  },
  "TransactionPartyVerificationV2::eq": {
   "kind": "fn",
@@ -4837,37 +4845,51 @@
  "TransactionPartyVerificationV2::freshness": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.freshness",
+  "kotlin": "TransactionPartyVerification.freshness"
  },
  "TransactionPartyVerificationV2::party_id": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.partyId",
+  "kotlin": "TransactionPartyVerification.partyId"
  },
  "TransactionPartyVerificationV2::required_scope": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.requiredScope",
+  "kotlin": "TransactionPartyVerification.requiredScope"
  },
  "TransactionPartyVerificationV2::scope_assessment": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.scopeAssessment",
+  "kotlin": "TransactionPartyVerification.scopeAssessment"
  },
  "TransactionPartyVerificationV2::status_assessment": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.statusAssessment",
+  "kotlin": "TransactionPartyVerification.statusAssessment"
  },
  "TransactionPartyVerificationV2::status_evidence": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.statusEvidence",
+  "kotlin": "TransactionPartyVerification.statusEvidence"
  },
  "TransactionPartyVerificationV2::trust_assessment": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionPartyVerification.trustAssessment",
+  "kotlin": "TransactionPartyVerification.trustAssessment"
  },
  "TransactionReceiptPartyV2": {
   "kind": "struct",
@@ -5040,12 +5062,16 @@
  "TransactionReceiptVerificationV2": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionReceiptVerification",
+  "kotlin": "TransactionReceiptVerification"
  },
  "TransactionReceiptVerificationV2::actionable": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionReceiptVerification.actionable",
+  "kotlin": "TransactionReceiptVerification.actionable"
  },
  "TransactionReceiptVerificationV2::clone": {
   "kind": "fn",
@@ -5070,17 +5096,23 @@
  "TransactionReceiptVerificationV2::parties": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionReceiptVerification.parties",
+  "kotlin": "TransactionReceiptVerification.parties"
  },
  "TransactionReceiptVerificationV2::transaction_id": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionReceiptVerification.transactionId",
+  "kotlin": "TransactionReceiptVerification.transactionId"
  },
  "TransactionVerifyRequestV2": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionVerifyRequest",
+  "kotlin": "TransactionVerifyRequest"
  },
  "TransactionVerifyRequestV2::clone": {
   "kind": "fn",
@@ -5105,22 +5137,29 @@
  "TransactionVerifyRequestV2::future_skew_seconds": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionVerifyRequest.futureSkewSeconds",
+  "kotlin": "TransactionVerifyRequest.futureSkewSeconds"
  },
  "TransactionVerifyRequestV2::now": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionVerifyRequest.now",
+  "kotlin": "TransactionVerifyRequest.now"
  },
  "TransactionVerifyRequestV2::receipt": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionVerifyRequest.receipt",
+  "kotlin": "TransactionVerifyRequest.receipt"
  },
  "TransactionVerifySourcesV2": {
   "kind": "struct",
   "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Sources are flattened into TransactionVerifyRequest and verifyTransactionReceipt arguments"
  },
  "TransactionVerifySourcesV2::clone": {
   "kind": "fn",
@@ -5135,27 +5174,32 @@
  "TransactionVerifySourcesV2::status_evidence": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Sources are flattened into TransactionVerifyRequest and verifyTransactionReceipt arguments"
  },
  "TransactionVerifySourcesV2::status_journal": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Sources are flattened into TransactionVerifyRequest and verifyTransactionReceipt arguments"
  },
  "TransactionVerifySourcesV2::status_keys": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionVerifyRequest.statusKeys",
+  "kotlin": "TransactionVerifyRequest.statusKeys"
  },
  "TransactionVerifySourcesV2::status_policy": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "TransactionVerifyRequest.statusPolicy",
+  "kotlin": "TransactionVerifyRequest.statusPolicy"
  },
  "TransactionVerifySourcesV2::trust": {
   "kind": "member",
   "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Sources are flattened into TransactionVerifyRequest and verifyTransactionReceipt arguments"
  },
  "TrustRegistry": {
   "kind": "struct",
@@ -9663,7 +9707,9 @@
  "verify_transaction_receipt_v2": {
   "kind": "fn",
   "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.verifyTransactionReceipt",
+  "kotlin": "verifyTransactionReceipt"
  },
  "verify_transaction_receipt_v2_signatures": {
   "kind": "fn",

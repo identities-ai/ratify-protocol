@@ -9249,8 +9249,9 @@
  },
  "recover_interrupted_claim_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "recoverInterruptedClaim",
+  "status": "mapped",
+  "swift": "Ratify.recoverInterruptedClaim"
  },
  "recover_key_rotation_v2": {
   "kind": "fn",

@@ -574,6 +574,21 @@ pub fn ffi_resume_committed_claim(
     })
 }
 
+#[uniffi::export]
+pub fn ffi_recover_interrupted_claim(
+    store: Arc<dyn FfiClaimStore>,
+    token: Arc<FfiCancelToken>,
+    claim_id: String,
+) -> FfiResult<Arc<FfiCommittedOutcome>> {
+    call(|| {
+        Ok(FfiCommittedOutcome::new(core::recover_interrupted_claim_v2(
+            token.context(),
+            &ForeignClaimStore(store),
+            &claim_id,
+        )?))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

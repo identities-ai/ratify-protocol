@@ -504,6 +504,7 @@ Ratify.protocolClaimId(namespace:replayEpoch:digest:) [Func] -> Swift.String, Sw
 Ratify.publishReceipt(_:using:timeout:) [Func] -> Foundation.Data, RatifyProtocol.CommittedOutcome, any RatifyProtocol.ReceiptPublisher, Swift.Duration?
 Ratify.receiptOutboxDigest(_:) [Func] -> Swift.String, Foundation.Data
 Ratify.recordSecurityKeyRole(store:role:key:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, Swift.String, RatifyProtocol.HybridPublicKey, Swift.Duration?
+Ratify.recoverInterruptedClaim(store:claimId:timeout:) [Func] -> RatifyProtocol.CommittedOutcome, any RatifyProtocol.ClaimStore, Swift.String, Swift.Duration?
 Ratify.recoverKeyRotation(_:newRecoveryEpoch:newGenesisKey:) [Func] -> RatifyProtocol.RotationJournal, RatifyProtocol.RotationJournal, Swift.Int64, RatifyProtocol.HybridPublicKey
 Ratify.releaseDecision(_:signedReceipt:verifierPublicKey:logId:claimStore:checkpoint:timeout:) [Func] -> RatifyProtocol.ReleaseResult, RatifyProtocol.CommittedOutcome, Foundation.Data?, RatifyProtocol.HybridPublicKey, Swift.String, any RatifyProtocol.ReleaseClaimStore, any RatifyProtocol.ReceiptCheckpoint, Swift.Duration?
 Ratify.resumeCommittedClaim(store:claimId:timeout:) [Func] -> RatifyProtocol.CommittedOutcome, any RatifyProtocol.CommittedClaimStore, Swift.String, Swift.Duration?

@@ -282,4 +282,12 @@ extension Ratify {
                 token: token, claimId: claimId) })
         }
     }
+
+    public static func recoverInterruptedClaim(store: any ClaimStore, claimId: String,
+                                               timeout: Duration? = nil) async throws(RatifyError) -> CommittedOutcome {
+        try await onWorker(timeout: timeout) { token throws(RatifyError) in
+            try CommittedOutcome(ffi { try ffiRecoverInterruptedClaim(store: ClaimStoreBridge(store),
+                token: token, claimId: claimId) })
+        }
+    }
 }

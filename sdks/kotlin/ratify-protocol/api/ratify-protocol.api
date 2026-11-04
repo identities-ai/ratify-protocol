@@ -138,6 +138,8 @@ public final class com/ratifyprotocol/ClaimDisposition : java/lang/Enum {
 }
 
 public final class com/ratifyprotocol/ClaimKt {
+	public static final fun recoverInterruptedClaim-5_5nbZA (Lcom/ratifyprotocol/ClaimStore;Ljava/lang/String;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun recoverInterruptedClaim-5_5nbZA$default (Lcom/ratifyprotocol/ClaimStore;Ljava/lang/String;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static final fun resumeCommittedClaim-5_5nbZA (Lcom/ratifyprotocol/CommittedClaimStore;Ljava/lang/String;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun resumeCommittedClaim-5_5nbZA$default (Lcom/ratifyprotocol/CommittedClaimStore;Ljava/lang/String;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }

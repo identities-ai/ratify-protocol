@@ -14,6 +14,7 @@ import com.ratifyprotocol.internal.ffi.FfiRateReservationStore
 import com.ratifyprotocol.internal.ffi.FfiStoreContext
 import com.ratifyprotocol.internal.ffi.FfiStoreException
 import com.ratifyprotocol.internal.ffi.ffiResumeCommittedClaim
+import com.ratifyprotocol.internal.ffi.ffiRecoverInterruptedClaim
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 
@@ -207,4 +208,10 @@ public class CommittedOutcome internal constructor(internal val handle: FfiCommi
 public suspend fun resumeCommittedClaim(store: CommittedClaimStore, claimId: String,
     timeout: Duration? = null): CommittedOutcome = onWorker(timeout) { token ->
     CommittedOutcome(ffi { ffiResumeCommittedClaim(CommittedClaimStoreBridge(store), token, claimId) })
+}
+
+/** Recovers an expired evaluator lease into a non-actionable committed handoff. */
+public suspend fun recoverInterruptedClaim(store: ClaimStore, claimId: String,
+    timeout: Duration? = null): CommittedOutcome = onWorker(timeout) { token ->
+    CommittedOutcome(ffi { ffiRecoverInterruptedClaim(ClaimStoreBridge(store), token, claimId) })
 }

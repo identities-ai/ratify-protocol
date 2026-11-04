@@ -51,8 +51,8 @@ object ReferenceStoreVectors {
         val store = Store(100, 5, "a".repeat(32), key)
         val challenge = ByteArray(32) { 3 }
         val digest = "sha384:" + challengeClaimDigest(challenge).hex()
-        val claim = ChallengeClaim(protocolClaimId("test", 1, challenge), "test", 1, digest, "proof", "bundle",
-            emptyList(), "data:read", "", key.keyId, "agent", false, emptyList(), 90, 200, 100, 0,
+        val claim = ChallengeClaim(protocolClaimId("test", 1, challenge), "test", 1, digest, digest, digest,
+            emptyList(), "data:read", "", key.keyId, "", false, emptyList(), 90, 200, 100, 0,
             null, null, emptyList())
         val created = store.claim(claim)
         check(created.disposition == ClaimDisposition.CREATED)
@@ -85,6 +85,12 @@ object ReferenceStoreVectors {
         } catch (e: StoreError.Classified) {
             check(e.errorClass == ErrorClass.CLAIM_LEASE_LIVE)
         }
+        try {
+            recoverInterruptedClaim(store, claim.claimId)
+            error("recovery replaced an active evaluator")
+        } catch (e: RatifyException.Protocol) {
+            check(e.errorClass == ErrorClass.CLAIM_LEASE_LIVE)
+        }
         store.setTime(106)
         val interrupted = store.loadInterrupted(claim.claimId)
         check(interrupted.claim == claim)
@@ -93,5 +99,9 @@ object ReferenceStoreVectors {
             store.loadCommitted(claim.claimId)
             error("an expired evaluating claim was reported committed")
         } catch (e: StoreError.Classified) { check(e.errorClass == ErrorClass.CLAIM_LEASE_LOST) }
+        val recovered = recoverInterruptedClaim(store, claim.claimId)
+        check(org.json.JSONObject(String(recovered.receiptBody)).getString("decision_reason") == "evaluation_interrupted")
+        check(store.loadCommitted(claim.claimId).receiptBody.contentEquals(recovered.receiptBody))
+        check(recoverInterruptedClaim(store, claim.claimId).receiptBody.contentEquals(recovered.receiptBody))
     }
 }

@@ -14617,6 +14617,16 @@ func ffiLoadExpectedChallenge(store: FfiChallengeIssuanceStore, token: FfiCancel
     )
 })
 }
+func ffiRecoverInterruptedClaim(store: FfiClaimStore, token: FfiCancelToken, claimId: String)throws  -> FfiCommittedOutcome  {
+    return try  FfiConverterTypeFfiCommittedOutcome_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_recover_interrupted_claim(
+        FfiConverterTypeFfiClaimStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterString.lower(claimId),uniffiCallStatus
+    )
+})
+}
 func ffiResumeCommittedClaim(store: FfiCommittedClaimStore, token: FfiCancelToken, claimId: String)throws  -> FfiCommittedOutcome  {
     return try  FfiConverterTypeFfiCommittedOutcome_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -15855,6 +15865,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_load_expected_challenge() != 24741) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_recover_interrupted_claim() != 6951) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_resume_committed_claim() != 29490) {

@@ -1149,6 +1149,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_load_expected_challenge(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_recover_interrupted_claim(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_resume_committed_claim(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_build_session_context(
@@ -2022,6 +2024,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_load_expected_challenge(`store`: Long,`token`: Long,`namespace`: RustBuffer.ByValue,`replayEpoch`: Long,`challenge`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_recover_interrupted_claim(`store`: Long,`token`: Long,`claimId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_resume_committed_claim(`store`: Long,`token`: Long,`claimId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_build_session_context(`inputs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2418,6 +2422,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_load_expected_challenge() and 0xFFFF) != 24741) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_recover_interrupted_claim() and 0xFFFF) != 6951) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_resume_committed_claim() and 0xFFFF) != 29490) {
@@ -21115,6 +21122,20 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     )
     }
     
+
+    @Throws(FfiException::class) internal fun `ffiRecoverInterruptedClaim`(`store`: FfiClaimStore, `token`: FfiCancelToken, `claimId`: kotlin.String): FfiCommittedOutcome {
+            return FfiConverterTypeFfiCommittedOutcome.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_recover_interrupted_claim(
+
+
+        FfiConverterTypeFfiClaimStore.lower(`store`),
+        FfiConverterTypeFfiCancelToken.lower(`token`),
+        FfiConverterString.lower(`claimId`),_status)
+}
+    )
+    }
+
 
     @Throws(FfiException::class) internal fun `ffiResumeCommittedClaim`(`store`: FfiCommittedClaimStore, `token`: FfiCancelToken, `claimId`: kotlin.String): FfiCommittedOutcome {
             return FfiConverterTypeFfiCommittedOutcome.lift(

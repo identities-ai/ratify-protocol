@@ -50,9 +50,9 @@ final class ReferenceStoreTests: XCTestCase {
         let challenge = Data(repeating: 3, count: 32)
         let digest = "sha384:" + (try Ratify.challengeClaimDigest(challenge)).hex
         let claim = ChallengeClaim(claimId: try Ratify.protocolClaimId(namespace: "test", replayEpoch: 1, challenge: challenge),
-            namespace: "test", replayEpoch: 1, challengeDigest: digest, proofDigest: "proof", bundleHash: "bundle",
+            namespace: "test", replayEpoch: 1, challengeDigest: digest, proofDigest: digest, bundleHash: digest,
             issuerIds: [], requiredScope: "data:read", contextPolicyDigest: "", verifierId: key.keyId,
-            agentId: "agent", requiresRate: false, rateBatch: [], issuedAt: 90, expiresAt: 200,
+            agentId: "", requiresRate: false, rateBatch: [], issuedAt: 90, expiresAt: 200,
             maxAgeSeconds: 100, clockSkewSeconds: 0, streamId: nil, streamSeq: nil, constraintEvaluators: [])
         let created = try await store.claim(claim)
         XCTAssertEqual(created.disposition, .created)
@@ -91,6 +91,12 @@ final class ReferenceStoreTests: XCTestCase {
         } catch let error as StoreError {
             XCTAssertEqual(error.errorClass, .claimLeaseLive)
         }
+        do {
+            _ = try await Ratify.recoverInterruptedClaim(store: store, claimId: claim.claimId)
+            XCTFail("recovery replaced an active evaluator")
+        } catch let error {
+            XCTAssertEqual(error.errorClass, .claimLeaseLive)
+        }
         try store.setTime(106)
         let interrupted = try await store.loadInterrupted(claimId: claim.claimId)
         XCTAssertEqual(interrupted.claim, claim)
@@ -101,5 +107,12 @@ final class ReferenceStoreTests: XCTestCase {
         } catch let error as StoreError {
             XCTAssertEqual(error.errorClass, .claimLeaseLost)
         }
+        let recovered = try await Ratify.recoverInterruptedClaim(store: store, claimId: claim.claimId)
+        let body = try JSONSerialization.jsonObject(with: recovered.receiptBody) as! [String: Any]
+        XCTAssertEqual(body["decision_reason"] as? String, "evaluation_interrupted")
+        let saved = try await store.loadCommitted(claimId: claim.claimId)
+        XCTAssertEqual(saved.receiptBody, recovered.receiptBody)
+        let repeated = try await Ratify.recoverInterruptedClaim(store: store, claimId: claim.claimId)
+        XCTAssertEqual(repeated.receiptBody, recovered.receiptBody)
     }
 }

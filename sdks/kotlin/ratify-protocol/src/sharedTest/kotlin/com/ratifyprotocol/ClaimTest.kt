@@ -922,7 +922,8 @@ class ClaimTest {
             "resume_accepts_honest_record", "restore_exact_state", "restore_lost_state_with_epoch_bump",
             "release_of_claim_the_store_does_not_hold", "planted_release_record_does_not_replace_acknowledgement",
             "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
-            "withheld_record_conflict_is_rejected")
+            "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
+            "checkpoint_refusal_without_fork_does_not_freeze")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -975,7 +976,8 @@ class ClaimTest {
             "restore_lost_state_with_epoch_bump" to 6, "release_of_claim_the_store_does_not_hold" to 4,
             "planted_release_record_does_not_replace_acknowledgement" to 8,
             "recorded_withheld_answers_before_receipt_checks" to 7, "withheld_when_recording_fails" to 7,
-            "withheld_record_conflict_is_rejected" to 7)
+            "withheld_record_conflict_is_rejected" to 7, "checkpoint_fork_freezes_log" to 11,
+            "checkpoint_refusal_without_fork_does_not_freeze" to 11)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -987,7 +989,8 @@ class ClaimTest {
             "finalize" to setOf("op", "request", "terminal_b64", "body_b64", "expect"),
             "recover_direct" to setOf("op", "request", "terminal_b64", "body_b64", "expect"),
             "restore" to setOf("op", "mode", "expect"),
-            "plant_release" to setOf("op", "request", "time", "expect"))
+            "plant_release" to setOf("op", "request", "time", "expect"),
+            "acknowledge" to setOf("op", "request", "mode", "expect"))
         val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == corpus.getString("verifier_key") }
@@ -1046,6 +1049,27 @@ class ClaimTest {
                         store.plantReleaseTestOnly(checkNotNull(committed[requestName]) { at }.claimId,
                             step.getLong("time"))
                     }
+                    "acknowledge" -> {
+                        assertEquals(at, if (want.has("failed")) setOf("failed") else setOf("ack_timestamp"),
+                            want.keys().asSequence().toSet())
+                        val receipt = decodeVerificationReceipt(checkNotNull(receipts[requestName]) { at })
+                        val entry = verificationReceiptDigest(receipt)
+                        val mode = step.getString("mode")
+                        org.junit.Assert.assertTrue(at, mode == "exact" || mode == "fork")
+                        if (mode == "fork") {
+                            assertEquals(at, true, want.getBoolean("failed"))
+                            entry[0] = (entry[0].toInt() xor 1).toByte()
+                        }
+                        try {
+                            val ack = store.acknowledge(receipt.logId, receipt.sequence, receipt.previousReceiptHash, entry)
+                            org.junit.Assert.assertFalse(at, want.has("failed"))
+                            assertEquals(at, want.getLong("ack_timestamp"), ack.timestamp)
+                            assertEquals(at, receipt.sequence, ack.sequence)
+                            org.junit.Assert.assertArrayEquals(at, entry, ack.entryHash)
+                        } catch (e: StoreError) {
+                            assertEquals(at, true, want.getBoolean("failed"))
+                        }
+                    }
                     "claim_only" -> {
                         assertEquals(at, setOf("disposition"), want.keys().asSequence().toSet())
                         val req = request(requestName, corpusName = "lifecycle-scenarios.json")
@@ -1100,6 +1124,9 @@ class ClaimTest {
                         } else if (name == "outbox_retained_past_challenge_expiry" && index == 5) {
                             assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
                             assertEquals(at, 1_800_000_290L, currentTime)
+                        } else if (name == "checkpoint_fork_freezes_log" && index == 6) {
+                            assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
+                            assertEquals(at, 1_800_000_007L, currentTime)
                         } else assertEquals(at, fixtureRequest.now, currentTime)
                         val req = if (fixtureRequest.now == currentTime && replayEpochOverride == null) fixtureRequest
                             else request(requestName, corpusName = "lifecycle-scenarios.json", atTime = currentTime,

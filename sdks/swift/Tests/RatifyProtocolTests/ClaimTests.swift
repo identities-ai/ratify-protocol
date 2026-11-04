@@ -995,7 +995,8 @@ final class ClaimTests: XCTestCase {
             "resume_accepts_honest_record", "restore_exact_state", "restore_lost_state_with_epoch_bump",
             "release_of_claim_the_store_does_not_hold", "planted_release_record_does_not_replace_acknowledgement",
             "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
-            "withheld_record_conflict_is_rejected"]
+            "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
+            "checkpoint_refusal_without_fork_does_not_freeze"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -1049,7 +1050,8 @@ final class ClaimTests: XCTestCase {
             "restore_lost_state_with_epoch_bump": 6, "release_of_claim_the_store_does_not_hold": 4,
             "planted_release_record_does_not_replace_acknowledgement": 8,
             "recorded_withheld_answers_before_receipt_checks": 7, "withheld_when_recording_fails": 7,
-            "withheld_record_conflict_is_rejected": 7]
+            "withheld_record_conflict_is_rejected": 7, "checkpoint_fork_freezes_log": 11,
+            "checkpoint_refusal_without_fork_does_not_freeze": 11]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1058,7 +1060,8 @@ final class ClaimTests: XCTestCase {
             "claim_only": ["op", "request", "expect"], "recover": ["op", "request", "expect"],
             "finalize": ["op", "request", "terminal_b64", "body_b64", "expect"],
             "recover_direct": ["op", "request", "terminal_b64", "body_b64", "expect"],
-            "restore": ["op", "mode", "expect"], "plant_release": ["op", "request", "time", "expect"]]
+            "restore": ["op", "mode", "expect"], "plant_release": ["op", "request", "time", "expect"],
+            "acknowledge": ["op", "request", "mode", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -1112,6 +1115,26 @@ final class ClaimTests: XCTestCase {
                     XCTAssertTrue(want.isEmpty, at)
                     try store.plantReleaseTestOnly(claimId: try XCTUnwrap(committed[requestName], at).claimId,
                         ackTimestamp: Int64(step.int("time")))
+                case "acknowledge":
+                    XCTAssertEqual(Set(want.keys), want["failed"] == nil ? ["ack_timestamp"] : ["failed"], at)
+                    let receipt = try Ratify.decodeVerificationReceipt(try XCTUnwrap(receipts[requestName], at))
+                    var entry = try Ratify.verificationReceiptDigest(receipt)
+                    let mode = step.s("mode")
+                    XCTAssertTrue(mode == "exact" || mode == "fork", at)
+                    if mode == "fork" {
+                        XCTAssertEqual(want["failed"] as? Bool, true, at)
+                        entry[entry.startIndex] ^= 1
+                    }
+                    do {
+                        let ack = try await store.acknowledge(logId: receipt.logId, sequence: receipt.sequence,
+                            previousEntryHash: receipt.previousReceiptHash, entryHash: entry)
+                        XCTAssertFalse(want.keys.contains("failed"), at)
+                        XCTAssertEqual(ack.timestamp, Int64(want.int("ack_timestamp")), at)
+                        XCTAssertEqual(ack.sequence, receipt.sequence, at)
+                        XCTAssertEqual(ack.entryHash, entry, at)
+                    } catch is StoreError {
+                        XCTAssertEqual(want["failed"] as? Bool, true, at)
+                    }
                 case "claim_only":
                     XCTAssertEqual(Set(want.keys), ["disposition"], at)
                     let req = try request(requestName, corpusName: "lifecycle-scenarios.json")
@@ -1172,6 +1195,9 @@ final class ClaimTests: XCTestCase {
                     } else if name == "outbox_retained_past_challenge_expiry" && index == 5 {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, 1_800_000_290, at)
+                    } else if name == "checkpoint_fork_freezes_log" && index == 6 {
+                        XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
+                        XCTAssertEqual(currentTime, 1_800_000_007, at)
                     } else { XCTAssertEqual(fixtureRequest.now, currentTime, at) }
                     let req = fixtureRequest.now == currentTime && replayEpochOverride == nil ? fixtureRequest
                         : try request(requestName, corpusName: "lifecycle-scenarios.json", atTime: currentTime,

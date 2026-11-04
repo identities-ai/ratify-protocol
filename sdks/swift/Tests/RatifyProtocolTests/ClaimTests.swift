@@ -124,11 +124,14 @@ final class ClaimTests: XCTestCase {
     actor CreatedClaimStore: RateAtFinalizationClaimStore {
         let onFinalize: (@Sendable () async -> Void)?
         let claimedAt: Int64
+        let finalizeTimeOffset: Int64
         private(set) var claims = 0
         private(set) var progressWrites = 0
         private(set) var finalizations = 0
-        init(onFinalize: (@Sendable () async -> Void)? = nil, claimedAt: Int64 = 1_800_000_000) {
+        init(onFinalize: (@Sendable () async -> Void)? = nil, claimedAt: Int64 = 1_800_000_000,
+             finalizeTimeOffset: Int64 = 0) {
             self.onFinalize = onFinalize; self.claimedAt = claimedAt
+            self.finalizeTimeOffset = finalizeTimeOffset
         }
         func authoritativeTime() -> Int64 { claimedAt }
         func claim(_ claim: ChallengeClaim) -> ClaimResult {
@@ -142,6 +145,9 @@ final class ClaimTests: XCTestCase {
             XCTAssertEqual(ownerToken, Data(repeating: 7, count: 32))
             XCTAssertFalse(terminalResult.isEmpty)
             XCTAssertFalse(receiptBody.isEmpty)
+            if finalizeTimeOffset != 0 {
+                XCTAssertGreaterThan(allowValidUntil, claimedAt + finalizeTimeOffset)
+            }
             finalizations += 1
             return true
         }
@@ -347,10 +353,9 @@ final class ClaimTests: XCTestCase {
                     ["fault:panic", "fault:invalid_outcome"].contains($0.s("implementation"))
                 } &&
                 ["absent", "accept"].contains(vector.s("receiver_binding_hook")) &&
-                (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 evidence.values.allSatisfy { $0["mode"] as? String != "panic" }
         }
-        XCTAssertEqual(vectors.count, 350)
+        XCTAssertEqual(vectors.count, 351)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
@@ -367,7 +372,8 @@ final class ClaimTests: XCTestCase {
             let req = try request(name, evaluators: registry)
             let (trust, status, journal) = try await vectorProviders(vector, request: req)
             let store = CreatedClaimStore(claimedAt: Int64(vector.int("now") +
-                ((vector["claim_time_offset"] as? NSNumber)?.intValue ?? 0)))
+                ((vector["claim_time_offset"] as? NSNumber)?.intValue ?? 0)),
+                finalizeTimeOffset: (vector["finalize_time_offset"] as? NSNumber)?.int64Value ?? 0)
             let baseStore: any ClaimStore = store
             let memberships = (vector["audience_memberships"] as? [[String: Any]] ?? []).map {
                 AudienceMembership(delegationIndex: UInt64($0.int("delegation_index")),

@@ -131,7 +131,8 @@ class ClaimTest {
     }
 
     private class CreatedClaimStore(private val onFinalize: (suspend () -> Unit)? = null,
-        private val claimedAt: Long = 1_800_000_000L) : RateAtFinalizationClaimStore {
+        private val claimedAt: Long = 1_800_000_000L,
+        private val finalizeTimeOffset: Long = 0L) : RateAtFinalizationClaimStore {
         var claims = 0
         var progressWrites = 0
         var finalizations = 0
@@ -146,6 +147,7 @@ class ClaimTest {
             org.junit.Assert.assertArrayEquals(ByteArray(32) { 7 }, ownerToken)
             org.junit.Assert.assertTrue(terminalResult.isNotEmpty())
             org.junit.Assert.assertTrue(receiptBody.isNotEmpty())
+            if (finalizeTimeOffset != 0L) org.junit.Assert.assertTrue(allowValidUntil > claimedAt + finalizeTimeOffset)
             finalizations++
             return true
         }
@@ -331,12 +333,11 @@ class ClaimTest {
                     }
                 } ?: true) &&
                 vector.getString("receiver_binding_hook") in listOf("absent", "accept") &&
-                vector.optLong("finalize_time_offset") == 0L &&
                 evidence.keys().asSequence().all { issuer ->
                     evidence.getJSONObject(issuer).optString("mode") != "panic"
                 }
         }
-        assertEquals(350, vectors.size)
+        assertEquals(351, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")
@@ -350,7 +351,8 @@ class ClaimTest {
             val registry = if (registrations.isEmpty()) null else ConstraintEvaluatorRegistry(timeout, registrations)
             val req = request(name, registry)
             val (trust, status, journal) = vectorProviders(vector, req)
-            val store = CreatedClaimStore(claimedAt = vector.getLong("now") + vector.optLong("claim_time_offset"))
+            val store = CreatedClaimStore(claimedAt = vector.getLong("now") + vector.optLong("claim_time_offset"),
+                finalizeTimeOffset = vector.optLong("finalize_time_offset"))
             val baseStore: ClaimStore = store
             val memberships = vector.optJSONArray("audience_memberships")?.let { array ->
                 (0 until array.length()).map { index ->

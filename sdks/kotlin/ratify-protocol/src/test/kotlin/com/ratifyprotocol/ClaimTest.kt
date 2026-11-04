@@ -293,12 +293,12 @@ class ClaimTest {
                     }
                 } ?: true) &&
                 vector.getString("receiver_binding_hook") == "absent" &&
-                vector.optLong("claim_time_offset") == 0L && vector.optLong("finalize_time_offset") == 0L &&
+                vector.optLong("finalize_time_offset") == 0L &&
                 evidence.keys().asSequence().all { issuer ->
                     evidence.getJSONObject(issuer).optString("mode") !in listOf("error", "panic")
                 }
         }
-        assertEquals(294, vectors.size)
+        assertEquals(301, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")
@@ -312,7 +312,7 @@ class ClaimTest {
             val registry = if (registrations.isEmpty()) null else ConstraintEvaluatorRegistry(timeout, registrations)
             val req = request(name, registry)
             val (trust, status, journal) = vectorProviders(vector, req)
-            val store = CreatedClaimStore(claimedAt = vector.getLong("now"))
+            val store = CreatedClaimStore(claimedAt = vector.getLong("now") + vector.optLong("claim_time_offset"))
             val baseStore: ClaimStore = store
             val memberships = vector.optJSONArray("audience_memberships")?.let { array ->
                 (0 until array.length()).map { index ->

@@ -298,11 +298,10 @@ final class ClaimTests: XCTestCase {
                     ["fault:panic", "fault:invalid_outcome"].contains($0.s("implementation"))
                 } &&
                 vector.s("receiver_binding_hook") == "absent" &&
-                (vector["claim_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 evidence.values.allSatisfy { !["error", "panic"].contains($0["mode"] as? String ?? "") }
         }
-        XCTAssertEqual(vectors.count, 294)
+        XCTAssertEqual(vectors.count, 301)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
@@ -318,7 +317,8 @@ final class ClaimTests: XCTestCase {
                 timeoutMilliseconds: timeout, registrations: registrations)
             let req = try request(name, evaluators: registry)
             let (trust, status, journal) = try await vectorProviders(vector, request: req)
-            let store = CreatedClaimStore(claimedAt: Int64(vector.int("now")))
+            let store = CreatedClaimStore(claimedAt: Int64(vector.int("now") +
+                ((vector["claim_time_offset"] as? NSNumber)?.intValue ?? 0)))
             let baseStore: any ClaimStore = store
             let memberships = (vector["audience_memberships"] as? [[String: Any]] ?? []).map {
                 AudienceMembership(delegationIndex: UInt64($0.int("delegation_index")),

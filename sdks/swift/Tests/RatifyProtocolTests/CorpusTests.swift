@@ -8,6 +8,7 @@ import XCTest
 /// a runner that stops executing, fails here. At full parity `pending` is empty.
 final class CorpusTests: XCTestCase {
     static let runners: [String: @Sendable () async throws -> Void] = [
+        "README.md": CorpusReadmeRunner.run,
         "annex-a.json": AnnexARunner.run,
         "keys.json": KeysRunner.run,
         "limits.json": LimitsRunner.run,
@@ -36,7 +37,6 @@ final class CorpusTests: XCTestCase {
 
     /// Entries whose runners land in a later milestone (build plan §9).
     static let pending: [String: String] = [
-        "README.md": "M3",
         "concurrency-scenarios.json": "M4",
         "cross-sdk": "M4",
         "device-state.json": "M3",

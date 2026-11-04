@@ -14,6 +14,7 @@ object CorpusRunners {
     private fun annex(): String = String(Corpus.read("spec/SPEC-v2-ANNEX-A.md"), Charsets.UTF_8)
 
     val runners: Map<String, () -> Unit> = mapOf(
+        "README.md" to CorpusReadmeVectors::run,
         "annex-a.json" to { AnnexAVectors.corpus(annex()) },
         "keys.json" to KeysVectors::corpus,
         "limits.json" to LimitsVectors::corpus,
@@ -42,7 +43,6 @@ object CorpusRunners {
 
     /** Entries whose runners land in a later milestone (build plan §9). */
     val pending: Map<String, String> = mapOf(
-        "README.md" to "M3",
         "concurrency-scenarios.json" to "M4",
         "cross-sdk" to "M4",
         "device-state.json" to "M3",

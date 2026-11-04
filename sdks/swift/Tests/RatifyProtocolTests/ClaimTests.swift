@@ -130,6 +130,7 @@ final class ClaimTests: XCTestCase {
         private(set) var claims = 0
         private(set) var progressWrites = 0
         private(set) var finalizations = 0
+        private(set) var allowHorizons: [Int64] = []
         init(onFinalize: (@Sendable () async -> Void)? = nil, claimedAt: Int64 = 1_800_000_000,
              finalizeTimeOffset: Int64 = 0, disposition: ClaimDisposition = .created) {
             self.onFinalize = onFinalize; self.claimedAt = claimedAt
@@ -149,12 +150,11 @@ final class ClaimTests: XCTestCase {
             XCTAssertFalse(terminalResult.isEmpty)
             XCTAssertFalse(receiptBody.isEmpty)
             finalizations += 1
-            if finalizeTimeOffset != 0 {
-                let finalTime = claimedAt + finalizeTimeOffset
-                if finalTime < claimedAt { throw StoreError.classified(.clockRegressed, detail: "finalization clock regressed") }
-                if allowValidUntil != 0 && (finalTime >= allowValidUntil || finalTime >= claimed!.expiresAt) {
-                    throw StoreError.classified(.allowHorizonPassed, detail: "allow horizon passed")
-                }
+            allowHorizons.append(allowValidUntil)
+            let finalTime = claimedAt + finalizeTimeOffset
+            if finalTime < claimedAt { throw StoreError.classified(.clockRegressed, detail: "finalization clock regressed") }
+            if allowValidUntil != 0 && (finalTime >= allowValidUntil || finalTime >= claimed!.expiresAt) {
+                throw StoreError.classified(.allowHorizonPassed, detail: "allow horizon passed")
             }
             return true
         }
@@ -492,6 +492,7 @@ final class ClaimTests: XCTestCase {
                 Data(base64Encoded: vector.obj("expected").s("receipt_body_b64"))!, name)
             let claims = await store.claims
             let finalizations = await store.finalizations
+            let allowHorizons = await store.allowHorizons
             let progressWrites = await store.progressWrites
             let trustCalls = await trust.calls
             let statusRequests = await status.requests
@@ -500,6 +501,7 @@ final class ClaimTests: XCTestCase {
             XCTAssertEqual(receiver?.calls ?? 0, expectedCallbacks.int("receiver_binding"), name)
             XCTAssertEqual(claims, 1, name)
             XCTAssertEqual(finalizations, 1, name)
+            XCTAssertEqual(allowHorizons, [(vector.obj("expected")["allow_valid_until"] as? NSNumber)?.int64Value ?? 0], name)
             XCTAssertEqual(progressWrites, expectedCallbacks.int("progress"), name)
             XCTAssertEqual(trustCalls, expectedCallbacks.int("trust"), name)
             XCTAssertEqual(statusRequests.count, expectedCallbacks.int("status"), name)

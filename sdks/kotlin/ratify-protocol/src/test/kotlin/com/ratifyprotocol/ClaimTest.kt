@@ -138,6 +138,7 @@ class ClaimTest {
         var claims = 0
         var progressWrites = 0
         var finalizations = 0
+        val allowHorizons = mutableListOf<Long>()
         override suspend fun authoritativeTime(): Long = claimedAt
         override suspend fun claim(claim: ChallengeClaim): ClaimResult {
             claims++
@@ -152,12 +153,11 @@ class ClaimTest {
             org.junit.Assert.assertTrue(terminalResult.isNotEmpty())
             org.junit.Assert.assertTrue(receiptBody.isNotEmpty())
             finalizations++
-            if (finalizeTimeOffset != 0L) {
-                val finalTime = claimedAt + finalizeTimeOffset
-                if (finalTime < claimedAt) throw StoreError.Classified(ErrorClass.CLOCK_REGRESSED, "finalization clock regressed")
-                if (allowValidUntil != 0L && (finalTime >= allowValidUntil || finalTime >= claimed!!.expiresAt))
-                    throw StoreError.Classified(ErrorClass.ALLOW_HORIZON_PASSED, "allow horizon passed")
-            }
+            allowHorizons.add(allowValidUntil)
+            val finalTime = claimedAt + finalizeTimeOffset
+            if (finalTime < claimedAt) throw StoreError.Classified(ErrorClass.CLOCK_REGRESSED, "finalization clock regressed")
+            if (allowValidUntil != 0L && (finalTime >= allowValidUntil || finalTime >= claimed!!.expiresAt))
+                throw StoreError.Classified(ErrorClass.ALLOW_HORIZON_PASSED, "allow horizon passed")
             return true
         }
         override suspend fun recordProgress(claimId: String, ownerToken: ByteArray, progress: EvaluationProgress) {
@@ -468,6 +468,7 @@ class ClaimTest {
                 outcome.committed?.receiptBody)
             assertEquals(name, 1, store.claims)
             assertEquals(name, 1, store.finalizations)
+            assertEquals(name, listOf(vector.getJSONObject("expected").optLong("allow_valid_until")), store.allowHorizons)
             assertEquals(name, vector.getJSONObject("expected").getJSONObject("callback_counts").getInt("progress"),
                 store.progressWrites)
             val callbacks = vector.getJSONObject("expected").getJSONObject("callback_counts")

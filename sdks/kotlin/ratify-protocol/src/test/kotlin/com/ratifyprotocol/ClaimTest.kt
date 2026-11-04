@@ -239,12 +239,12 @@ class ClaimTest {
     }
 
     private suspend fun vectorProviders(vector: JSONObject, req: VerifyRequest): Triple<VectorTrust, VectorStatus, VectorJournal> {
-        val trustKey = vector.getJSONObject("trust").optJSONObject("root_public_key")?.let(::publicKeyOf)
+        val trustScript = vector.optJSONObject("trust") ?: JSONObject()
+        val trustKey = trustScript.optJSONObject("root_public_key")?.let(::publicKeyOf)
             ?: HybridPublicKey(ByteArray(0), ByteArray(0))
-        val trustScript = vector.getJSONObject("trust")
         val trust = VectorTrust(trustKey,
             TrustOutcome.fromSpelling(trustScript.optString("outcome")) ?: TrustOutcome.UNAVAILABLE,
-            trustScript.getString("mode") == "error")
+            trustScript.optString("mode") == "error")
         val evidenceObject = vector.getJSONObject("status_evidence")
         val evidence = evidenceObject.keys().asSequence().associateWith { issuer ->
             val objects = evidenceObject.getJSONObject(issuer).getJSONArray("objects")
@@ -308,7 +308,7 @@ class ClaimTest {
             val evidence = vector.optJSONObject("status_evidence") ?: JSONObject()
             vector.getJSONObject("expected").getString("stage") == "committed" &&
                 vector.getString("claim_store") == "create" &&
-                (trust.optString("mode") == "error" || trust.optString("mode") == "ok" &&
+                (vector.isNull("trust") || trust.optString("mode") == "error" || trust.optString("mode") == "ok" &&
                     TrustOutcome.fromSpelling(trust.optString("outcome")) != null) &&
                 vector.getString("audience_mode") in listOf("ok", "error") &&
                 vector.getString("rate") in listOf("absent", "reserve", "exceeded", "unavailable") &&
@@ -318,13 +318,13 @@ class ClaimTest {
                         array.getJSONObject(index).getString("implementation") in listOf("fault:panic", "fault:invalid_outcome")
                     }
                 } ?: true) &&
-                vector.getString("receiver_binding_hook") == "absent" &&
+                vector.getString("receiver_binding_hook") in listOf("absent", "accept") &&
                 vector.optLong("finalize_time_offset") == 0L &&
                 evidence.keys().asSequence().all { issuer ->
                     evidence.getJSONObject(issuer).optString("mode") != "panic"
                 }
         }
-        assertEquals(342, vectors.size)
+        assertEquals(345, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")
@@ -351,8 +351,9 @@ class ClaimTest {
             } ?: emptyList()
             val audience = CountingAudience(memberships, vector.getString("audience_mode") == "error")
             val rate = if (vector.getString("rate") == "absent") null else VectorRate(vector.getString("rate"))
+            val receiver = if (vector.getString("receiver_binding_hook") == "accept") ReceiverProbe(false) else null
             val outcome = verifyProofBundle(req, baseStore, trust = trust, audience = audience,
-                statusEvidence = status, statusJournal = journal, rate = rate)
+                receiverBinding = receiver, statusEvidence = status, statusJournal = journal, rate = rate)
             assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)
             org.junit.Assert.assertArrayEquals(name, vector.getJSONObject("expected").b64("receipt_body_b64"),
                 outcome.committed?.receiptBody)
@@ -361,6 +362,7 @@ class ClaimTest {
             assertEquals(name, vector.getJSONObject("expected").getJSONObject("callback_counts").getInt("progress"),
                 store.progressWrites)
             val callbacks = vector.getJSONObject("expected").getJSONObject("callback_counts")
+            assertEquals(name, callbacks.getInt("receiver_binding"), receiver?.calls?.get() ?: 0)
             assertEquals(name, callbacks.getInt("trust"), trust.calls.get())
             assertEquals(name, callbacks.getInt("status"), status.requests.size)
             assertEquals(name, callbacks.getInt("audience"), audience.calls.get())

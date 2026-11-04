@@ -271,11 +271,12 @@ final class ClaimTests: XCTestCase {
 
     private func vectorProviders(_ vector: [String: Any], request req: VerifyRequest) async throws
         -> (VectorTrust, VectorStatus, VectorJournal) {
-        let root = vector.obj("trust")["root_public_key"] as? [String: Any]
+        let trustScript = vector["trust"] as? [String: Any] ?? [:]
+        let root = trustScript["root_public_key"] as? [String: Any]
         let trust = VectorTrust(key: root.map { HybridPublicKey(ed25519: $0.b64("ed25519"), mlDsa65: $0.b64("ml_dsa_65")) }
             ?? HybridPublicKey(ed25519: Data(), mlDsa65: Data()),
-            outcome: TrustOutcome(rawValue: vector.obj("trust")["outcome"] as? String ?? "") ?? .unavailable,
-            fails: vector.obj("trust").s("mode") == "error")
+            outcome: TrustOutcome(rawValue: trustScript["outcome"] as? String ?? "") ?? .unavailable,
+            fails: trustScript["mode"] as? String == "error")
         let evidence = vector.obj("status_evidence").mapValues { value -> [StatusEvidenceObject] in
             let script = value as! [String: Any]
             return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }
@@ -324,7 +325,7 @@ final class ClaimTests: XCTestCase {
             let evidence = vector.obj("status_evidence") as! [String: [String: Any]]
             return vector.obj("expected").s("stage") == "committed" &&
                 vector.s("claim_store") == "create" &&
-                (trust["mode"] as? String == "error" ||
+                (vector["trust"] is NSNull || trust["mode"] as? String == "error" ||
                     trust["mode"] as? String == "ok" &&
                     TrustOutcome(rawValue: trust["outcome"] as? String ?? "") != nil) &&
                 ["ok", "error"].contains(vector.s("audience_mode")) &&
@@ -333,11 +334,11 @@ final class ClaimTests: XCTestCase {
                 !(vector["constraint_evaluators"] as? [[String: Any]] ?? []).contains {
                     ["fault:panic", "fault:invalid_outcome"].contains($0.s("implementation"))
                 } &&
-                vector.s("receiver_binding_hook") == "absent" &&
+                ["absent", "accept"].contains(vector.s("receiver_binding_hook")) &&
                 (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 evidence.values.allSatisfy { $0["mode"] as? String != "panic" }
         }
-        XCTAssertEqual(vectors.count, 342)
+        XCTAssertEqual(vectors.count, 345)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
@@ -365,8 +366,10 @@ final class ClaimTests: XCTestCase {
             let audience = EmptyAudience(memberships: memberships,
                 fails: vector.s("audience_mode") == "error")
             let rate = vector.s("rate") == "absent" ? nil : VectorRate(vector.s("rate"))
-            let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore, trust: trust,
-                audience: audience, statusEvidence: status, statusJournal: journal, rate: rate)
+            let receiver = vector.s("receiver_binding_hook") == "accept" ? ReceiverProbe(reject: false) : nil
+            let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore,
+                receiverBinding: receiver, trust: trust, audience: audience, statusEvidence: status,
+                statusJournal: journal, rate: rate)
             XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))
             XCTAssertEqual(outcome.committed?.receiptBody,
                 Data(base64Encoded: vector.obj("expected").s("receipt_body_b64"))!, name)
@@ -377,6 +380,7 @@ final class ClaimTests: XCTestCase {
             let statusRequests = await status.requests
             let audienceCalls = await audience.calls
             let expectedCallbacks = vector.obj("expected").obj("callback_counts")
+            XCTAssertEqual(receiver?.calls ?? 0, expectedCallbacks.int("receiver_binding"), name)
             XCTAssertEqual(claims, 1, name)
             XCTAssertEqual(finalizations, 1, name)
             XCTAssertEqual(progressWrites, expectedCallbacks.int("progress"), name)

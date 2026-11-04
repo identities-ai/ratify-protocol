@@ -206,18 +206,22 @@ class ClaimTest {
         }
     }
 
-    private class VectorTrust(private val key: HybridPublicKey, private val outcome: TrustOutcome) : TrustProvider {
+    private class VectorTrust(private val key: HybridPublicKey, private val outcome: TrustOutcome,
+        private val fails: Boolean = false) : TrustProvider {
         val calls = AtomicInteger()
         override suspend fun resolve(chain: List<DelegationCert>): TrustResolution {
             calls.incrementAndGet()
+            if (fails) error("scripted trust failure")
             return TrustResolution(outcome, key)
         }
     }
 
-    private class VectorStatus(private val evidence: Map<String, List<StatusEvidenceObject>>) : StatusEvidenceProvider {
+    private class VectorStatus(private val evidence: Map<String, List<StatusEvidenceObject>>,
+        private val failures: Set<String> = emptySet()) : StatusEvidenceProvider {
         val requests = java.util.Collections.synchronizedList(mutableListOf<StatusEvidenceRequest>())
         override suspend fun provide(request: StatusEvidenceRequest): List<StatusEvidenceObject> {
             requests.add(request)
+            if (request.issuerId in failures) error("scripted status failure")
             return evidence[request.issuerId] ?: emptyList()
         }
     }
@@ -225,7 +229,10 @@ class ClaimTest {
     private suspend fun vectorProviders(vector: JSONObject, req: VerifyRequest): Triple<VectorTrust, VectorStatus, VectorJournal> {
         val trustKey = vector.getJSONObject("trust").optJSONObject("root_public_key")?.let(::publicKeyOf)
             ?: HybridPublicKey(ByteArray(0), ByteArray(0))
-        val trust = VectorTrust(trustKey, TrustOutcome.fromSpelling(vector.getJSONObject("trust").getString("outcome"))!!)
+        val trustScript = vector.getJSONObject("trust")
+        val trust = VectorTrust(trustKey,
+            TrustOutcome.fromSpelling(trustScript.optString("outcome")) ?: TrustOutcome.UNAVAILABLE,
+            trustScript.getString("mode") == "error")
         val evidenceObject = vector.getJSONObject("status_evidence")
         val evidence = evidenceObject.keys().asSequence().associateWith { issuer ->
             val objects = evidenceObject.getJSONObject(issuer).getJSONArray("objects")
@@ -234,7 +241,10 @@ class ClaimTest {
                 StatusEvidenceObject(item.getInt("object_type_code").toUShort(), item.b64("wire_b64"))
             }
         }
-        val status = VectorStatus(evidence)
+        val failures = evidenceObject.keys().asSequence().filter { issuer ->
+            evidenceObject.getJSONObject(issuer).getString("mode") == "error"
+        }.toSet()
+        val status = VectorStatus(evidence, failures)
         val journal = VectorJournal(emptySecurityJournalSnapshot())
         val script = vector.getJSONObject("journal")
         if (script.optJSONArray("setup") != null) {
@@ -267,10 +277,12 @@ class ClaimTest {
         return Triple(trust, status, journal)
     }
 
-    private class CountingAudience(private val values: List<AudienceMembership> = emptyList()) : AudienceProvider {
+    private class CountingAudience(private val values: List<AudienceMembership> = emptyList(),
+        private val fails: Boolean = false) : AudienceProvider {
         val calls = AtomicInteger()
         override suspend fun memberships(deferred: List<DeferredConstraint>, receiverId: String): List<AudienceMembership> {
             calls.incrementAndGet()
+            if (fails) error("scripted audience failure")
             return values
         }
     }
@@ -284,8 +296,9 @@ class ClaimTest {
             val evidence = vector.optJSONObject("status_evidence") ?: JSONObject()
             vector.getJSONObject("expected").getString("stage") == "committed" &&
                 vector.getString("claim_store") == "create" &&
-                trust.optString("mode") == "ok" && TrustOutcome.fromSpelling(trust.optString("outcome")) != null &&
-                vector.getString("audience_mode") == "ok" && vector.getString("rate") == "absent" &&
+                (trust.optString("mode") == "error" || trust.optString("mode") == "ok" &&
+                    TrustOutcome.fromSpelling(trust.optString("outcome")) != null) &&
+                vector.getString("audience_mode") in listOf("ok", "error") && vector.getString("rate") == "absent" &&
                 journal.optString("mode") == "anchored" &&
                 (vector.optJSONArray("constraint_evaluators")?.let { array ->
                     (0 until array.length()).none { index ->
@@ -295,10 +308,10 @@ class ClaimTest {
                 vector.getString("receiver_binding_hook") == "absent" &&
                 vector.optLong("finalize_time_offset") == 0L &&
                 evidence.keys().asSequence().all { issuer ->
-                    evidence.getJSONObject(issuer).optString("mode") !in listOf("error", "panic")
+                    evidence.getJSONObject(issuer).optString("mode") != "panic"
                 }
         }
-        assertEquals(311, vectors.size)
+        assertEquals(322, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")
@@ -323,7 +336,7 @@ class ClaimTest {
                         item.getLong("expires_at"), item.getString("evidence_digest"))
                 }
             } ?: emptyList()
-            val audience = CountingAudience(memberships)
+            val audience = CountingAudience(memberships, vector.getString("audience_mode") == "error")
             val outcome = verifyProofBundle(req, baseStore, trust = trust, audience = audience,
                 statusEvidence = status, statusJournal = journal)
             assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)

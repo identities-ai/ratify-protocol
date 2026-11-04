@@ -177,30 +177,42 @@ final class ClaimTests: XCTestCase {
     actor VectorTrust: TrustProvider {
         let key: HybridPublicKey
         let outcome: TrustOutcome
+        let fails: Bool
         private(set) var calls = 0
-        init(key: HybridPublicKey, outcome: TrustOutcome) { self.key = key; self.outcome = outcome }
-        func resolve(chain: [DelegationCert]) -> TrustResolution {
+        init(key: HybridPublicKey, outcome: TrustOutcome, fails: Bool = false) {
+            self.key = key; self.outcome = outcome; self.fails = fails
+        }
+        func resolve(chain: [DelegationCert]) throws -> TrustResolution {
             calls += 1
+            if fails { throw StoreError.unavailable("scripted trust failure") }
             return TrustResolution(outcome: outcome, rootKey: key)
         }
     }
 
     actor VectorStatus: StatusEvidenceProvider {
         let byIssuer: [String: [StatusEvidenceObject]]
+        let failures: Set<String>
         private(set) var requests: [StatusEvidenceRequest] = []
-        init(byIssuer: [String: [StatusEvidenceObject]]) { self.byIssuer = byIssuer }
-        func provide(_ request: StatusEvidenceRequest) -> [StatusEvidenceObject] {
+        init(byIssuer: [String: [StatusEvidenceObject]], failures: Set<String> = []) {
+            self.byIssuer = byIssuer; self.failures = failures
+        }
+        func provide(_ request: StatusEvidenceRequest) throws -> [StatusEvidenceObject] {
             requests.append(request)
+            if failures.contains(request.issuerId) { throw StoreError.unavailable("scripted status failure") }
             return byIssuer[request.issuerId] ?? []
         }
     }
 
     actor EmptyAudience: AudienceProvider {
         let values: [AudienceMembership]
+        let fails: Bool
         private(set) var calls = 0
-        init(memberships: [AudienceMembership] = []) { values = memberships }
-        func memberships(for deferred: [DeferredConstraint], receiverId: String) -> [AudienceMembership] {
+        init(memberships: [AudienceMembership] = [], fails: Bool = false) {
+            values = memberships; self.fails = fails
+        }
+        func memberships(for deferred: [DeferredConstraint], receiverId: String) throws -> [AudienceMembership] {
             calls += 1
+            if fails { throw StoreError.unavailable("scripted audience failure") }
             return values
         }
     }
@@ -248,11 +260,15 @@ final class ClaimTests: XCTestCase {
         let root = vector.obj("trust")["root_public_key"] as? [String: Any]
         let trust = VectorTrust(key: root.map { HybridPublicKey(ed25519: $0.b64("ed25519"), mlDsa65: $0.b64("ml_dsa_65")) }
             ?? HybridPublicKey(ed25519: Data(), mlDsa65: Data()),
-            outcome: TrustOutcome(rawValue: vector.obj("trust").s("outcome"))!)
+            outcome: TrustOutcome(rawValue: vector.obj("trust")["outcome"] as? String ?? "") ?? .unavailable,
+            fails: vector.obj("trust").s("mode") == "error")
         let evidence = vector.obj("status_evidence").mapValues { value -> [StatusEvidenceObject] in
             let script = value as! [String: Any]
             return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }
         }
+        let statusFailures = Set(vector.obj("status_evidence").compactMap { entry in
+            (entry.value as? [String: Any])?["mode"] as? String == "error" ? entry.key : nil
+        })
         let journal = VectorJournal(try Ratify.emptySecurityJournalSnapshot())
         let script = vector.obj("journal")
         if let setup = script["setup"] as? [[String: Any]] {
@@ -284,7 +300,7 @@ final class ClaimTests: XCTestCase {
                     epoch: key.epoch, key: key.key, policy: req.statusPolicy, now: Int64(step.int("now")))
             }
         }
-        return (trust, VectorStatus(byIssuer: evidence), journal)
+        return (trust, VectorStatus(byIssuer: evidence, failures: statusFailures), journal)
     }
 
     func testVerifierCorpusCommittedReceipts() async throws {
@@ -293,18 +309,20 @@ final class ClaimTests: XCTestCase {
             let journal = vector["journal"] as? [String: Any] ?? [:]
             let evidence = vector.obj("status_evidence") as! [String: [String: Any]]
             return vector.obj("expected").s("stage") == "committed" &&
-                vector.s("claim_store") == "create" && trust["mode"] as? String == "ok" &&
-                TrustOutcome(rawValue: trust["outcome"] as? String ?? "") != nil &&
-                vector.s("audience_mode") == "ok" &&
+                vector.s("claim_store") == "create" &&
+                (trust["mode"] as? String == "error" ||
+                    trust["mode"] as? String == "ok" &&
+                    TrustOutcome(rawValue: trust["outcome"] as? String ?? "") != nil) &&
+                ["ok", "error"].contains(vector.s("audience_mode")) &&
                 vector.s("rate") == "absent" && journal["mode"] as? String == "anchored" &&
                 !(vector["constraint_evaluators"] as? [[String: Any]] ?? []).contains {
                     ["fault:panic", "fault:invalid_outcome"].contains($0.s("implementation"))
                 } &&
                 vector.s("receiver_binding_hook") == "absent" &&
                 (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
-                evidence.values.allSatisfy { !["error", "panic"].contains($0["mode"] as? String ?? "") }
+                evidence.values.allSatisfy { $0["mode"] as? String != "panic" }
         }
-        XCTAssertEqual(vectors.count, 311)
+        XCTAssertEqual(vectors.count, 322)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
@@ -329,7 +347,8 @@ final class ClaimTests: XCTestCase {
                     trustDomainIds: $0.strings("trust_domain_ids"), issuedAt: Int64($0.int("issued_at")),
                     expiresAt: Int64($0.int("expires_at")), evidenceDigest: $0.s("evidence_digest"))
             }
-            let audience = EmptyAudience(memberships: memberships)
+            let audience = EmptyAudience(memberships: memberships,
+                fails: vector.s("audience_mode") == "error")
             let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore, trust: trust,
                 audience: audience, statusEvidence: status, statusJournal: journal)
             XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))

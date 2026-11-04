@@ -186,6 +186,8 @@ fn foreign_registration(r: FfiConstraintEvaluatorRegistration) -> ConstraintEval
         evaluate: Arc::new(move |ctx, input| {
             let result = evaluator.evaluate(input.clone().into(), FfiStoreContext::new(ctx))
                 .map_err(|e| ConstraintEvaluatorError(e.to_string()))?;
+            #[cfg(feature = "test-hooks")]
+            crate::guard::test_hooks::fire_callback(5);
             let outcome = match result.outcome.as_str() {
                 "pass" => ConstraintOutcomeV2::Pass,
                 "denied" => ConstraintOutcomeV2::Denied,

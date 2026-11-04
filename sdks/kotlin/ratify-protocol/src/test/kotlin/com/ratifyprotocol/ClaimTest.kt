@@ -14,8 +14,17 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicInteger
 import org.json.JSONObject
 import kotlinx.coroutines.delay
+import com.sun.jna.Library
+import com.sun.jna.Native
 
 class ClaimTest {
+    private interface CallbackPanicHooks : Library {
+        fun ratify_ffi_test_arm_callback_panic(kind: Int)
+        fun ratify_ffi_test_callback_panic_remaining(): Int
+    }
+    private val callbackPanicHooks: CallbackPanicHooks by lazy {
+        Native.load("ratify_protocol_ffi", CallbackPanicHooks::class.java)
+    }
     private class ReceiverProbe(private val reject: Boolean) : ReceiverBindingHook {
         val calls = AtomicInteger()
         override fun validate(bundle: ProofBundle, expected: ExpectedChallenge) {
@@ -313,6 +322,7 @@ class ClaimTest {
                 "com.ratifyprotocol.allowed_values/v1" -> evaluateAllowedValues(input)
                 "fault:pass_until" -> ConstraintEvaluationResult(ConstraintOutcome.PASS, validUntil)
                 "fault:error" -> error("scripted evaluator failure")
+                "fault:panic" -> ConstraintEvaluationResult(ConstraintOutcome.PASS)
                 "fault:invalid_outcome" -> ConstraintEvaluationResult(ConstraintOutcome.INVALID)
                 "fault:timeout" -> { delay(100); ConstraintEvaluationResult(ConstraintOutcome.PASS) }
                 else -> error("Unsupported corpus evaluator: $implementation")
@@ -422,29 +432,9 @@ class ClaimTest {
         val root = File(System.getProperty("ratify.corpus")!!)
         Corpus.read = { File(root, it).readBytes() }
         val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter { vector ->
-            val trust = vector.optJSONObject("trust") ?: JSONObject()
-            val journal = vector.optJSONObject("journal") ?: JSONObject()
-            val evidence = vector.optJSONObject("status_evidence") ?: JSONObject()
-            vector.getJSONObject("expected").getString("stage") == "committed" &&
-                vector.getString("claim_store") == "create" &&
-                (vector.isNull("trust") || trust.optString("mode") in listOf("error", "registry") ||
-                    trust.optString("mode") == "ok" &&
-                    TrustOutcome.fromSpelling(trust.optString("outcome")) != null) &&
-                vector.getString("audience_mode") in listOf("ok", "error") &&
-                vector.getString("rate") in listOf("absent", "reserve", "exceeded", "unavailable") &&
-                journal.optString("mode") in listOf("anchored", "absent", "unanchored", "load_error",
-                    "cas_conflict", "cas_conflict_once") &&
-                (vector.optJSONArray("constraint_evaluators")?.let { array ->
-                    (0 until array.length()).none { index ->
-                        array.getJSONObject(index).getString("implementation") == "fault:panic"
-                    }
-                } ?: true) &&
-                vector.getString("receiver_binding_hook") in listOf("absent", "accept") &&
-                evidence.keys().asSequence().all { issuer ->
-                    evidence.getJSONObject(issuer).optString("mode") != "panic"
-                }
+            vector.getJSONObject("expected").getString("stage") == "committed"
         }
-        assertEquals(357, vectors.size)
+        assertEquals(362, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")
@@ -475,8 +465,37 @@ class ClaimTest {
             val receiver = if (vector.getString("receiver_binding_hook") == "accept") ReceiverProbe(false) else null
             val journalStore: SecurityJournalStore? = if (vector.getJSONObject("journal").getString("mode") == "absent")
                 null else journal
-            val outcome = verifyProofBundle(req, baseStore, trust = trust, audience = audience,
-                receiverBinding = receiver, statusEvidence = status, statusJournal = journalStore, rate = rate)
+            val panicKind = when (name) {
+                "trust_provider_panic" -> 1
+                "status_provider_panic" -> 2
+                "audience_provider_panic" -> 3
+                "rate_store_panic" -> 4
+                "extension_evaluator_panic" -> 5
+                else -> 0
+            }
+            if (panicKind == 1) assertEquals(name, "panic", vector.getJSONObject("trust").getString("mode"))
+            if (panicKind == 2) org.junit.Assert.assertTrue(name,
+                vector.getJSONObject("status_evidence").keys().asSequence().any {
+                    vector.getJSONObject("status_evidence").getJSONObject(it).getString("mode") == "panic"
+                })
+            if (panicKind == 3) assertEquals(name, "panic", vector.getString("audience_mode"))
+            if (panicKind == 4) assertEquals(name, "panic", vector.getString("rate"))
+            if (panicKind == 5) org.junit.Assert.assertTrue(name,
+                vector.getJSONArray("constraint_evaluators").let { array ->
+                    (0 until array.length()).any { array.getJSONObject(it).getString("implementation") == "fault:panic" }
+                })
+            // A test-only Rust unwind after the foreign call exercises core
+            // containment without treating a JVM throwable as a Rust panic.
+            if (panicKind != 0) callbackPanicHooks.ratify_ffi_test_arm_callback_panic(panicKind)
+            val (outcome, remaining) = try {
+                val result = verifyProofBundle(req, baseStore, trust = trust, audience = audience,
+                    receiverBinding = receiver, statusEvidence = status, statusJournal = journalStore, rate = rate)
+                result to callbackPanicHooks.ratify_ffi_test_callback_panic_remaining()
+            } finally {
+                callbackPanicHooks.ratify_ffi_test_arm_callback_panic(0)
+            }
+            assertEquals("$name callback panic hook was not reached", 0,
+                remaining)
             assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)
             org.junit.Assert.assertArrayEquals(name, vector.getJSONObject("expected").b64("receipt_body_b64"),
                 outcome.committed?.receiptBody)

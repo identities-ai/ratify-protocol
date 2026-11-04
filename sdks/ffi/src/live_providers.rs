@@ -56,6 +56,8 @@ pub(crate) fn trust_callback(provider: Arc<dyn FfiTrustProvider>) -> core::V2Tru
         let chain = chain.iter().map(FfiDelegationCert::from).collect();
         let result = provider.resolve(chain, FfiStoreContext::new(ctx))
             .map_err(|e| core::V2ProviderError::new(e.to_string()))?;
+        #[cfg(feature = "test-hooks")]
+        crate::guard::test_hooks::fire_callback(1);
         Ok(core::V2TrustResolution {
             outcome: core::V2TrustOutcome::parse(&result.outcome).unwrap_or(core::V2TrustOutcome::Ambiguous),
             root_key: result.root_key.into(),
@@ -104,8 +106,11 @@ pub(crate) fn audience_callback(provider: Arc<dyn FfiAudienceProvider>) -> core:
             kind: d.kind.clone(),
             canonical_json: d.canonical_json.clone(),
         }).collect();
-        provider.memberships(input, receiver_id.into(), FfiStoreContext::new(ctx))
-            .map_err(|e| core::V2ProviderError::new(e.to_string()))?
+        let memberships = provider.memberships(input, receiver_id.into(), FfiStoreContext::new(ctx))
+            .map_err(|e| core::V2ProviderError::new(e.to_string()))?;
+        #[cfg(feature = "test-hooks")]
+        crate::guard::test_hooks::fire_callback(3);
+        memberships
             .into_iter().map(|m| {
                 Ok(core::V2AudienceMembership {
                     delegation_index: usize::try_from(m.delegation_index)
@@ -156,8 +161,11 @@ pub(crate) fn status_callback(provider: Arc<dyn FfiStatusEvidenceProvider>) -> c
                 cert_id: r.cert_id.clone(),
             }).collect(),
         };
-        let objects = provider.provide(request, FfiStoreContext::new(ctx))
-            .map_err(|e| core::V2StatusProviderError::new(e.to_string()))?
+        let provided = provider.provide(request, FfiStoreContext::new(ctx))
+            .map_err(|e| core::V2StatusProviderError::new(e.to_string()))?;
+        #[cfg(feature = "test-hooks")]
+        crate::guard::test_hooks::fire_callback(2);
+        let objects = provided
             .into_iter().map(|o| core::V2StatusEvidenceObject { object_type: o.object_type, wire: o.wire }).collect();
         Ok(core::V2StatusEvidenceBatch { objects })
     })

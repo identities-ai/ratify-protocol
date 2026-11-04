@@ -504,7 +504,10 @@ impl V2RateReservationStore for ForeignRateReservationStore {
     fn reserve_v2_rate_batch(&self, ctx: &V2Context, claim_id: &str, owner_token: &[u8],
                              bundle_hash: &str, batch: &[V2RateReservation]) -> Result<(), V2StoreError> {
         self.0.reserve(claim_id.into(), owner_token.into(), bundle_hash.into(),
-            batch.iter().cloned().map(Into::into).collect(), FfiStoreContext::new(ctx)).map_err(Into::into)
+            batch.iter().cloned().map(Into::into).collect(), FfiStoreContext::new(ctx)).map_err(V2StoreError::from)?;
+        #[cfg(feature = "test-hooks")]
+        crate::guard::test_hooks::fire_callback(4);
+        Ok(())
     }
 }
 

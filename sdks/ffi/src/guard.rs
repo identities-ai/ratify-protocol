@@ -105,14 +105,33 @@ pub(crate) fn call_with<T>(
 
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
     static ARMED: AtomicBool = AtomicBool::new(false);
+    static CALLBACK_PANIC: AtomicU32 = AtomicU32::new(0);
 
     /// Make the next guarded call panic inside its guard (test builds only).
     #[no_mangle]
     pub extern "C" fn ratify_ffi_test_arm_panic() {
         ARMED.store(true, Ordering::SeqCst);
+    }
+
+    /// One-shot Rust unwind after a foreign callback returns. Kinds are
+    /// trust=1, status=2, audience=3, rate=4, evaluator=5. Test builds only.
+    #[no_mangle]
+    pub extern "C" fn ratify_ffi_test_arm_callback_panic(kind: u32) {
+        CALLBACK_PANIC.store(kind, Ordering::SeqCst);
+    }
+
+    #[no_mangle]
+    pub extern "C" fn ratify_ffi_test_callback_panic_remaining() -> u32 {
+        CALLBACK_PANIC.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn fire_callback(kind: u32) {
+        if CALLBACK_PANIC.compare_exchange(kind, 0, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            panic!("injected callback panic");
+        }
     }
 
     /// An emulated external signing provider (test builds only): signs `M`

@@ -2,6 +2,11 @@ import Foundation
 import XCTest
 import RatifyProtocol
 
+@_silgen_name("ratify_ffi_test_arm_callback_panic")
+private func armCallbackPanic(_ kind: UInt32)
+@_silgen_name("ratify_ffi_test_callback_panic_remaining")
+private func callbackPanicRemaining() -> UInt32
+
 final class ClaimTests: XCTestCase {
     final class ReceiverProbe: ReceiverBindingHook, @unchecked Sendable {
         let reject: Bool
@@ -385,6 +390,7 @@ final class ClaimTests: XCTestCase {
             case "com.ratifyprotocol.allowed_values/v1": return try Ratify.evaluateAllowedValues(input)
             case "fault:pass_until": return ConstraintEvaluationResult(outcome: .pass, validUntil: validUntil)
             case "fault:error": throw StoreError.unavailable("scripted evaluator failure")
+            case "fault:panic": return ConstraintEvaluationResult(outcome: .pass)
             case "fault:invalid_outcome": return ConstraintEvaluationResult(outcome: .invalid)
             case "fault:timeout":
                 try await Task.sleep(for: .milliseconds(100))
@@ -448,27 +454,10 @@ final class ClaimTests: XCTestCase {
     }
 
     func testVerifierCorpusCommittedReceipts() async throws {
-        let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter { vector in
-            let trust = vector["trust"] as? [String: Any] ?? [:]
-            let journal = vector["journal"] as? [String: Any] ?? [:]
-            let evidence = vector.obj("status_evidence") as! [String: [String: Any]]
-            return vector.obj("expected").s("stage") == "committed" &&
-                vector.s("claim_store") == "create" &&
-                (vector["trust"] is NSNull || trust["mode"] as? String == "error" ||
-                    trust["mode"] as? String == "registry" ||
-                    trust["mode"] as? String == "ok" &&
-                    TrustOutcome(rawValue: trust["outcome"] as? String ?? "") != nil) &&
-                ["ok", "error"].contains(vector.s("audience_mode")) &&
-                ["absent", "reserve", "exceeded", "unavailable"].contains(vector.s("rate")) &&
-                ["anchored", "absent", "unanchored", "load_error", "cas_conflict", "cas_conflict_once"]
-                    .contains(journal["mode"] as? String ?? "") &&
-                !(vector["constraint_evaluators"] as? [[String: Any]] ?? []).contains {
-                    $0.s("implementation") == "fault:panic"
-                } &&
-                ["absent", "accept"].contains(vector.s("receiver_binding_hook")) &&
-                evidence.values.allSatisfy { $0["mode"] as? String != "panic" }
+        let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
+            $0.obj("expected").s("stage") == "committed"
         }
-        XCTAssertEqual(vectors.count, 357)
+        XCTAssertEqual(vectors.count, 362)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
@@ -499,9 +488,27 @@ final class ClaimTests: XCTestCase {
             let rate = vector.s("rate") == "absent" ? nil : VectorRate(vector.s("rate"))
             let receiver = vector.s("receiver_binding_hook") == "accept" ? ReceiverProbe(reject: false) : nil
             let journalStore: (any SecurityJournalStore)? = vector.obj("journal").s("mode") == "absent" ? nil : journal
+            let panicKind: UInt32 = switch name {
+            case "trust_provider_panic": 1
+            case "status_provider_panic": 2
+            case "audience_provider_panic": 3
+            case "rate_store_panic": 4
+            case "extension_evaluator_panic": 5
+            default: 0
+            }
+            if panicKind == 1 { XCTAssertEqual(vector.obj("trust").s("mode"), "panic", name) }
+            if panicKind == 2 { XCTAssertTrue(vector.obj("status_evidence").values.contains { ($0 as? [String: Any])?["mode"] as? String == "panic" }, name) }
+            if panicKind == 3 { XCTAssertEqual(vector.s("audience_mode"), "panic", name) }
+            if panicKind == 4 { XCTAssertEqual(vector.s("rate"), "panic", name) }
+            if panicKind == 5 { XCTAssertTrue(vector.arr("constraint_evaluators").contains { $0.s("implementation") == "fault:panic" }, name) }
+            // A Swift trap cannot unwind. The test-only Rust hook panics after
+            // the foreign call, preserving its count while exercising core containment.
+            if panicKind != 0 { armCallbackPanic(panicKind) }
+            defer { armCallbackPanic(0) }
             let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore,
                 receiverBinding: receiver, trust: trust, audience: audience, statusEvidence: status,
                 statusJournal: journalStore, rate: rate)
+            XCTAssertEqual(callbackPanicRemaining(), 0, name + ": callback panic hook was not reached")
             XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))
             XCTAssertEqual(outcome.committed?.receiptBody,
                 Data(base64Encoded: vector.obj("expected").s("receipt_body_b64"))!, name)

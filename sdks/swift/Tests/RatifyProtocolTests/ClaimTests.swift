@@ -123,14 +123,17 @@ final class ClaimTests: XCTestCase {
 
     actor CreatedClaimStore: RateAtFinalizationClaimStore {
         let onFinalize: (@Sendable () async -> Void)?
+        let claimedAt: Int64
         private(set) var claims = 0
         private(set) var progressWrites = 0
         private(set) var finalizations = 0
-        init(onFinalize: (@Sendable () async -> Void)? = nil) { self.onFinalize = onFinalize }
-        func authoritativeTime() -> Int64 { 1_800_000_000 }
+        init(onFinalize: (@Sendable () async -> Void)? = nil, claimedAt: Int64 = 1_800_000_000) {
+            self.onFinalize = onFinalize; self.claimedAt = claimedAt
+        }
+        func authoritativeTime() -> Int64 { claimedAt }
         func claim(_ claim: ChallengeClaim) -> ClaimResult {
             claims += 1
-            return ClaimResult(disposition: .created, claimedAt: 1_800_000_000,
+            return ClaimResult(disposition: .created, claimedAt: claimedAt,
                 ownerToken: Data(repeating: 7, count: 32))
         }
         func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data,
@@ -192,10 +195,12 @@ final class ClaimTests: XCTestCase {
     }
 
     actor EmptyAudience: AudienceProvider {
+        let values: [AudienceMembership]
         private(set) var calls = 0
+        init(memberships: [AudienceMembership] = []) { values = memberships }
         func memberships(for deferred: [DeferredConstraint], receiverId: String) -> [AudienceMembership] {
             calls += 1
-            return []
+            return values
         }
     }
 
@@ -245,18 +250,22 @@ final class ClaimTests: XCTestCase {
                 vector.s("receiver_binding_hook") == "absent" &&
                 (vector["claim_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
-                vector.int("now") == 1_800_000_000 &&
-                (vector["audience_memberships"] as? [Any] ?? []).isEmpty &&
                 evidence.values.allSatisfy { !["error", "panic"].contains($0["mode"] as? String ?? "") }
         }
-        XCTAssertEqual(vectors.count, 201)
+        XCTAssertEqual(vectors.count, 241)
         for vector in vectors {
             let name = vector.s("name")
             let req = try request(name)
             let (trust, status, journal) = try await vectorProviders(vector, request: req)
-            let store = CreatedClaimStore()
+            let store = CreatedClaimStore(claimedAt: Int64(vector.int("now")))
             let baseStore: any ClaimStore = store
-            let audience = EmptyAudience()
+            let memberships = (vector["audience_memberships"] as? [[String: Any]] ?? []).map {
+                AudienceMembership(delegationIndex: UInt64($0.int("delegation_index")),
+                    constraintIndex: UInt64($0.int("constraint_index")), receiverId: $0.s("receiver_id"),
+                    trustDomainIds: $0.strings("trust_domain_ids"), issuedAt: Int64($0.int("issued_at")),
+                    expiresAt: Int64($0.int("expires_at")), evidenceDigest: $0.s("evidence_digest"))
+            }
+            let audience = EmptyAudience(memberships: memberships)
             let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore, trust: trust,
                 audience: audience, statusEvidence: status, statusJournal: journal)
             XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))

@@ -130,14 +130,15 @@ class ClaimTest {
         }
     }
 
-    private class CreatedClaimStore(private val onFinalize: (suspend () -> Unit)? = null) : RateAtFinalizationClaimStore {
+    private class CreatedClaimStore(private val onFinalize: (suspend () -> Unit)? = null,
+        private val claimedAt: Long = 1_800_000_000L) : RateAtFinalizationClaimStore {
         var claims = 0
         var progressWrites = 0
         var finalizations = 0
-        override suspend fun authoritativeTime(): Long = 1_800_000_000
+        override suspend fun authoritativeTime(): Long = claimedAt
         override suspend fun claim(claim: ChallengeClaim): ClaimResult {
             claims++
-            return ClaimResult(ClaimDisposition.CREATED, 1_800_000_000, ByteArray(32) { 7 })
+            return ClaimResult(ClaimDisposition.CREATED, claimedAt, ByteArray(32) { 7 })
         }
         override suspend fun finalize(claimId: String, ownerToken: ByteArray, terminalResult: ByteArray,
             receiptBody: ByteArray, allowValidUntil: Long): Boolean {
@@ -227,11 +228,11 @@ class ClaimTest {
         return Triple(trust, status, journal)
     }
 
-    private class CountingAudience : AudienceProvider {
+    private class CountingAudience(private val values: List<AudienceMembership> = emptyList()) : AudienceProvider {
         val calls = AtomicInteger()
         override suspend fun memberships(deferred: List<DeferredConstraint>, receiverId: String): List<AudienceMembership> {
             calls.incrementAndGet()
-            return emptyList()
+            return values
         }
     }
 
@@ -252,20 +253,27 @@ class ClaimTest {
                 (vector.optJSONArray("constraint_evaluators")?.length() ?: 0) == 0 &&
                 vector.getString("receiver_binding_hook") == "absent" &&
                 vector.optLong("claim_time_offset") == 0L && vector.optLong("finalize_time_offset") == 0L &&
-                vector.getLong("now") == 1_800_000_000L &&
-                (vector.optJSONArray("audience_memberships")?.length() ?: 0) == 0 &&
                 evidence.keys().asSequence().all { issuer ->
                     evidence.getJSONObject(issuer).optString("mode") !in listOf("error", "panic")
                 }
         }
-        assertEquals(201, vectors.size)
+        assertEquals(241, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val req = request(name)
             val (trust, status, journal) = vectorProviders(vector, req)
-            val store = CreatedClaimStore()
+            val store = CreatedClaimStore(claimedAt = vector.getLong("now"))
             val baseStore: ClaimStore = store
-            val audience = CountingAudience()
+            val memberships = vector.optJSONArray("audience_memberships")?.let { array ->
+                (0 until array.length()).map { index ->
+                    val item = array.getJSONObject(index)
+                    AudienceMembership(item.getLong("delegation_index").toULong(),
+                        item.getLong("constraint_index").toULong(), item.getString("receiver_id"),
+                        item.strings("trust_domain_ids"), item.getLong("issued_at"),
+                        item.getLong("expires_at"), item.getString("evidence_digest"))
+                }
+            } ?: emptyList()
+            val audience = CountingAudience(memberships)
             val outcome = verifyProofBundle(req, baseStore, trust = trust, audience = audience,
                 statusEvidence = status, statusJournal = journal)
             assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)

@@ -1169,6 +1169,373 @@ func FfiConverterTypeFfiEd25519Signer_lower(_ value: FfiEd25519Signer) -> UInt64
 
 
 
+protocol FfiJournalContextProtocol: AnyObject, Sendable {
+    
+    func isCancelled() throws  -> Bool
+    
+}
+class FfiJournalContext: FfiJournalContextProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffijournalcontext(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffijournalcontext(handle, $0) }
+    }
+
+    
+
+    
+func isCancelled()throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffijournalcontext_is_cancelled(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiJournalContext: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiJournalContext
+
+    static func lift(_ handle: UInt64) throws -> FfiJournalContext {
+        return FfiJournalContext(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiJournalContext) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiJournalContext {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiJournalContext, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalContext_lift(_ handle: UInt64) throws -> FfiJournalContext {
+    return try FfiConverterTypeFfiJournalContext.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalContext_lower(_ value: FfiJournalContext) -> UInt64 {
+    return FfiConverterTypeFfiJournalContext.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Implementations must anchor the head independently from the journal bytes
+ * and atomically compare-and-swap both values.
+ */
+protocol FfiJournalStore: AnyObject, Sendable {
+    
+    func load(context: FfiJournalContext) throws  -> FfiJournalSnapshot
+    
+    func compareAndSwap(expected: FfiJournalHead, next: FfiJournalSnapshot, context: FfiJournalContext) throws 
+    
+}
+/**
+ * Implementations must anchor the head independently from the journal bytes
+ * and atomically compare-and-swap both values.
+ */
+class FfiJournalStoreImpl: FfiJournalStore, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffijournalstore(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffijournalstore(handle, $0) }
+    }
+
+    
+
+    
+func load(context: FfiJournalContext)throws  -> FfiJournalSnapshot  {
+    return try  FfiConverterTypeFfiJournalSnapshot_lift(try rustCallWithError(FfiConverterTypeFfiJournalStoreError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffijournalstore_load(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiJournalContext_lower(context),uniffiCallStatus
+    )
+})
+}
+    
+func compareAndSwap(expected: FfiJournalHead, next: FfiJournalSnapshot, context: FfiJournalContext)throws   {try rustCallWithError(FfiConverterTypeFfiJournalStoreError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffijournalstore_compare_and_swap(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiJournalHead_lower(expected),
+        FfiConverterTypeFfiJournalSnapshot_lower(next),
+        FfiConverterTypeFfiJournalContext_lower(context),uniffiCallStatus
+    )
+}
+}
+    
+
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceFfiJournalStore {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceFfiJournalStore = UniffiVTableCallbackInterfaceFfiJournalStore(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeFfiJournalStore.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface FfiJournalStore: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeFfiJournalStore.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface FfiJournalStore: handle missing in uniffiClone")
+            }
+        },
+        load: { (
+            uniffiHandle: UInt64,
+            context: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> FfiJournalSnapshot in
+                guard let uniffiObj = try? FfiConverterTypeFfiJournalStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.load(
+                     context: try FfiConverterTypeFfiJournalContext_lift(context)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterTypeFfiJournalSnapshot_lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeFfiJournalStoreError_lower
+            )
+        },
+        compareAndSwap: { (
+            uniffiHandle: UInt64,
+            expected: RustBuffer,
+            next: RustBuffer,
+            context: UInt64,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeFfiJournalStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.compareAndSwap(
+                     expected: try FfiConverterTypeFfiJournalHead_lift(expected),
+                     next: try FfiConverterTypeFfiJournalSnapshot_lift(next),
+                     context: try FfiConverterTypeFfiJournalContext_lift(context)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeFfiJournalStoreError_lower
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceFfiJournalStore> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceFfiJournalStore>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitFfiJournalStore() {
+    uniffi_ratify_protocol_ffi_fn_init_callback_vtable_ffijournalstore(UniffiCallbackInterfaceFfiJournalStore.vtablePtr)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiJournalStore: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<FfiJournalStore>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiJournalStore
+
+    static func lift(_ handle: UInt64) throws -> FfiJournalStore {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return FfiJournalStoreImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    static func lower(_ value: FfiJournalStore) -> UInt64 {
+         if let rustImpl = value as? FfiJournalStoreImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiJournalStore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiJournalStore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalStore_lift(_ handle: UInt64) throws -> FfiJournalStore {
+    return try FfiConverterTypeFfiJournalStore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalStore_lower(_ value: FfiJournalStore) -> UInt64 {
+    return FfiConverterTypeFfiJournalStore.lower(value)
+}
+
+
+
+
+
+
 /**
  * The signing call's context, as seen by an external signer: it can only
  * observe cancellation.
@@ -2463,6 +2830,114 @@ func FfiConverterTypeFfiDelegationCert_lift(_ buf: RustBuffer) throws -> FfiDele
 #endif
 func FfiConverterTypeFfiDelegationCert_lower(_ value: FfiDelegationCert) -> RustBuffer {
     return FfiConverterTypeFfiDelegationCert.lower(value)
+}
+
+
+struct FfiJournalHead: Equatable, Hashable {
+    var generation: UInt64
+    var digest: String
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(generation: UInt64, digest: String) {
+        self.generation = generation
+        self.digest = digest
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiJournalHead: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiJournalHead: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiJournalHead {
+        return
+            try FfiJournalHead(
+                generation: FfiConverterUInt64.read(from: &buf), 
+                digest: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiJournalHead, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.generation, into: &buf)
+        FfiConverterString.write(value.digest, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalHead_lift(_ buf: RustBuffer) throws -> FfiJournalHead {
+    return try FfiConverterTypeFfiJournalHead.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalHead_lower(_ value: FfiJournalHead) -> RustBuffer {
+    return FfiConverterTypeFfiJournalHead.lower(value)
+}
+
+
+struct FfiJournalSnapshot: Equatable, Hashable {
+    var snapshot: Data
+    var head: FfiJournalHead
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(snapshot: Data, head: FfiJournalHead) {
+        self.snapshot = snapshot
+        self.head = head
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiJournalSnapshot: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiJournalSnapshot: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiJournalSnapshot {
+        return
+            try FfiJournalSnapshot(
+                snapshot: FfiConverterData.read(from: &buf), 
+                head: FfiConverterTypeFfiJournalHead.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiJournalSnapshot, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.snapshot, into: &buf)
+        FfiConverterTypeFfiJournalHead.write(value.head, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalSnapshot_lift(_ buf: RustBuffer) throws -> FfiJournalSnapshot {
+    return try FfiConverterTypeFfiJournalSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalSnapshot_lower(_ value: FfiJournalSnapshot) -> RustBuffer {
+    return FfiConverterTypeFfiJournalSnapshot.lower(value)
 }
 
 
@@ -4847,6 +5322,93 @@ func FfiConverterTypeFfiError_lower(_ value: FfiError) -> RustBuffer {
 }
 
 
+
+enum FfiJournalStoreError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    case Conflict
+    case Cancelled
+    case Failed(detail: String
+    )
+
+    
+
+    
+
+    
+    var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension FfiJournalStoreError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiJournalStoreError: FfiConverterRustBuffer {
+    typealias SwiftType = FfiJournalStoreError
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiJournalStoreError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .Conflict
+        case 2: return .Cancelled
+        case 3: return .Failed(
+            detail: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    static func write(_ value: FfiJournalStoreError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .Conflict:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .Cancelled:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .Failed(detail):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(detail, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalStoreError_lift(_ buf: RustBuffer) throws -> FfiJournalStoreError {
+    return try FfiConverterTypeFfiJournalStoreError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiJournalStoreError_lower(_ value: FfiJournalStoreError) -> RustBuffer {
+    return FfiConverterTypeFfiJournalStoreError.lower(value)
+}
+
+
 /**
  * What a valid log entry does to its log.
  */
@@ -6139,6 +6701,113 @@ func ffiErrorClassSpellings()throws  -> [String]  {
     )
 })
 }
+func ffiApplyRevocationListToJournal(store: FfiJournalStore, token: FfiCancelToken, list: FfiRevocationList, issuerId: String, epoch: UInt64, key: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws  -> FfiJournalSnapshot  {
+    return try  FfiConverterTypeFfiJournalSnapshot_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_list_to_journal(
+        FfiConverterTypeFfiJournalStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterTypeFfiRevocationList_lower(list),
+        FfiConverterString.lower(issuerId),
+        FfiConverterUInt64.lower(epoch),
+        FfiConverterTypeFfiPublicKey_lower(key),
+        FfiConverterTypeFfiStatusPolicy_lower(policy),
+        FfiConverterInt64.lower(now),uniffiCallStatus
+    )
+})
+}
+func ffiApplyRevocationPushToJournal(store: FfiJournalStore, token: FfiCancelToken, push: FfiRevocationPush, issuerId: String, epoch: UInt64, key: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws  -> FfiJournalSnapshot  {
+    return try  FfiConverterTypeFfiJournalSnapshot_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_push_to_journal(
+        FfiConverterTypeFfiJournalStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterTypeFfiRevocationPush_lower(push),
+        FfiConverterString.lower(issuerId),
+        FfiConverterUInt64.lower(epoch),
+        FfiConverterTypeFfiPublicKey_lower(key),
+        FfiConverterTypeFfiStatusPolicy_lower(policy),
+        FfiConverterInt64.lower(now),uniffiCallStatus
+    )
+})
+}
+func ffiConfigureStatusKeyEpoch(store: FfiJournalStore, token: FfiCancelToken, issuerId: String, epoch: UInt64, key: FfiPublicKey)throws  -> FfiJournalSnapshot  {
+    return try  FfiConverterTypeFfiJournalSnapshot_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_configure_status_key_epoch(
+        FfiConverterTypeFfiJournalStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterString.lower(issuerId),
+        FfiConverterUInt64.lower(epoch),
+        FfiConverterTypeFfiPublicKey_lower(key),uniffiCallStatus
+    )
+})
+}
+func ffiEmptySecurityJournalSnapshot()throws  -> FfiJournalSnapshot  {
+    return try  FfiConverterTypeFfiJournalSnapshot_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_empty_security_journal_snapshot(uniffiCallStatus
+    )
+})
+}
+func ffiMigrateSecurityJournalJson(legacyJson: Data)throws  -> FfiJournalSnapshot  {
+    return try  FfiConverterTypeFfiJournalSnapshot_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_migrate_security_journal_json(
+        FfiConverterData.lower(legacyJson),uniffiCallStatus
+    )
+})
+}
+func ffiRecordSecurityKeyRole(store: FfiJournalStore, token: FfiCancelToken, role: String, key: FfiPublicKey)throws  -> FfiJournalSnapshot  {
+    return try  FfiConverterTypeFfiJournalSnapshot_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_record_security_key_role(
+        FfiConverterTypeFfiJournalStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterString.lower(role),
+        FfiConverterTypeFfiPublicKey_lower(key),uniffiCallStatus
+    )
+})
+}
+func ffiRevocationStatusFromJournal(store: FfiJournalStore, token: FfiCancelToken, issuerId: String, certId: String, epoch: UInt64, key: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws  -> FfiStatusResult  {
+    return try  FfiConverterTypeFfiStatusResult_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_revocation_status_from_journal(
+        FfiConverterTypeFfiJournalStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterString.lower(issuerId),
+        FfiConverterString.lower(certId),
+        FfiConverterUInt64.lower(epoch),
+        FfiConverterTypeFfiPublicKey_lower(key),
+        FfiConverterTypeFfiStatusPolicy_lower(policy),
+        FfiConverterInt64.lower(now),uniffiCallStatus
+    )
+})
+}
+func ffiSecurityJournalSnapshotDigest(snapshot: Data)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_security_journal_snapshot_digest(
+        FfiConverterData.lower(snapshot),uniffiCallStatus
+    )
+})
+}
+func ffiValidateSecurityJournalSnapshot(snapshot: Data, head: FfiJournalHead)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_validate_security_journal_snapshot(
+        FfiConverterData.lower(snapshot),
+        FfiConverterTypeFfiJournalHead_lower(head),uniffiCallStatus
+    )
+}
+}
+func ffiValidateSecurityJournalTransition(current: FfiJournalSnapshot, next: FfiJournalSnapshot)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_validate_security_journal_transition(
+        FfiConverterTypeFfiJournalSnapshot_lower(current),
+        FfiConverterTypeFfiJournalSnapshot_lower(next),uniffiCallStatus
+    )
+}
+}
 /**
  * `key_id_v2` of a complete key.
  */
@@ -7073,6 +7742,36 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_error_class_spellings() != 14258) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list_to_journal() != 32159) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_push_to_journal() != 13616) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_configure_status_key_epoch() != 9458) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_empty_security_journal_snapshot() != 24841) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_migrate_security_journal_json() != 27577) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_record_security_key_role() != 60257) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_revocation_status_from_journal() != 27471) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_security_journal_snapshot_digest() != 22481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_security_journal_snapshot() != 46415) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_validate_security_journal_transition() != 1188) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_key_id() != 65279) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7364,6 +8063,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_fficontextpolicy_required_fields() != 36080) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffijournalcontext_is_cancelled() != 29433) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffijournalstore_load() != 12545) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffijournalstore_compare_and_swap() != 40721) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisoftwarekey_key_id() != 64233) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7447,6 +8155,7 @@ private let initializationResult: InitializationResult = {
     }
 
     uniffiCallbackInitFfiEd25519Signer()
+    uniffiCallbackInitFfiJournalStore()
     uniffiCallbackInitFfiSigner()
     return InitializationResult.ok
 }()

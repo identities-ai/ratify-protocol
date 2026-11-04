@@ -33,6 +33,7 @@ object CorpusRunners {
         "status-sequences.json" to StatusVectors::statusSequences,
         "challenge-claim.json" to StatusVectors::challengeClaim,
         "provider-evidence" to ProviderEvidenceVectors::run,
+        "security-journal.json" to JournalVectors::run,
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
@@ -44,7 +45,6 @@ object CorpusRunners {
         "device-state.json" to "M3",
         "evaluator-profiles.json" to "M3",
         "lifecycle-scenarios.json" to "M3",
-        "security-journal.json" to "M3",
         "status-publisher.json" to "M3",
         "transaction-verification.json" to "M3",
         "verifier-ordering.json" to "M3",

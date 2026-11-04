@@ -251,12 +251,15 @@ ProofBundle.version [Var] -> Swift.Int64
 Ratify [Enum]
 Ratify.acceptKeyRotationStatement(_:journal:now:futureSkew:) [Func] -> (journal: RatifyProtocol.RotationJournal, result: Swift.Result<RatifyProtocol.LogResult, RatifyProtocol.RatifyError>), RatifyProtocol.KeyRotationStatement, RatifyProtocol.RotationJournal, Swift.Int64, Swift.Int64
 Ratify.applyRevocationList(_:_:boundIssuerId:statusKeyEpoch:statusKey:policy:now:) [Func] -> RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationList, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64
+Ratify.applyRevocationListToJournal(store:list:issuerId:epoch:key:policy:now:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.RevocationList, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64, Swift.Duration?
 Ratify.applyRevocationPush(_:_:boundIssuerId:statusKeyEpoch:statusKey:policy:now:) [Func] -> RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationPush, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64
+Ratify.applyRevocationPushToJournal(store:push:issuerId:epoch:key:policy:now:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.RevocationPush, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64, Swift.Duration?
 Ratify.buildSessionContext(_:) [Func] -> Foundation.Data, RatifyProtocol.SessionContextInputs
 Ratify.bundleHash(_:) [Func] -> Swift.String, RatifyProtocol.ProofBundle
 Ratify.canonicalJSON(_:) [Func] -> Foundation.Data, Foundation.Data
 Ratify.challengeClaimDigest(_:) [Func] -> Foundation.Data, Foundation.Data
 Ratify.checkVerificationReceiptBundleBinding(_:bundle:) [Func] -> (), RatifyProtocol.VerificationReceipt, RatifyProtocol.ProofBundle
+Ratify.configureStatusKeyEpoch(store:issuerId:epoch:key:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, Swift.Duration?
 Ratify.decodeDelegationCert(_:) [Func] -> RatifyProtocol.DelegationCert, Foundation.Data
 Ratify.decodeKeyRotationStatement(_:) [Func] -> RatifyProtocol.KeyRotationStatement, Foundation.Data
 Ratify.decodePayloadDigest(_:) [Func] -> Foundation.Data?, Swift.String?
@@ -270,6 +273,7 @@ Ratify.decodeVerificationReceiptBody(_:) [Func] -> RatifyProtocol.VerificationRe
 Ratify.decodeWitnessEntry(_:) [Func] -> RatifyProtocol.WitnessEntry, Foundation.Data
 Ratify.delegationCertSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.DelegationCert
 Ratify.emptyRevocationStatusState() [Func] -> RatifyProtocol.RevocationStatusState
+Ratify.emptySecurityJournalSnapshot() [Func] -> RatifyProtocol.SecurityJournalSnapshot
 Ratify.encodeDelegationCert(_:) [Func] -> Foundation.Data, RatifyProtocol.DelegationCert
 Ratify.encodeKeyRotationStatement(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
 Ratify.encodeProofBundle(_:) [Func] -> Foundation.Data, RatifyProtocol.ProofBundle
@@ -286,18 +290,22 @@ Ratify.isSensitiveScope(_:) [Func] -> Swift.Bool, Swift.String
 Ratify.keyId(_:) [Func] -> Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.keyRotationStatementDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
 Ratify.keyRotationStatementSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
+Ratify.migrateSecurityJournalJSON(_:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, Foundation.Data
 Ratify.mldsaContext(_:) [Func] -> Foundation.Data, RatifyProtocol.ObjectType
 Ratify.newKeyRotationJournal(authorityId:recoveryEpoch:role:genesisKey:) [Func] -> RatifyProtocol.RotationJournal, Swift.String, Swift.Int64, Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.operationContextHash(_:) [Func] -> Foundation.Data, RatifyProtocol.OperationContext
 Ratify.presentationSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.ProofBundle
 Ratify.protocolClaimId(namespace:replayEpoch:challenge:) [Func] -> Swift.String, Swift.String, Swift.Int64, Foundation.Data
 Ratify.protocolClaimId(namespace:replayEpoch:digest:) [Func] -> Swift.String, Swift.String, Swift.Int64, Foundation.Data
+Ratify.recordSecurityKeyRole(store:role:key:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, Swift.String, RatifyProtocol.HybridPublicKey, Swift.Duration?
 Ratify.recoverKeyRotation(_:newRecoveryEpoch:newGenesisKey:) [Func] -> RatifyProtocol.RotationJournal, RatifyProtocol.RotationJournal, Swift.Int64, RatifyProtocol.HybridPublicKey
 Ratify.revocationListSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationList
 Ratify.revocationPushSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationPush
 Ratify.revocationStatusForCert(_:issuerId:certId:statusKeyEpoch:statusKey:policy:now:) [Func] -> RatifyProtocol.RevocationStatusResult, RatifyProtocol.RevocationStatusState, Swift.String, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64
+Ratify.revocationStatusFromJournal(store:issuerId:certId:epoch:key:policy:now:timeout:) [Func] -> RatifyProtocol.RevocationStatusResult, any RatifyProtocol.SecurityJournalStore, Swift.String, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64, Swift.Duration?
 Ratify.scopeVocabulary() [Func] -> [Swift.String]
 Ratify.scopeWildcards() [Func] -> [Swift.String : [Swift.String]]
+Ratify.securityJournalSnapshotDigest(_:) [Func] -> Swift.String, Foundation.Data
 Ratify.sessionContextBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.SessionContextInputs
 Ratify.signDelegationCert(_:key:) [Func] -> RatifyProtocol.DelegationCert, RatifyProtocol.DelegationCert, RatifyProtocol.SoftwarePrivateKey
 Ratify.signDelegationCert(_:signer:) [Func] -> RatifyProtocol.DelegationCert, RatifyProtocol.DelegationCert, any RatifyProtocol.ExternalSigner
@@ -336,6 +344,8 @@ Ratify.transactionReceiptSignBytes(_:) [Func] -> Foundation.Data, RatifyProtocol
 Ratify.transitionRevocationStatusEpoch(_:issuerId:nextEpoch:nextStatusKey:) [Func] -> RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationStatusState, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey
 Ratify.validId(_:) [Func] -> Swift.Bool, Swift.String
 Ratify.validateScopes(_:) [Func] -> (), [Swift.String]
+Ratify.validateSecurityJournalSnapshot(_:head:) [Func] -> (), Foundation.Data, RatifyProtocol.SecurityJournalHead
+Ratify.validateSecurityJournalTransition(current:next:) [Func] -> (), RatifyProtocol.SecurityJournalSnapshot, RatifyProtocol.SecurityJournalSnapshot
 Ratify.verificationReceiptBody(_:) [Func] -> Foundation.Data, RatifyProtocol.VerificationReceipt
 Ratify.verificationReceiptDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.VerificationReceipt
 Ratify.verificationReceiptSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.VerificationReceipt
@@ -495,6 +505,29 @@ SecureEnclaveKey.init(storageRecord:authenticationContext:) [Constructor] -> Rat
 SecureEnclaveKey.keyId [Var] -> Swift.String
 SecureEnclaveKey.publicKey [Var] -> RatifyProtocol.HybridPublicKey
 SecureEnclaveKey.storageRecord() [Func] -> Foundation.Data
+SecurityJournalHead [Struct]
+SecurityJournalHead.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SecurityJournalHead, RatifyProtocol.SecurityJournalHead
+SecurityJournalHead.digest [Var] -> Swift.String
+SecurityJournalHead.generation [Var] -> Swift.UInt64
+SecurityJournalHead.hash(into:) [Func] -> (), Swift.Hasher
+SecurityJournalHead.hashValue [Var] -> Swift.Int
+SecurityJournalHead.init(generation:digest:) [Constructor] -> RatifyProtocol.SecurityJournalHead, Swift.UInt64, Swift.String
+SecurityJournalSnapshot [Struct]
+SecurityJournalSnapshot.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SecurityJournalSnapshot, RatifyProtocol.SecurityJournalSnapshot
+SecurityJournalSnapshot.hash(into:) [Func] -> (), Swift.Hasher
+SecurityJournalSnapshot.hashValue [Var] -> Swift.Int
+SecurityJournalSnapshot.head [Var] -> RatifyProtocol.SecurityJournalHead
+SecurityJournalSnapshot.init(snapshot:head:) [Constructor] -> RatifyProtocol.SecurityJournalSnapshot, Foundation.Data, RatifyProtocol.SecurityJournalHead
+SecurityJournalSnapshot.snapshot [Var] -> Foundation.Data
+SecurityJournalStore [Protocol]
+SecurityJournalStore.compareAndSwap(expected:next:) [Func] -> (), RatifyProtocol.SecurityJournalHead, RatifyProtocol.SecurityJournalSnapshot
+SecurityJournalStore.load() [Func] -> RatifyProtocol.SecurityJournalSnapshot
+SecurityJournalStoreError [Enum]
+SecurityJournalStoreError.__derived_enum_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SecurityJournalStoreError, RatifyProtocol.SecurityJournalStoreError
+SecurityJournalStoreError.cancelled [EnumElement] -> (RatifyProtocol.SecurityJournalStoreError.Type) -> RatifyProtocol.SecurityJournalStoreError
+SecurityJournalStoreError.conflict [EnumElement] -> (RatifyProtocol.SecurityJournalStoreError.Type) -> RatifyProtocol.SecurityJournalStoreError
+SecurityJournalStoreError.hash(into:) [Func] -> (), Swift.Hasher
+SecurityJournalStoreError.hashValue [Var] -> Swift.Int
 SessionContextInputs [Struct]
 SessionContextInputs.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SessionContextInputs, RatifyProtocol.SessionContextInputs
 SessionContextInputs.agentId [Var] -> Swift.String

@@ -205,6 +205,24 @@ public final class com/ratifyprotocol/InternalErrorKind : java/lang/Enum {
 	public static fun values ()[Lcom/ratifyprotocol/InternalErrorKind;
 }
 
+public final class com/ratifyprotocol/JournalKt {
+	public static final fun applyRevocationListToJournal-SZZx_38 (Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RevocationList;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun applyRevocationListToJournal-SZZx_38$default (Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RevocationList;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun applyRevocationPushToJournal-SZZx_38 (Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RevocationPush;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun applyRevocationPushToJournal-SZZx_38$default (Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RevocationPush;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun configureStatusKeyEpoch-FZaBSoA (Lcom/ratifyprotocol/SecurityJournalStore;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun configureStatusKeyEpoch-FZaBSoA$default (Lcom/ratifyprotocol/SecurityJournalStore;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun emptySecurityJournalSnapshot ()Lcom/ratifyprotocol/SecurityJournalSnapshot;
+	public static final fun migrateSecurityJournalJson ([B)Lcom/ratifyprotocol/SecurityJournalSnapshot;
+	public static final fun recordSecurityKeyRole-51bEbmg (Lcom/ratifyprotocol/SecurityJournalStore;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun recordSecurityKeyRole-51bEbmg$default (Lcom/ratifyprotocol/SecurityJournalStore;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun revocationStatusFromJournal-SZZx_38 (Lcom/ratifyprotocol/SecurityJournalStore;Ljava/lang/String;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun revocationStatusFromJournal-SZZx_38$default (Lcom/ratifyprotocol/SecurityJournalStore;Ljava/lang/String;Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun securityJournalSnapshotDigest ([B)Ljava/lang/String;
+	public static final fun validateSecurityJournalSnapshot ([BLcom/ratifyprotocol/SecurityJournalHead;)V
+	public static final fun validateSecurityJournalTransition (Lcom/ratifyprotocol/SecurityJournalSnapshot;Lcom/ratifyprotocol/SecurityJournalSnapshot;)V
+}
+
 public final class com/ratifyprotocol/JsonKt {
 	public static final fun canonicalJson ([B)[B
 	public static final fun errorClassSpellings ()Ljava/util/List;
@@ -546,6 +564,39 @@ public final class com/ratifyprotocol/RotationState {
 	public final fun getRole ()Ljava/lang/String;
 	public final fun getSequence ()J
 	public final fun getUsedKeyIds ()Ljava/util/List;
+}
+
+public final class com/ratifyprotocol/SecurityJournalHead {
+	public synthetic fun <init> (JLjava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDigest ()Ljava/lang/String;
+	public final fun getGeneration-s-VKNKU ()J
+	public fun hashCode ()I
+}
+
+public final class com/ratifyprotocol/SecurityJournalSnapshot {
+	public fun <init> ([BLcom/ratifyprotocol/SecurityJournalHead;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHead ()Lcom/ratifyprotocol/SecurityJournalHead;
+	public final fun getSnapshot ()[B
+	public fun hashCode ()I
+}
+
+public abstract interface class com/ratifyprotocol/SecurityJournalStore {
+	public abstract fun compareAndSwap (Lcom/ratifyprotocol/SecurityJournalHead;Lcom/ratifyprotocol/SecurityJournalSnapshot;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun load (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract class com/ratifyprotocol/SecurityJournalStoreError : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/ratifyprotocol/SecurityJournalStoreError$Cancelled : com/ratifyprotocol/SecurityJournalStoreError {
+	public fun <init> ()V
+}
+
+public final class com/ratifyprotocol/SecurityJournalStoreError$Conflict : com/ratifyprotocol/SecurityJournalStoreError {
+	public fun <init> ()V
 }
 
 public final class com/ratifyprotocol/SessionContextInputs {

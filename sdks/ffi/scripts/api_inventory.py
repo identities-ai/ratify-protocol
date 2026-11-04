@@ -142,6 +142,9 @@ def cmd_check():
 # Public declarations that no inventory item maps, each with its reason.
 # Everything else public must be named by a mapped inventory entry.
 EXTRA_SWIFT = {
+    "SecurityJournalSnapshot": "SDK carrier for canonical snapshot bytes and an independent head",
+    "Ratify.validateSecurityJournalSnapshot": "SDK boundary validation before a journal store load",
+    "SecurityJournalStoreError": "host callback error signalling; core errors are RatifyError",
     "KeyStorageRecord": "the documented key storage record (plan §4.3); SDK-only",
     "KeyStorageRecord.RecordType": "storage record types (plan §4.3)",
     "KeychainKeyStore": "Keychain storage of software keys (plan §4.3); SDK-only",
@@ -153,6 +156,11 @@ EXTRA_SWIFT = {
     "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
 }
 EXTRA_KOTLIN = {
+    "SecurityJournalSnapshot": "SDK carrier for canonical snapshot bytes and an independent head",
+    "validateSecurityJournalSnapshot": "SDK boundary validation before a journal store load",
+    "SecurityJournalStoreError": "host callback error signalling; core errors are RatifyException",
+    "SecurityJournalStoreError.Conflict": "host compare-and-swap conflict",
+    "SecurityJournalStoreError.Cancelled": "host callback cancellation",
     "KeyStorageRecord": "the documented key storage record (plan §4.3); SDK-only",
     "KeyStorageRecord.RecordType": "storage record types (plan §4.3)",
     "AndroidKeyStore": "Keystore-wrapped storage of software keys (plan §4.3); SDK-only",
@@ -181,6 +189,10 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "SecurityJournalSnapshot.snapshot": "canonical bytes supplied by the core",
+    "SecurityJournalSnapshot.head": "independently anchored head paired with the bytes",
+    "SecurityJournalStoreError.conflict": "host compare-and-swap conflict",
+    "SecurityJournalStoreError.cancelled": "host callback cancellation",
     "RatifyException.errorClass": "the §2.7 class of any RatifyException",
     "RatifyException.Signing.errorClass": "the §2.7 class (plan §2.2)",
     "RatifyException.Signing.kind": "the V2SignError kind (plan §2.2); mapped in M2",

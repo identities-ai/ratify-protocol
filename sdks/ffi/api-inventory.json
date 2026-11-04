@@ -4075,8 +4075,9 @@
  },
  "SecurityJournalHeadV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SecurityJournalHead",
+  "status": "mapped",
+  "swift": "SecurityJournalHead"
  },
  "SecurityJournalHeadV2::clone": {
   "kind": "fn",
@@ -4090,8 +4091,9 @@
  },
  "SecurityJournalHeadV2::digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SecurityJournalHead.digest",
+  "status": "mapped",
+  "swift": "SecurityJournalHead.digest"
  },
  "SecurityJournalHeadV2::eq": {
   "kind": "fn",
@@ -4105,8 +4107,9 @@
  },
  "SecurityJournalHeadV2::generation": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SecurityJournalHead.generation",
+  "status": "mapped",
+  "swift": "SecurityJournalHead.generation"
  },
  "SecurityJournalHeadV2::hash": {
   "kind": "fn",
@@ -4150,18 +4153,21 @@
  },
  "SecurityJournalStoreV2": {
   "kind": "trait",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SecurityJournalStore",
+  "status": "mapped",
+  "swift": "SecurityJournalStore"
  },
  "SecurityJournalStoreV2::compare_and_swap": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SecurityJournalStore.compareAndSwap",
+  "status": "mapped",
+  "swift": "SecurityJournalStore.compareAndSwap"
  },
  "SecurityJournalStoreV2::load": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SecurityJournalStore.load",
+  "status": "mapped",
+  "swift": "SecurityJournalStore.load"
  },
  "SecurityJournalV2": {
   "kind": "struct",
@@ -8416,8 +8422,9 @@
  },
  "apply_revocation_list_to_journal_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "applyRevocationListToJournal",
+  "status": "mapped",
+  "swift": "Ratify.applyRevocationListToJournal"
  },
  "apply_revocation_list_v2": {
   "kind": "fn",
@@ -8427,8 +8434,9 @@
  },
  "apply_revocation_push_to_journal_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "applyRevocationPushToJournal",
+  "status": "mapped",
+  "swift": "Ratify.applyRevocationPushToJournal"
  },
  "apply_revocation_push_v2": {
   "kind": "fn",
@@ -8493,8 +8501,9 @@
  },
  "configure_status_key_epoch_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "configureStatusKeyEpoch",
+  "status": "mapped",
+  "swift": "Ratify.configureStatusKeyEpoch"
  },
  "constraint_profile_digest_v2": {
   "kind": "fn",
@@ -8590,8 +8599,9 @@
  },
  "empty_security_journal_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "emptySecurityJournalSnapshot",
+  "status": "mapped",
+  "swift": "Ratify.emptySecurityJournalSnapshot"
  },
  "encode_delegation_cert_v2": {
   "kind": "fn",
@@ -8777,8 +8787,9 @@
  },
  "migrate_security_journal_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "migrateSecurityJournalJson",
+  "status": "mapped",
+  "swift": "Ratify.migrateSecurityJournalJSON"
  },
  "new_key_rotation_v2_journal": {
   "kind": "fn",
@@ -8843,8 +8854,9 @@
  },
  "record_security_key_role_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "recordSecurityKeyRole",
+  "status": "mapped",
+  "swift": "Ratify.recordSecurityKeyRole"
  },
  "recover_interrupted_claim_v2": {
   "kind": "fn",
@@ -8907,8 +8919,9 @@
  },
  "revocation_status_from_journal_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "revocationStatusFromJournal",
+  "status": "mapped",
+  "swift": "Ratify.revocationStatusFromJournal"
  },
  "scope_wildcards": {
   "kind": "fn",
@@ -8918,8 +8931,9 @@
  },
  "security_journal_snapshot_digest_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "securityJournalSnapshotDigest",
+  "status": "mapped",
+  "swift": "Ratify.securityJournalSnapshotDigest"
  },
  "session_context_v2_bytes": {
   "kind": "fn",
@@ -9159,8 +9173,9 @@
  },
  "validate_security_journal_transition_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "validateSecurityJournalTransition",
+  "status": "mapped",
+  "swift": "Ratify.validateSecurityJournalTransition"
  },
  "validate_security_journal_v2": {
   "kind": "fn",

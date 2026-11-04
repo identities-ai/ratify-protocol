@@ -352,16 +352,19 @@ class ClaimTest {
     }
 
     private class VectorStatus(private val evidence: Map<String, List<StatusEvidenceObject>>,
-        private val failures: Set<String> = emptySet()) : StatusEvidenceProvider {
+        private val failures: Set<String> = emptySet(), private val onFirstRequest: (() -> Unit)? = null) : StatusEvidenceProvider {
         val requests = java.util.Collections.synchronizedList(mutableListOf<StatusEvidenceRequest>())
+        private val firstRequest = java.util.concurrent.atomic.AtomicBoolean()
         override suspend fun provide(request: StatusEvidenceRequest): List<StatusEvidenceObject> {
             requests.add(request)
+            if (firstRequest.compareAndSet(false, true)) onFirstRequest?.invoke()
             if (request.issuerId in failures) error("scripted status failure")
             return evidence[request.issuerId] ?: emptyList()
         }
     }
 
-    private suspend fun vectorProviders(vector: JSONObject, req: VerifyRequest): Triple<VectorTrust, VectorStatus, VectorJournal> {
+    private suspend fun vectorProviders(vector: JSONObject, req: VerifyRequest,
+        onFirstStatus: (() -> Unit)? = null): Triple<VectorTrust, VectorStatus, VectorJournal> {
         val trustScript = vector.optJSONObject("trust") ?: JSONObject()
         val trustKey = trustScript.optJSONObject("root_public_key")?.let(::publicKeyOf)
             ?: HybridPublicKey(ByteArray(0), ByteArray(0))
@@ -382,7 +385,7 @@ class ClaimTest {
         val failures = evidenceObject.keys().asSequence().filter { issuer ->
             evidenceObject.getJSONObject(issuer).getString("mode") == "error"
         }.toSet()
-        val status = VectorStatus(evidence, failures)
+        val status = VectorStatus(evidence, failures, onFirstStatus)
         val journal = VectorJournal(emptySecurityJournalSnapshot())
         val script = vector.getJSONObject("journal")
         if (script.optJSONArray("setup") != null) {
@@ -836,7 +839,8 @@ class ClaimTest {
             "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected",
             "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery",
             "resume_refuses_claims_without_a_committed_record", "clock_regression_at_resume_and_recovery",
-            "clock_beyond_timestamp_domain_at_resume_and_recovery")
+            "clock_beyond_timestamp_domain_at_resume_and_recovery",
+            "lease_expires_during_status_then_recovery", "clock_regression_during_evaluation")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -850,7 +854,8 @@ class ClaimTest {
             "crash_after_claim_lease_recovery" to 9,
             "resume_refuses_claims_without_a_committed_record" to 7,
             "clock_regression_at_resume_and_recovery" to 7,
-            "clock_beyond_timestamp_domain_at_resume_and_recovery" to 7)
+            "clock_beyond_timestamp_domain_at_resume_and_recovery" to 7,
+            "lease_expires_during_status_then_recovery" to 5, "clock_regression_during_evaluation" to 3)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -877,8 +882,9 @@ class ClaimTest {
                 val requestName = step.optString("request")
                 val want = step.getJSONObject("expect")
                 val at = "$name step $index $op"
-                val expectedStepKeys = stepKeys[op].orEmpty() + if (op == "release" && step.has("receipt_of"))
-                    setOf("receipt_of") else emptySet()
+                val expectedStepKeys = stepKeys[op].orEmpty() +
+                    (if (op == "release" && step.has("receipt_of")) setOf("receipt_of") else emptySet()) +
+                    (if (op == "verify" && step.has("mode")) setOf("mode", "time") else emptySet())
                 assertEquals(at, expectedStepKeys, step.keys().asSequence().toSet())
                 when (op) {
                     "set_time" -> {
@@ -906,22 +912,38 @@ class ClaimTest {
                         assertEquals(at, want.getString("disposition"), store.claim(claim).disposition.spelling)
                     }
                     "verify" -> {
-                        assertEquals(at, if (want.has("decision"))
+                        assertEquals(at, if (want.has("error_class")) setOf("stage", "error_class")
+                            else if (want.has("decision"))
                             setOf("stage", "decision", "decision_reason", "allow_horizon")
                             else setOf("stage", "disposition"), want.keys().asSequence().toSet())
                         val fixtureRequest = request(requestName, corpusName = "lifecycle-scenarios.json")
                         val currentTime = store.now()
-                        if (name == "crash_after_claim_lease_recovery" && index == 6) {
+                        if (name == "crash_after_claim_lease_recovery" && index == 6 ||
+                            name == "lease_expires_during_status_then_recovery" && index == 1) {
                             assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
                             assertEquals(at, 1_800_000_030L, currentTime)
                         } else assertEquals(at, fixtureRequest.now, currentTime)
                         val req = if (fixtureRequest.now == currentTime) fixtureRequest
                             else request(requestName, corpusName = "lifecycle-scenarios.json", atTime = currentTime)
-                        val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(requestName), req)
+                        val mode = step.optString("mode")
+                        if (mode.isNotEmpty()) org.junit.Assert.assertTrue(at,
+                            mode in setOf("expire_lease_during_status", "regress_clock_during_status"))
+                        val callbackTime = if (mode.isEmpty()) null else step.getLong("time")
+                        if (mode == "expire_lease_during_status") org.junit.Assert.assertTrue(at, callbackTime!! > currentTime)
+                        if (mode == "regress_clock_during_status") org.junit.Assert.assertTrue(at, callbackTime!! < currentTime)
+                        val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(requestName),
+                            req, callbackTime?.let { time -> { store.setTime(time) } })
                         val result = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
                         assertEquals(at, want.getString("stage"), result.stage.spelling)
                         claimed[requestName]?.let { assertEquals(at, it, result.claim) }
-                        if (want.has("disposition")) assertEquals(at, want.getString("disposition"), result.disposition?.spelling)
+                        if (want.has("error_class")) {
+                            assertEquals(at, setOf("stage", "error_class"), want.keys().asSequence().toSet())
+                            assertEquals(at, want.getString("error_class"), result.errorClass?.spelling)
+                            assertEquals(at, VerifyStage.EVALUATING, result.stage)
+                            assertEquals(at, ClaimDisposition.CREATED, result.disposition)
+                            claimed[requestName] = result.claim
+                            assertEquals(at, null, result.committed)
+                        } else if (want.has("disposition")) assertEquals(at, want.getString("disposition"), result.disposition?.spelling)
                         else assertEquals(at, ClaimDisposition.CREATED, result.disposition)
                         if (want.has("decision")) {
                             val value = checkNotNull(result.committed) { at }

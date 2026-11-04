@@ -340,12 +340,15 @@ final class ClaimTests: XCTestCase {
     actor VectorStatus: StatusEvidenceProvider {
         let byIssuer: [String: [StatusEvidenceObject]]
         let failures: Set<String>
+        let onFirstRequest: (@Sendable () throws -> Void)?
         private(set) var requests: [StatusEvidenceRequest] = []
-        init(byIssuer: [String: [StatusEvidenceObject]], failures: Set<String> = []) {
-            self.byIssuer = byIssuer; self.failures = failures
+        init(byIssuer: [String: [StatusEvidenceObject]], failures: Set<String> = [],
+             onFirstRequest: (@Sendable () throws -> Void)? = nil) {
+            self.byIssuer = byIssuer; self.failures = failures; self.onFirstRequest = onFirstRequest
         }
         func provide(_ request: StatusEvidenceRequest) throws -> [StatusEvidenceObject] {
             requests.append(request)
+            if requests.count == 1 { try onFirstRequest?() }
             if failures.contains(request.issuerId) { throw StoreError.unavailable("scripted status failure") }
             return byIssuer[request.issuerId] ?? []
         }
@@ -405,7 +408,8 @@ final class ClaimTests: XCTestCase {
         }
     }
 
-    private func vectorProviders(_ vector: [String: Any], request req: VerifyRequest) async throws
+    private func vectorProviders(_ vector: [String: Any], request req: VerifyRequest,
+                                 onFirstStatus: (@Sendable () throws -> Void)? = nil) async throws
         -> (VectorTrust, VectorStatus, VectorJournal) {
         let trustScript = vector["trust"] as? [String: Any] ?? [:]
         let root = trustScript["root_public_key"] as? [String: Any]
@@ -455,7 +459,8 @@ final class ClaimTests: XCTestCase {
             }
         }
         await journal.setMode(script.s("mode"))
-        return (trust, VectorStatus(byIssuer: evidence, failures: statusFailures), journal)
+        return (trust, VectorStatus(byIssuer: evidence, failures: statusFailures,
+            onFirstRequest: onFirstStatus), journal)
     }
 
     func verifierCorpusCommittedReceipts() async throws {
@@ -888,7 +893,8 @@ final class ClaimTests: XCTestCase {
             "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected",
             "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery",
             "resume_refuses_claims_without_a_committed_record", "clock_regression_at_resume_and_recovery",
-            "clock_beyond_timestamp_domain_at_resume_and_recovery"]
+            "clock_beyond_timestamp_domain_at_resume_and_recovery",
+            "lease_expires_during_status_then_recovery", "clock_regression_during_evaluation"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -902,7 +908,8 @@ final class ClaimTests: XCTestCase {
             "crash_after_claim_lease_recovery": 9,
             "resume_refuses_claims_without_a_committed_record": 7,
             "clock_regression_at_resume_and_recovery": 7,
-            "clock_beyond_timestamp_domain_at_resume_and_recovery": 7]
+            "clock_beyond_timestamp_domain_at_resume_and_recovery": 7,
+            "lease_expires_during_status_then_recovery": 5, "clock_regression_during_evaluation": 3]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -926,6 +933,7 @@ final class ClaimTests: XCTestCase {
                 let at = "\(name) step \(index) \(op)"
                 var expectedStepKeys = stepKeys[op] ?? []
                 if op == "release" && step["receipt_of"] != nil { expectedStepKeys.insert("receipt_of") }
+                if op == "verify" && step["mode"] != nil { expectedStepKeys.formUnion(["mode", "time"]) }
                 XCTAssertEqual(Set(step.keys), expectedStepKeys, at)
                 switch op {
                 case "set_time":
@@ -954,22 +962,42 @@ final class ClaimTests: XCTestCase {
                     let claimResult = try await store.claim(claim)
                     XCTAssertEqual(claimResult.disposition.rawValue, want.s("disposition"), at)
                 case "verify":
-                    XCTAssertEqual(Set(want.keys), want["decision"] == nil ? ["stage", "disposition"]
+                    XCTAssertEqual(Set(want.keys), want["error_class"] != nil ? ["stage", "error_class"]
+                        : want["decision"] == nil ? ["stage", "disposition"]
                         : ["stage", "decision", "decision_reason", "allow_horizon"], at)
                     let fixtureRequest = try request(requestName, corpusName: "lifecycle-scenarios.json")
                     let currentTime = try store.now()
-                    if name == "crash_after_claim_lease_recovery" && index == 6 {
+                    if name == "crash_after_claim_lease_recovery" && index == 6 ||
+                       name == "lease_expires_during_status_then_recovery" && index == 1 {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, 1_800_000_030, at)
                     } else { XCTAssertEqual(fixtureRequest.now, currentTime, at) }
                     let req = fixtureRequest.now == currentTime ? fixtureRequest
                         : try request(requestName, corpusName: "lifecycle-scenarios.json", atTime: currentTime)
-                    let (trust, status, journal) = try await vectorProviders(corpus.obj("requests").obj(requestName), request: req)
+                    let mode = step["mode"] as? String
+                    if mode != nil {
+                        XCTAssertTrue(["expire_lease_during_status", "regress_clock_during_status"].contains(mode!), at)
+                    }
+                    let callbackTime = mode == nil ? nil : Int64(step.int("time"))
+                    if mode == "expire_lease_during_status" { XCTAssertGreaterThan(callbackTime!, currentTime, at) }
+                    if mode == "regress_clock_during_status" { XCTAssertLessThan(callbackTime!, currentTime, at) }
+                    let onFirstStatus: (@Sendable () throws -> Void)?
+                    if let callbackTime { onFirstStatus = { try store.setTime(callbackTime) } }
+                    else { onFirstStatus = nil }
+                    let (trust, status, journal) = try await vectorProviders(corpus.obj("requests").obj(requestName),
+                        request: req, onFirstStatus: onFirstStatus)
                     let result = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
                         statusEvidence: status, statusJournal: journal)
                     XCTAssertEqual(result.stage.rawValue, want.s("stage"), at)
                     if let seeded = claimed[requestName] { XCTAssertEqual(result.claim, seeded, at) }
-                    if want.keys.contains("disposition") {
+                    if want.keys.contains("error_class") {
+                        XCTAssertEqual(Set(want.keys), ["stage", "error_class"], at)
+                        XCTAssertEqual(result.errorClass?.rawValue, want.s("error_class"), at)
+                        XCTAssertEqual(result.stage, .evaluating, at)
+                        XCTAssertEqual(result.disposition, .created, at)
+                        claimed[requestName] = result.claim
+                        XCTAssertNil(result.committed, at)
+                    } else if want.keys.contains("disposition") {
                         XCTAssertEqual(result.disposition?.rawValue, want.s("disposition"), at)
                     } else { XCTAssertEqual(result.disposition, .created, at) }
                     if want.keys.contains("decision") {

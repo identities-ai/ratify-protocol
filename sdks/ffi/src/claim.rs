@@ -574,6 +574,7 @@ pub fn ffi_resume_committed_claim(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::sync::Mutex;
 
     #[derive(Default)]
@@ -688,6 +689,75 @@ mod tests {
             Err(V2StoreError::Unavailable(_))));
         assert!(store.finalize_v2_claim(&ctx, "claim", &[1, 2], &[3], &[4], 50).unwrap());
         assert_eq!(*foreign.0.lock().unwrap(), vec!["finalize"]);
+    }
+
+    #[derive(Default)]
+    struct ContendedBarrierStore(Mutex<(HashMap<String, Vec<FfiRateReservation>>, HashMap<String, i64>)>);
+
+    impl FfiClaimStore for ContendedBarrierStore {
+        fn authoritative_time(&self, _: Arc<FfiStoreContext>) -> Result<i64, FfiStoreError> { Ok(42) }
+        fn claim(&self, claim: FfiChallengeClaim, _: Arc<FfiStoreContext>) -> Result<FfiClaimResult, FfiStoreError> {
+            self.0.lock().unwrap().0.insert(claim.claim_id, claim.rate_batch);
+            Ok(FfiClaimResult { disposition: FfiClaimDisposition::Created, claimed_at: 42, owner_token: vec![1] })
+        }
+        fn finalize(&self, claim_id: String, token: Vec<u8>, _: Vec<u8>, _: Vec<u8>, horizon: i64,
+            _: Arc<FfiStoreContext>) -> Result<bool, FfiStoreError> {
+            assert_eq!(token, vec![1]);
+            assert!(horizon > 0);
+            let mut state = self.0.lock().unwrap();
+            let batch = state.0.get(&claim_id).unwrap().clone();
+            if batch.iter().any(|r| state.1.get(&r.issuer_id).copied().unwrap_or(0) >= r.limit) {
+                return Err(FfiStoreError::RateLimitExceeded);
+            }
+            for r in batch { *state.1.entry(r.issuer_id).or_default() += 1; }
+            Ok(true)
+        }
+        fn record_progress(&self, _: String, _: Vec<u8>, _: FfiEvaluationProgress,
+            _: Arc<FfiStoreContext>) -> Result<(), FfiStoreError> { panic!("not used") }
+        fn load_interrupted(&self, _: String, _: Arc<FfiStoreContext>) -> Result<FfiInterruptedClaim, FfiStoreError> {
+            panic!("not used")
+        }
+        fn recover_interrupted(&self, _: String, _: Vec<u8>, _: Vec<u8>,
+            _: Arc<FfiStoreContext>) -> Result<bool, FfiStoreError> { panic!("not used") }
+    }
+
+    #[test]
+    fn foreign_barrier_preserves_batch_and_exact_rate_error_under_contention() {
+        let host = Arc::new(ContendedBarrierStore::default());
+        let store = Arc::new(ForeignBarrierClaimStore(ForeignClaimStore(host.clone())));
+        let ctx = V2Context::background();
+        let batch = vec![
+            V2RateReservation { issuer_id: "a".into(), cert_id: "one".into(), window_s: 60, limit: 1 },
+            V2RateReservation { issuer_id: "b".into(), cert_id: "two".into(), window_s: 60, limit: 2 },
+        ];
+        for id in ["first", "second"] {
+            let claim = V2ChallengeClaim { claim_id: id.into(), requires_rate: true,
+                rate_batch: batch.clone(), ..Default::default() };
+            store.claim_v2(&ctx, claim).unwrap();
+        }
+        for forwarded in host.0.lock().unwrap().0.values() {
+            assert_eq!(forwarded.len(), batch.len());
+            for (actual, expected) in forwarded.iter().zip(&batch) {
+                assert_eq!((&actual.issuer_id, &actual.cert_id, actual.window_s, actual.limit),
+                    (&expected.issuer_id, &expected.cert_id, expected.window_s, expected.limit));
+            }
+        }
+        let start = Arc::new(std::sync::Barrier::new(2));
+        let outcomes: Vec<_> = std::thread::scope(|scope| {
+            ["first", "second"].into_iter().map(|id| {
+                let store = store.clone();
+                let start = start.clone();
+                scope.spawn(move || {
+                    start.wait();
+                    store.finalize_v2_claim(&V2Context::background(), id, &[1], &[3], &[4], 50)
+                })
+            }).collect::<Vec<_>>().into_iter().map(|t| t.join().unwrap()).collect()
+        });
+        assert_eq!(outcomes.iter().filter(|r| **r == Ok(true)).count(), 1);
+        assert_eq!(outcomes.iter().filter(|r| matches!(r, Err(V2StoreError::RateLimitExceeded))).count(), 1);
+        let state = host.0.lock().unwrap();
+        assert_eq!(state.1.get("a"), Some(&1));
+        assert_eq!(state.1.get("b"), Some(&1), "the denied batch must not increment its second counter");
     }
 
     #[test]

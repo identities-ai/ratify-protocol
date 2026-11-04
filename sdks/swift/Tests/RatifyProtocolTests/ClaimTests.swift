@@ -151,6 +151,22 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    private func vectorProviders(_ vector: [String: Any], request req: VerifyRequest) async throws
+        -> (VectorTrust, VectorStatus, VectorJournal) {
+        let root = vector.obj("trust").obj("root_public_key")
+        let trust = VectorTrust(key: HybridPublicKey(ed25519: root.b64("ed25519"), mlDsa65: root.b64("ml_dsa_65")))
+        let evidence = vector.obj("status_evidence").mapValues { value -> [StatusEvidenceObject] in
+            let script = value as! [String: Any]
+            return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }
+        }
+        let journal = VectorJournal(try Ratify.emptySecurityJournalSnapshot())
+        for issuer in req.statusKeys.keys.sorted() {
+            let key = req.statusKeys[issuer]!
+            _ = try await Ratify.configureStatusKeyEpoch(store: journal, issuerId: issuer, epoch: key.epoch, key: key.key)
+        }
+        return (trust, VectorStatus(byIssuer: evidence), journal)
+    }
+
     func testExtensionEvaluatorsRunThroughLiveVerifier() async throws {
         let corpus = Corpus.load("verifier-ordering.json")
         let cases: [(String, VectorEvaluator.Mode, String)] = [
@@ -167,25 +183,78 @@ final class ClaimTests: XCTestCase {
                 registrations: [ConstraintEvaluatorRegistration(descriptor: ConstraintProfileDescriptor(
                     profile: registration.s("profile"), type: registration.s("type")), evaluator: evaluator)])
             let req = try request(name, evaluators: registry)
-            let root = vector.obj("trust").obj("root_public_key")
-            let trust = VectorTrust(key: HybridPublicKey(ed25519: root.b64("ed25519"), mlDsa65: root.b64("ml_dsa_65")))
-            let evidence = vector.obj("status_evidence").mapValues { value -> [StatusEvidenceObject] in
-                let script = value as! [String: Any]
-                return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }
-            }
-            let journal = VectorJournal(try Ratify.emptySecurityJournalSnapshot())
-            for issuer in req.statusKeys.keys.sorted() {
-                let key = req.statusKeys[issuer]!
-                _ = try await Ratify.configureStatusKeyEpoch(store: journal, issuerId: issuer, epoch: key.epoch, key: key.key)
-            }
+            let (trust, status, journal) = try await vectorProviders(vector, request: req)
             let outcome = try await Ratify.verifyProofBundle(req, claimStore: CreatedClaimStore(), trust: trust,
-                audience: EmptyAudience(), statusEvidence: VectorStatus(byIssuer: evidence), statusJournal: journal)
+                audience: EmptyAudience(), statusEvidence: status, statusJournal: journal)
             XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))
             let body = try JSONSerialization.jsonObject(with: outcome.committed!.receiptBody) as! [String: Any]
             XCTAssertEqual(body["decision_reason"] as? String, reason, name)
             let calls = await evaluator.calls
             XCTAssertEqual(calls, 1, name)
         }
+    }
+
+    actor ExhaustedBarrierStore: RateAtFinalizationClaimStore {
+        private var claim: ChallengeClaim?
+        private var counters: [String: Int64] = [:]
+        private(set) var observedBatch: [RateReservation] = []
+        private(set) var terminalDecisions: [String] = []
+        private(set) var finalizations = 0
+        private(set) var allowAttempts = 0
+        func authoritativeTime() -> Int64 { 1_800_000_000 }
+        private func key(_ r: RateReservation) -> String { "\(r.issuerId)|\(r.certId)|\(r.windowSeconds)" }
+        func claim(_ value: ChallengeClaim) -> ClaimResult {
+            observedBatch = value.rateBatch
+            claim = value
+            counters[key(value.rateBatch[0])] = value.rateBatch[0].limit
+            return ClaimResult(disposition: .created, claimedAt: 1_800_000_000,
+                ownerToken: Data(repeating: 7, count: 32))
+        }
+        func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data,
+                      allowValidUntil: Int64) throws -> Bool {
+            finalizations += 1
+            let decision = try JSONSerialization.jsonObject(with: terminalResult) as! [String: Any]
+            terminalDecisions.append(decision["decision"] as? String ?? "")
+            if decision["decision"] as? String == "allow" {
+                allowAttempts += 1
+                let batch = claim!.rateBatch
+                if batch.contains(where: { counters[key($0), default: 0] >= $0.limit }) {
+                    throw StoreError.rateLimitExceeded
+                }
+                for item in batch { counters[key(item), default: 0] += 1 }
+            }
+            return true
+        }
+        func recordProgress(claimId: String, ownerToken: Data, progress: EvaluationProgress) {}
+        func loadInterrupted(claimId: String) -> InterruptedClaim { fatalError("not interrupted") }
+        func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) -> Bool { false }
+        func counterValues() -> [Int64] { claim!.rateBatch.map { counters[key($0), default: 0] } }
+    }
+
+    func testRateBarrierMapsCapacityRefusalAndRetriesDeny() async throws {
+        let vector = Corpus.load("verifier-ordering.json").arr("vectors").first { $0.s("name") == "rate_multi_batch" }!
+        let expectedBatch = vector.obj("expected").arr("rate_batch").map {
+            RateReservation(issuerId: $0.s("issuer_id"), certId: $0.s("cert_id"),
+                windowSeconds: Int64($0.int("window_s")), limit: Int64($0.int("limit")))
+        }
+        let req = try request("rate_multi_batch")
+        let (trust, status, journal) = try await vectorProviders(vector, request: req)
+        let store = ExhaustedBarrierStore()
+        let outcome = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
+            audience: EmptyAudience(), statusEvidence: status, statusJournal: journal)
+        XCTAssertEqual(outcome.stage, .committed, outcome.errorDetail ?? "")
+        let body = try JSONSerialization.jsonObject(with: outcome.committed!.receiptBody) as! [String: Any]
+        XCTAssertEqual(body["decision_reason"] as? String, "constraint_denied")
+        let attempts = await store.allowAttempts
+        let finalizations = await store.finalizations
+        let counters = await store.counterValues()
+        let observedBatch = await store.observedBatch
+        let decisions = await store.terminalDecisions
+        XCTAssertEqual(observedBatch, expectedBatch)
+        XCTAssertEqual(decisions, ["allow", "deny"])
+        XCTAssertEqual(attempts, 1)
+        XCTAssertEqual(finalizations, 2, "the core must retry a definitive rate refusal as deny")
+        XCTAssertEqual(counters, [3, 0, 0], "the host fixture rejects the entire batch")
     }
 
     func testTrustUnavailabilityCommitsOnlyANonactionableHandoff() async throws {

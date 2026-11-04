@@ -137,6 +137,34 @@ class ClaimTest {
         }
     }
 
+    private suspend fun vectorProviders(vector: JSONObject, req: VerifyRequest): Triple<TrustProvider, StatusEvidenceProvider, VectorJournal> {
+        val trustKey = publicKeyOf(vector.getJSONObject("trust").getJSONObject("root_public_key"))
+        val trust = object : TrustProvider {
+            override suspend fun resolve(chain: List<DelegationCert>) = TrustResolution(TrustOutcome.TRUSTED, trustKey)
+        }
+        val evidenceObject = vector.getJSONObject("status_evidence")
+        val evidence = evidenceObject.keys().asSequence().associateWith { issuer ->
+            val objects = evidenceObject.getJSONObject(issuer).getJSONArray("objects")
+            (0 until objects.length()).map { index ->
+                val item = objects.getJSONObject(index)
+                StatusEvidenceObject(item.getInt("object_type_code").toUShort(), item.b64("wire_b64"))
+            }
+        }
+        val status = object : StatusEvidenceProvider {
+            override suspend fun provide(request: StatusEvidenceRequest) = evidence[request.issuerId] ?: emptyList()
+        }
+        val journal = VectorJournal(emptySecurityJournalSnapshot())
+        for (issuer in req.statusKeys.keys.sorted()) {
+            val key = req.statusKeys.getValue(issuer)
+            configureStatusKeyEpoch(journal, issuer, key.epoch, key.key)
+        }
+        return Triple(trust, status, journal)
+    }
+
+    private val emptyAudience = object : AudienceProvider {
+        override suspend fun memberships(deferred: List<DeferredConstraint>, receiverId: String) = emptyList<AudienceMembership>()
+    }
+
     @Test fun extensionEvaluatorsRunThroughLiveVerifier() = runBlocking {
         val root = File(System.getProperty("ratify.corpus")!!)
         val corpus = JSONObject(File(root, "v2/verifier-ordering.json").readText())
@@ -156,30 +184,8 @@ class ClaimTest {
                 listOf(ConstraintEvaluatorRegistration(ConstraintProfileDescriptor(
                     registration.getString("profile"), registration.getString("type")), evaluator)))
             val req = request(name, registry)
-            val trustKey = publicKeyOf(vector.getJSONObject("trust").getJSONObject("root_public_key"))
-            val trust = object : TrustProvider {
-                override suspend fun resolve(chain: List<DelegationCert>) = TrustResolution(TrustOutcome.TRUSTED, trustKey)
-            }
-            val evidenceObject = vector.getJSONObject("status_evidence")
-            val evidence = evidenceObject.keys().asSequence().associateWith { issuer ->
-                val objects = evidenceObject.getJSONObject(issuer).getJSONArray("objects")
-                (0 until objects.length()).map { index ->
-                    val item = objects.getJSONObject(index)
-                    StatusEvidenceObject(item.getInt("object_type_code").toUShort(), item.b64("wire_b64"))
-                }
-            }
-            val status = object : StatusEvidenceProvider {
-                override suspend fun provide(request: StatusEvidenceRequest) = evidence[request.issuerId] ?: emptyList()
-            }
-            val audience = object : AudienceProvider {
-                override suspend fun memberships(deferred: List<DeferredConstraint>, receiverId: String) = emptyList<AudienceMembership>()
-            }
-            val journal = VectorJournal(emptySecurityJournalSnapshot())
-            for (issuer in req.statusKeys.keys.sorted()) {
-                val key = req.statusKeys.getValue(issuer)
-                configureStatusKeyEpoch(journal, issuer, key.epoch, key.key)
-            }
-            val outcome = verifyProofBundle(req, CreatedClaimStore(), trust = trust, audience = audience,
+            val (trust, status, journal) = vectorProviders(vector, req)
+            val outcome = verifyProofBundle(req, CreatedClaimStore(), trust = trust, audience = emptyAudience,
                 statusEvidence = status, statusJournal = journal)
             assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)
             assertEquals(name, reason, JSONObject(String(outcome.committed!!.receiptBody)).getString("decision_reason"))
@@ -187,6 +193,70 @@ class ClaimTest {
             assertEquals(name, registration.getString("type"), evaluator.observedType)
             org.junit.Assert.assertNotNull(name, evaluator.observedParams)
         }
+    }
+
+    private class ExhaustedBarrierStore : RateAtFinalizationClaimStore {
+        private var claimed: ChallengeClaim? = null
+        private val counters = mutableMapOf<String, Long>()
+        var observedBatch: List<RateReservation> = emptyList()
+            private set
+        val terminalDecisions = mutableListOf<String>()
+        var finalizations = 0
+            private set
+        var allowAttempts = 0
+            private set
+        private fun key(r: RateReservation) = "${r.issuerId}|${r.certId}|${r.windowSeconds}"
+        override suspend fun authoritativeTime(): Long = 1_800_000_000
+        override suspend fun claim(claim: ChallengeClaim): ClaimResult = synchronized(this) {
+            observedBatch = claim.rateBatch
+            claimed = claim
+            counters[key(claim.rateBatch.first())] = claim.rateBatch.first().limit
+            ClaimResult(ClaimDisposition.CREATED, 1_800_000_000, ByteArray(32) { 7 })
+        }
+        override suspend fun finalize(claimId: String, ownerToken: ByteArray, terminalResult: ByteArray,
+            receiptBody: ByteArray, allowValidUntil: Long): Boolean = synchronized(this) {
+            finalizations++
+            val decision = JSONObject(String(terminalResult)).getString("decision")
+            terminalDecisions.add(decision)
+            if (decision == "allow") {
+                allowAttempts++
+                val batch = claimed!!.rateBatch
+                if (batch.any { (counters[key(it)] ?: 0) >= it.limit }) throw StoreError.RateLimitExceeded()
+                batch.forEach { counters[key(it)] = (counters[key(it)] ?: 0) + 1 }
+            }
+            true
+        }
+        override suspend fun recordProgress(claimId: String, ownerToken: ByteArray, progress: EvaluationProgress) {}
+        override suspend fun loadInterrupted(claimId: String): InterruptedClaim = error("not interrupted")
+        override suspend fun recoverInterrupted(claimId: String, terminalResult: ByteArray,
+            receiptBody: ByteArray): Boolean = false
+        fun counterValues(): List<Long> = synchronized(this) { claimed!!.rateBatch.map { counters[key(it)] ?: 0 } }
+    }
+
+    @Test fun rateBarrierMapsCapacityRefusalAndRetriesDeny() = runBlocking {
+        val root = File(System.getProperty("ratify.corpus")!!)
+        val corpus = JSONObject(File(root, "v2/verifier-ordering.json").readText())
+        val vectors = corpus.getJSONArray("vectors")
+        val vector = (0 until vectors.length()).asSequence().map(vectors::getJSONObject)
+            .first { it.getString("name") == "rate_multi_batch" }
+        val batch = vector.getJSONObject("expected").getJSONArray("rate_batch")
+        val expectedBatch = (0 until batch.length()).map { index ->
+            val item = batch.getJSONObject(index)
+            RateReservation(item.getString("issuer_id"), item.getString("cert_id"),
+                item.getLong("window_s"), item.getLong("limit"))
+        }
+        val req = request("rate_multi_batch")
+        val (trust, status, journal) = vectorProviders(vector, req)
+        val store = ExhaustedBarrierStore()
+        val outcome = verifyProofBundle(req, store, trust = trust, audience = emptyAudience,
+            statusEvidence = status, statusJournal = journal)
+        assertEquals(VerifyStage.COMMITTED, outcome.stage)
+        assertEquals("constraint_denied", JSONObject(String(outcome.committed!!.receiptBody)).getString("decision_reason"))
+        assertEquals(1, store.allowAttempts)
+        assertEquals(2, store.finalizations)
+        assertEquals(expectedBatch, store.observedBatch)
+        assertEquals(listOf("allow", "deny"), store.terminalDecisions)
+        assertEquals(listOf(3L, 0L, 0L), store.counterValues())
     }
 
     @Test fun trustUnavailabilityCommitsOnlyANonactionableHandoff() = runBlocking {

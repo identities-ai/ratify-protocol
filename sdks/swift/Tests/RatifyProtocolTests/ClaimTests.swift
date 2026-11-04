@@ -176,11 +176,12 @@ final class ClaimTests: XCTestCase {
 
     actor VectorTrust: TrustProvider {
         let key: HybridPublicKey
+        let outcome: TrustOutcome
         private(set) var calls = 0
-        init(key: HybridPublicKey) { self.key = key }
+        init(key: HybridPublicKey, outcome: TrustOutcome) { self.key = key; self.outcome = outcome }
         func resolve(chain: [DelegationCert]) -> TrustResolution {
             calls += 1
-            return TrustResolution(outcome: .trusted, rootKey: key)
+            return TrustResolution(outcome: outcome, rootKey: key)
         }
     }
 
@@ -246,7 +247,8 @@ final class ClaimTests: XCTestCase {
         -> (VectorTrust, VectorStatus, VectorJournal) {
         let root = vector.obj("trust")["root_public_key"] as? [String: Any]
         let trust = VectorTrust(key: root.map { HybridPublicKey(ed25519: $0.b64("ed25519"), mlDsa65: $0.b64("ml_dsa_65")) }
-            ?? HybridPublicKey(ed25519: Data(), mlDsa65: Data()))
+            ?? HybridPublicKey(ed25519: Data(), mlDsa65: Data()),
+            outcome: TrustOutcome(rawValue: vector.obj("trust").s("outcome"))!)
         let evidence = vector.obj("status_evidence").mapValues { value -> [StatusEvidenceObject] in
             let script = value as! [String: Any]
             return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }
@@ -292,7 +294,8 @@ final class ClaimTests: XCTestCase {
             let evidence = vector.obj("status_evidence") as! [String: [String: Any]]
             return vector.obj("expected").s("stage") == "committed" &&
                 vector.s("claim_store") == "create" && trust["mode"] as? String == "ok" &&
-                trust["outcome"] as? String == "trusted" && vector.s("audience_mode") == "ok" &&
+                TrustOutcome(rawValue: trust["outcome"] as? String ?? "") != nil &&
+                vector.s("audience_mode") == "ok" &&
                 vector.s("rate") == "absent" && journal["mode"] as? String == "anchored" &&
                 !(vector["constraint_evaluators"] as? [[String: Any]] ?? []).contains {
                     ["fault:panic", "fault:invalid_outcome"].contains($0.s("implementation"))
@@ -301,7 +304,7 @@ final class ClaimTests: XCTestCase {
                 (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 evidence.values.allSatisfy { !["error", "panic"].contains($0["mode"] as? String ?? "") }
         }
-        XCTAssertEqual(vectors.count, 301)
+        XCTAssertEqual(vectors.count, 311)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {

@@ -206,11 +206,11 @@ class ClaimTest {
         }
     }
 
-    private class VectorTrust(private val key: HybridPublicKey) : TrustProvider {
+    private class VectorTrust(private val key: HybridPublicKey, private val outcome: TrustOutcome) : TrustProvider {
         val calls = AtomicInteger()
         override suspend fun resolve(chain: List<DelegationCert>): TrustResolution {
             calls.incrementAndGet()
-            return TrustResolution(TrustOutcome.TRUSTED, key)
+            return TrustResolution(outcome, key)
         }
     }
 
@@ -225,7 +225,7 @@ class ClaimTest {
     private suspend fun vectorProviders(vector: JSONObject, req: VerifyRequest): Triple<VectorTrust, VectorStatus, VectorJournal> {
         val trustKey = vector.getJSONObject("trust").optJSONObject("root_public_key")?.let(::publicKeyOf)
             ?: HybridPublicKey(ByteArray(0), ByteArray(0))
-        val trust = VectorTrust(trustKey)
+        val trust = VectorTrust(trustKey, TrustOutcome.fromSpelling(vector.getJSONObject("trust").getString("outcome"))!!)
         val evidenceObject = vector.getJSONObject("status_evidence")
         val evidence = evidenceObject.keys().asSequence().associateWith { issuer ->
             val objects = evidenceObject.getJSONObject(issuer).getJSONArray("objects")
@@ -284,7 +284,7 @@ class ClaimTest {
             val evidence = vector.optJSONObject("status_evidence") ?: JSONObject()
             vector.getJSONObject("expected").getString("stage") == "committed" &&
                 vector.getString("claim_store") == "create" &&
-                trust.optString("mode") == "ok" && trust.optString("outcome") == "trusted" &&
+                trust.optString("mode") == "ok" && TrustOutcome.fromSpelling(trust.optString("outcome")) != null &&
                 vector.getString("audience_mode") == "ok" && vector.getString("rate") == "absent" &&
                 journal.optString("mode") == "anchored" &&
                 (vector.optJSONArray("constraint_evaluators")?.let { array ->
@@ -298,7 +298,7 @@ class ClaimTest {
                     evidence.getJSONObject(issuer).optString("mode") !in listOf("error", "panic")
                 }
         }
-        assertEquals(301, vectors.size)
+        assertEquals(311, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")

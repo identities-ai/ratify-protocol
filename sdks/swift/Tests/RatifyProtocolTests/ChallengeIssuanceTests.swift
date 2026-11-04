@@ -178,7 +178,7 @@ final class ChallengeIssuanceTests: XCTestCase {
         }
     }
 
-    private func assertBindings(_ record: ExpectedChallenge, _ request: ChallengeIssueRequest, _ label: String) {
+    private static func assertBindings(_ record: ExpectedChallenge, _ request: ChallengeIssueRequest, _ label: String) {
         XCTAssertEqual(record.verifierNamespace, request.verifierNamespace, label)
         XCTAssertEqual(record.replayEpoch, request.replayEpoch, label)
         XCTAssertEqual(record.verifierId, request.verifierId, label)
@@ -218,7 +218,9 @@ final class ChallengeIssuanceTests: XCTestCase {
         } catch { return "preflight:" + ((error as? RatifyError)?.errorClass?.rawValue ?? "internal") }
     }
 
-    func testChallengeIssuanceCorpusAllSteps() async throws {
+    func testChallengeIssuanceCorpusAllSteps() async throws { try await Self.runCorpus() }
+
+    static func runCorpus() async throws {
         let scenarios = Corpus.load("challenge-issuance.json").arr("scenarios")
         XCTAssertEqual(scenarios.count, 11)
         var checked = 0
@@ -252,7 +254,7 @@ final class ChallengeIssuanceTests: XCTestCase {
                             XCTAssertEqual(issued.value, expect.b64("challenge_b64"), label)
                             XCTAssertEqual(issued.issuedAt, Int64(expect.int("issued_at")), label)
                             XCTAssertEqual(issued.expiresAt, Int64(expect.int("expires_at")), label)
-                            assertBindings(issued, request, label)
+                            Self.assertBindings(issued, request, label)
                             issuedRequests[issued.value] = request
                         }
                     } catch {
@@ -277,7 +279,7 @@ final class ChallengeIssuanceTests: XCTestCase {
                             XCTAssertEqual(loaded.issuedAt, Int64(expect.int("issued_at")), label)
                             XCTAssertEqual(loaded.expiresAt, Int64(expect.int("expires_at")), label)
                             if let request = issuedRequests[loaded.value] {
-                                assertBindings(loaded, request, label)
+                                Self.assertBindings(loaded, request, label)
                             } else { XCTFail("loaded challenge has no issued request: \(label)") }
                             if let receiver = expect["expected_receiver_id"] as? String {
                                 XCTAssertEqual(loaded.expectedReceiverId, receiver, label)
@@ -323,6 +325,7 @@ final class ChallengeIssuanceTests: XCTestCase {
             XCTAssertEqual(calls, random.values.count - (name == "expiry_at_timestamp_domain_end" ? 1 : 0), name)
         }
         XCTAssertEqual(checked, 42)
+        Manifest.record("challenge-issuance.json", checked)
     }
 
     func testIssuePersistsBeforeExposureAndLoadsByDigest() async throws {

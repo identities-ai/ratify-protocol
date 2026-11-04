@@ -26,6 +26,7 @@ final class CorpusTests: XCTestCase {
         "rotation-sequences.json": LogsRunner.rotationSequences,
         "status-sequences.json": StatusRunner.statusSequences,
         "challenge-claim.json": StatusRunner.challengeClaim,
+        "challenge-issuance.json": ChallengeIssuanceTests.runCorpus,
         "provider-evidence": ProviderEvidenceRunner.run,
         "security-journal.json": JournalRunner.run,
         "status-publisher.json": PublisherRunner.run,
@@ -36,7 +37,6 @@ final class CorpusTests: XCTestCase {
     /// Entries whose runners land in a later milestone (build plan §9).
     static let pending: [String: String] = [
         "README.md": "M3",
-        "challenge-issuance.json": "M3",
         "concurrency-scenarios.json": "M4",
         "cross-sdk": "M4",
         "device-state.json": "M3",

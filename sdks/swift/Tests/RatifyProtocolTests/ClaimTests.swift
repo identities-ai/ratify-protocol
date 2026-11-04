@@ -382,6 +382,7 @@ final class ClaimTests: XCTestCase {
             case "com.ratifyprotocol.allowed_values/v1": return try Ratify.evaluateAllowedValues(input)
             case "fault:pass_until": return ConstraintEvaluationResult(outcome: .pass, validUntil: validUntil)
             case "fault:error": throw StoreError.unavailable("scripted evaluator failure")
+            case "fault:invalid_outcome": return ConstraintEvaluationResult(outcome: .invalid)
             case "fault:timeout":
                 try await Task.sleep(for: .milliseconds(100))
                 return ConstraintEvaluationResult(outcome: .pass)
@@ -459,12 +460,12 @@ final class ClaimTests: XCTestCase {
                 ["anchored", "absent", "unanchored", "load_error", "cas_conflict", "cas_conflict_once"]
                     .contains(journal["mode"] as? String ?? "") &&
                 !(vector["constraint_evaluators"] as? [[String: Any]] ?? []).contains {
-                    ["fault:panic", "fault:invalid_outcome"].contains($0.s("implementation"))
+                    $0.s("implementation") == "fault:panic"
                 } &&
                 ["absent", "accept"].contains(vector.s("receiver_binding_hook")) &&
                 evidence.values.allSatisfy { $0["mode"] as? String != "panic" }
         }
-        XCTAssertEqual(vectors.count, 356)
+        XCTAssertEqual(vectors.count, 357)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {

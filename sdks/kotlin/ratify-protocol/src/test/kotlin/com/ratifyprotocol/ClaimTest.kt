@@ -310,6 +310,7 @@ class ClaimTest {
                 "com.ratifyprotocol.allowed_values/v1" -> evaluateAllowedValues(input)
                 "fault:pass_until" -> ConstraintEvaluationResult(ConstraintOutcome.PASS, validUntil)
                 "fault:error" -> error("scripted evaluator failure")
+                "fault:invalid_outcome" -> ConstraintEvaluationResult(ConstraintOutcome.INVALID)
                 "fault:timeout" -> { delay(100); ConstraintEvaluationResult(ConstraintOutcome.PASS) }
                 else -> error("Unsupported corpus evaluator: $implementation")
             }
@@ -432,7 +433,7 @@ class ClaimTest {
                     "cas_conflict", "cas_conflict_once") &&
                 (vector.optJSONArray("constraint_evaluators")?.let { array ->
                     (0 until array.length()).none { index ->
-                        array.getJSONObject(index).getString("implementation") in listOf("fault:panic", "fault:invalid_outcome")
+                        array.getJSONObject(index).getString("implementation") == "fault:panic"
                     }
                 } ?: true) &&
                 vector.getString("receiver_binding_hook") in listOf("absent", "accept") &&
@@ -440,7 +441,7 @@ class ClaimTest {
                     evidence.getJSONObject(issuer).optString("mode") != "panic"
                 }
         }
-        assertEquals(356, vectors.size)
+        assertEquals(357, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")

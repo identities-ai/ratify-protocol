@@ -1,6 +1,10 @@
 package com.ratifyprotocol
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CancellationException
@@ -126,6 +130,54 @@ class ChallengeIssuanceTest {
             }
     }
 
+    private class ScenarioClaimStore : ClaimStore {
+        private val claims = mutableMapOf<String, Pair<ChallengeClaim, Long>>()
+        private val finalized = mutableSetOf<String>()
+        @Volatile private var now = 0L
+        private var claimCalls = 0
+        private var finalizeCalls = 0
+        private var progressCalls = 0
+        private var proofConflicts = 0
+        fun snapshot(): List<Int> = synchronized(this) {
+            listOf(claimCalls, finalizeCalls, progressCalls, proofConflicts)
+        }
+        fun setTime(value: Long) { now = value }
+        override suspend fun authoritativeTime(): Long = now
+        override suspend fun claim(claim: ChallengeClaim): ClaimResult = synchronized(this) {
+            claimCalls++
+            val existing = claims[claim.claimId]
+            if (existing != null) {
+                if (existing.first.proofDigest != claim.proofDigest) {
+                    proofConflicts++
+                    throw StoreError.ClaimProofConflict()
+                }
+                ClaimResult(ClaimDisposition.IN_PROGRESS, existing.second, ByteArray(0))
+            } else {
+                claims[claim.claimId] = claim to now
+                ClaimResult(ClaimDisposition.CREATED, now, ByteArray(32) { 7 })
+            }
+        }
+        override suspend fun finalize(claimId: String, ownerToken: ByteArray, terminalResult: ByteArray,
+            receiptBody: ByteArray, allowValidUntil: Long): Boolean = synchronized(this) {
+            if (!claims.containsKey(claimId) || !ownerToken.contentEquals(ByteArray(32) { 7 }) ||
+                claimId in finalized) throw StoreError.Unavailable("invalid finalization")
+            finalized.add(claimId)
+            finalizeCalls++
+            true
+        }
+        override suspend fun recordProgress(claimId: String, ownerToken: ByteArray, progress: EvaluationProgress) {
+            synchronized(this) {
+                if (!claims.containsKey(claimId) || !ownerToken.contentEquals(ByteArray(32) { 7 }) ||
+                    claimId in finalized) throw StoreError.Unavailable("invalid progress")
+                progressCalls++
+            }
+        }
+        override suspend fun loadInterrupted(claimId: String): InterruptedClaim =
+            throw StoreError.Unavailable("no interruption")
+        override suspend fun recoverInterrupted(claimId: String, terminalResult: ByteArray,
+            receiptBody: ByteArray): Boolean = false
+    }
+
     private class ScenarioRandom(private val values: List<ByteArray>) : ChallengeRandomSource {
         private var index = 0
         private var attempts = 0
@@ -155,13 +207,34 @@ class ChallengeIssuanceTest {
         org.junit.Assert.assertArrayEquals(label, request.expectedSessionContext, record.expectedSessionContext)
     }
 
-    @Test fun challengeIssuanceCorpusIssueAndLoadSteps() = runBlocking {
+    private suspend fun presentIssued(wire: ByteArray, at: Long, issuance: ScenarioStore,
+        claims: ScenarioClaimStore): String {
+        val bundle = try { decodeProofBundle(wire) }
+            catch (e: RatifyException) { return "preflight:" + (e.errorClass?.spelling ?: "internal") }
+        val expected = try { loadExpectedChallenge(issuance, "verify-test", 3, bundle.challenge) }
+            catch (e: RatifyException) { return "preflight:" + (e.errorClass?.spelling ?: "internal") }
+        return try {
+            val policy = expected.expectedSessionContext?.let {
+                ContextPolicy("ratify.verify.session-context/v1", true,
+                    listOf("verifier_id", "workspace_id", "agent_id", "session_id", "invocation_id", "request_hash"), it)
+            } ?: ContextPolicy("ratify.conformance.context-not-required/v1", false, emptyList())
+            val request = VerifyRequest(wire, expected, policy, "data:read", "verify-test", 3,
+                expected.verifierId, at, 300, 5, ConstraintContext(), "2025a", emptyMap(),
+                RevocationStatusPolicy(300, 300, 5))
+            val outcome = verifyProofBundle(request, claims)
+            outcome.disposition?.spelling ?: if (outcome.errorClass == ErrorClass.CLAIM_REPLAY)
+                "proof_conflict" else "preflight:" + (outcome.errorClass?.spelling ?: "internal")
+        } catch (e: RatifyException) { "preflight:" + (e.errorClass?.spelling ?: "internal") }
+    }
+
+    @Test fun challengeIssuanceCorpusAllSteps() = runBlocking {
         val scenarios = Corpus.load("challenge-issuance.json").arr("scenarios")
         assertEquals(11, scenarios.size)
         var checked = 0
         for (scenario in scenarios) {
             val name = scenario.getString("name")
             val store = ScenarioStore()
+            val claims = ScenarioClaimStore()
             val random = ScenarioRandom(scenario.strings("random_b64").map(java.util.Base64.getDecoder()::decode))
             val issuedRequests = mutableMapOf<String, ChallengeIssueRequest>()
             val firstRequest = scenario.arr("steps").first { it.getString("op") == "issue" }.getJSONObject("request")
@@ -219,14 +292,36 @@ class ChallengeIssuanceTest {
                             assertEquals(label, "expected_challenge_unavailable", expect.getString("result"))
                         }
                     }
-                    "present", "present_concurrent" -> Unit
+                    "present", "present_concurrent" -> {
+                        checked++
+                        val at = step.getLong("at")
+                        claims.setTime(at)
+                        val before = claims.snapshot()
+                        val wires = step.strings("bundles_b64").map(java.util.Base64.getDecoder()::decode)
+                        val actual = coroutineScope {
+                            wires.map { wire -> async(Dispatchers.Default) { presentIssued(wire, at, store, claims) } }
+                                .awaitAll().sorted()
+                        }
+                        val wanted = if (expect.getString("result") == "preflight")
+                            listOf("preflight:" + expect.getString("error_class")) else
+                            expect.strings("dispositions").sorted()
+                        assertEquals(label, wanted, actual)
+                        val delta = claims.snapshot().zip(before) { after, prior -> after - prior }
+                        if (expect.getString("result") == "preflight") {
+                            assertEquals(label, listOf(0, 0, 0, 0), delta)
+                        } else {
+                            assertEquals(label, wires.size, delta[0])
+                            assertEquals(label, wanted.count { it == "created" }, delta[1])
+                            assertEquals(label, wanted.count { it == "proof_conflict" }, delta[3])
+                        }
+                    }
                     else -> fail("unsupported corpus operation: ${step.getString("op")}")
                 }
             }
             assertTrue(name, !random.wasExhausted)
             assertEquals(name, random.available - if (name == "expiry_at_timestamp_domain_end") 1 else 0, random.calls)
         }
-        assertEquals(27, checked)
+        assertEquals(42, checked)
     }
 
     @Test fun issuePersistsBeforeExposureAndLoadsByDigest() = runBlocking {

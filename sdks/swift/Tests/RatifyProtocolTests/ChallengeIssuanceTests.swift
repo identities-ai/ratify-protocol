@@ -119,6 +119,46 @@ final class ChallengeIssuanceTests: XCTestCase {
         }
     }
 
+    actor ScenarioClaimStore: ClaimStore {
+        private var claims: [String: (claim: ChallengeClaim, claimedAt: Int64)] = [:]
+        private var finalized: Set<String> = []
+        private var now: Int64 = 0
+        private var claimCalls = 0
+        private var finalizeCalls = 0
+        private var progressCalls = 0
+        private var proofConflicts = 0
+        func snapshot() -> [Int] { [claimCalls, finalizeCalls, progressCalls, proofConflicts] }
+        func setTime(_ value: Int64) { now = value }
+        func authoritativeTime() -> Int64 { now }
+        func claim(_ next: ChallengeClaim) throws -> ClaimResult {
+            claimCalls += 1
+            if let existing = claims[next.claimId] {
+                if existing.claim.proofDigest != next.proofDigest {
+                    proofConflicts += 1
+                    throw StoreError.claimProofConflict
+                }
+                return ClaimResult(disposition: .inProgress, claimedAt: existing.claimedAt, ownerToken: Data())
+            }
+            claims[next.claimId] = (next, now)
+            return ClaimResult(disposition: .created, claimedAt: now, ownerToken: Data(repeating: 7, count: 32))
+        }
+        func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data,
+                      allowValidUntil: Int64) throws -> Bool {
+            guard claims[claimId] != nil, ownerToken == Data(repeating: 7, count: 32),
+                  !finalized.contains(claimId) else { throw StoreError.unavailable("invalid finalization") }
+            finalized.insert(claimId)
+            finalizeCalls += 1
+            return true
+        }
+        func recordProgress(claimId: String, ownerToken: Data, progress: EvaluationProgress) throws {
+            guard claims[claimId] != nil, ownerToken == Data(repeating: 7, count: 32),
+                  !finalized.contains(claimId) else { throw StoreError.unavailable("invalid progress") }
+            progressCalls += 1
+        }
+        func loadInterrupted(claimId: String) throws -> InterruptedClaim { throw StoreError.unavailable("no interruption") }
+        func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) -> Bool { false }
+    }
+
     actor ScenarioRandom: ChallengeRandomSource {
         let values: [Data]
         private var index = 0
@@ -148,13 +188,44 @@ final class ChallengeIssuanceTests: XCTestCase {
         XCTAssertEqual(record.expectedSessionContext, request.expectedSessionContext, label)
     }
 
-    func testChallengeIssuanceCorpusIssueAndLoadSteps() async throws {
+    private static func presentIssued(_ wire: Data, at: Int64, issuance: ScenarioStore,
+                                      claims: ScenarioClaimStore) async -> String {
+        let bundle: ProofBundle
+        do { bundle = try Ratify.decodeProofBundle(wire) }
+        catch { return "preflight:" + (error.errorClass?.rawValue ?? "internal") }
+        let expected: ExpectedChallenge
+        do {
+            expected = try await Ratify.loadExpectedChallenge(store: issuance, namespace: "verify-test",
+                replayEpoch: 3, challenge: bundle.challenge)
+        } catch { return "preflight:" + (error.errorClass?.rawValue ?? "internal") }
+        do {
+            let policy = try expected.expectedSessionContext.map {
+                try ContextPolicy(profile: "ratify.verify.session-context/v1", requireBound: true,
+                    requiredFields: ["verifier_id", "workspace_id", "agent_id", "session_id", "invocation_id", "request_hash"],
+                    expectedSessionContext: $0)
+            } ?? ContextPolicy(profile: "ratify.conformance.context-not-required/v1", requireBound: false,
+                               requiredFields: [])
+            let request = VerifyRequest(bundle: wire, expected: expected, contextPolicy: policy,
+                requiredScope: "data:read", verifierNamespace: "verify-test", replayEpoch: 3,
+                verifierId: expected.verifierId, now: at, maxChallengeAgeSeconds: 300,
+                futureSkewSeconds: 5, context: ConstraintContext(), tzdbVersion: "2025a",
+                statusKeys: [:], statusPolicy: RevocationStatusPolicy(maxListLifetimeSeconds: 300,
+                    maxStatusAgeSeconds: 300, clockSkewSeconds: 5))
+            let outcome = try await Ratify.verifyProofBundle(request, claimStore: claims)
+            if let disposition = outcome.disposition { return disposition.rawValue }
+            if outcome.errorClass == .claimReplay { return "proof_conflict" }
+            return "preflight:" + (outcome.errorClass?.rawValue ?? "internal")
+        } catch { return "preflight:" + ((error as? RatifyError)?.errorClass?.rawValue ?? "internal") }
+    }
+
+    func testChallengeIssuanceCorpusAllSteps() async throws {
         let scenarios = Corpus.load("challenge-issuance.json").arr("scenarios")
         XCTAssertEqual(scenarios.count, 11)
         var checked = 0
         for scenario in scenarios {
             let name = scenario.s("name")
             let store = ScenarioStore()
+            let claims = ScenarioClaimStore()
             let random = ScenarioRandom(scenario.strings("random_b64").map { Data(base64Encoded: $0)! })
             var issuedRequests: [Data: ChallengeIssueRequest] = [:]
             let firstRequest = scenario.arr("steps").first { $0.s("op") == "issue" }!.obj("request")
@@ -216,7 +287,33 @@ final class ChallengeIssuanceTests: XCTestCase {
                         XCTAssertEqual(error.errorClass, .expectedChallengeUnavailable, label)
                         XCTAssertEqual(expect.s("result"), "expected_challenge_unavailable", label)
                     }
-                } else if !["present", "present_concurrent"].contains(step.s("op")) {
+                } else if ["present", "present_concurrent"].contains(step.s("op")) {
+                    checked += 1
+                    let at = Int64(step.int("at"))
+                    await claims.setTime(at)
+                    let before = await claims.snapshot()
+                    let wires = step.strings("bundles_b64").map { Data(base64Encoded: $0)! }
+                    let actual = await withTaskGroup(of: String.self) { group in
+                        for wire in wires {
+                            group.addTask { await Self.presentIssued(wire, at: at, issuance: store, claims: claims) }
+                        }
+                        var results: [String] = []
+                        for await result in group { results.append(result) }
+                        return results.sorted()
+                    }
+                    let expected = expect.s("result") == "preflight" ?
+                        ["preflight:" + expect.s("error_class")] : expect.strings("dispositions").sorted()
+                    XCTAssertEqual(actual, expected, label)
+                    let after = await claims.snapshot()
+                    let delta = zip(after, before).map(-)
+                    if expect.s("result") == "preflight" {
+                        XCTAssertEqual(delta, [0, 0, 0, 0], label)
+                    } else {
+                        XCTAssertEqual(delta[0], wires.count, label)
+                        XCTAssertEqual(delta[1], expected.filter { $0 == "created" }.count, label)
+                        XCTAssertEqual(delta[3], expected.filter { $0 == "proof_conflict" }.count, label)
+                    }
+                } else {
                     XCTFail("unsupported corpus operation: \(step.s("op"))")
                 }
             }
@@ -225,7 +322,7 @@ final class ChallengeIssuanceTests: XCTestCase {
             XCTAssertFalse(exhausted, name)
             XCTAssertEqual(calls, random.values.count - (name == "expiry_at_timestamp_domain_end" ? 1 : 0), name)
         }
-        XCTAssertEqual(checked, 27)
+        XCTAssertEqual(checked, 42)
     }
 
     func testIssuePersistsBeforeExposureAndLoadsByDigest() async throws {

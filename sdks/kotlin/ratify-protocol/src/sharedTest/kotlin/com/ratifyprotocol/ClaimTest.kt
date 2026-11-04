@@ -843,7 +843,22 @@ class ClaimTest {
             "lease_expires_during_status_then_recovery", "clock_regression_during_evaluation",
             "clock_regression_at_release_is_withheld", "withheld_after_recorded_release_records_nothing",
             "receipt_abandoned", "clock_regression_at_claim", "different_proof_for_claimed_challenge_is_replay",
-            "stream_sequence_rules", "outbox_retained_past_challenge_expiry")
+            "stream_sequence_rules", "outbox_retained_past_challenge_expiry",
+            "finalize_rejects_body_with_other_verifier_id", "finalize_rejects_body_with_other_agent_id",
+            "finalize_rejects_body_with_other_bundle_hash", "finalize_rejects_body_with_other_issuer_ids",
+            "finalize_rejects_body_with_other_required_scope", "finalize_rejects_body_with_other_context_policy_digest",
+            "finalize_rejects_body_with_other_constraint_evaluators", "finalize_rejects_body_with_other_terminal_decision",
+            "finalize_rejects_body_with_other_terminal_identity_status", "finalize_rejects_body_with_other_terminal_members",
+            "finalize_rejects_body_with_other_terminal_spelling", "finalize_rejects_body_with_other_terminal_without_identity_status",
+            "finalize_rejects_body_with_null_context_policy_digest_unverified", "finalize_rejects_body_with_null_context_policy_digest_unbound",
+            "finalize_rejects_allow_without_allow_horizon", "finalize_rejects_negative_allow_horizon_on_non_allow",
+            "finalize_rejects_allow_horizon_beyond_timestamp_domain", "finalize_rejects_allow_horizon_on_non_allow",
+            "finalize_rejects_body_with_context_policy_digest_not_evaluated", "resume_finalized_claim_without_handoff",
+            "recover_rejects_malformed_body", "recover_rejects_body_for_another_claim",
+            "recover_rejects_context_policy_digest_not_evaluated", "recover_rejects_other_decision",
+            "recover_rejects_terminal_result_other_than_body", "recover_direct_accepts_canonical_interrupted_body",
+            "recover_rejects_terminal_result_with_other_members", "recover_rejects_terminal_result_not_canonical",
+            "recover_rejects_terminal_result_without_identity_status", "recover_rejects_terminal_result_other_identity_status")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -862,7 +877,22 @@ class ClaimTest {
             "clock_regression_at_release_is_withheld" to 7, "withheld_after_recorded_release_records_nothing" to 8,
             "receipt_abandoned" to 8, "clock_regression_at_claim" to 5,
             "different_proof_for_claimed_challenge_is_replay" to 3, "stream_sequence_rules" to 7,
-            "outbox_retained_past_challenge_expiry" to 6)
+            "outbox_retained_past_challenge_expiry" to 6,
+            "finalize_rejects_body_with_other_verifier_id" to 5, "finalize_rejects_body_with_other_agent_id" to 5,
+            "finalize_rejects_body_with_other_bundle_hash" to 5, "finalize_rejects_body_with_other_issuer_ids" to 5,
+            "finalize_rejects_body_with_other_required_scope" to 5, "finalize_rejects_body_with_other_context_policy_digest" to 5,
+            "finalize_rejects_body_with_other_constraint_evaluators" to 5, "finalize_rejects_body_with_other_terminal_decision" to 5,
+            "finalize_rejects_body_with_other_terminal_identity_status" to 5, "finalize_rejects_body_with_other_terminal_members" to 5,
+            "finalize_rejects_body_with_other_terminal_spelling" to 5, "finalize_rejects_body_with_other_terminal_without_identity_status" to 5,
+            "finalize_rejects_body_with_null_context_policy_digest_unverified" to 4, "finalize_rejects_body_with_null_context_policy_digest_unbound" to 4,
+            "finalize_rejects_allow_without_allow_horizon" to 4, "finalize_rejects_negative_allow_horizon_on_non_allow" to 3,
+            "finalize_rejects_allow_horizon_beyond_timestamp_domain" to 3, "finalize_rejects_allow_horizon_on_non_allow" to 4,
+            "finalize_rejects_body_with_context_policy_digest_not_evaluated" to 4, "resume_finalized_claim_without_handoff" to 6,
+            "recover_rejects_malformed_body" to 6, "recover_rejects_body_for_another_claim" to 6,
+            "recover_rejects_context_policy_digest_not_evaluated" to 6, "recover_rejects_other_decision" to 6,
+            "recover_rejects_terminal_result_other_than_body" to 6, "recover_direct_accepts_canonical_interrupted_body" to 7,
+            "recover_rejects_terminal_result_with_other_members" to 6, "recover_rejects_terminal_result_not_canonical" to 6,
+            "recover_rejects_terminal_result_without_identity_status" to 6, "recover_rejects_terminal_result_other_identity_status" to 6)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -870,7 +900,9 @@ class ClaimTest {
             "set_ack_withheld" to setOf("op", "withheld", "expect"),
             "resume" to setOf("op", "request", "expect"),
             "abandon" to setOf("op", "expect"), "claim_only" to setOf("op", "request", "expect"),
-            "recover" to setOf("op", "request", "expect"))
+            "recover" to setOf("op", "request", "expect"),
+            "finalize" to setOf("op", "request", "terminal_b64", "body_b64", "expect"),
+            "recover_direct" to setOf("op", "request", "terminal_b64", "body_b64", "expect"))
         val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == corpus.getString("verifier_key") }
@@ -882,6 +914,7 @@ class ClaimTest {
             val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"), logId, key)
             val committed = mutableMapOf<String, CommittedOutcome>()
             val claimed = mutableMapOf<String, ChallengeClaim>()
+            val owners = mutableMapOf<String, ByteArray>()
             val receipts = mutableMapOf<String, ByteArray>()
             val publishedWires = mutableMapOf<String, ByteArray>()
             for ((index, step) in scenario.arr("steps").withIndex()) {
@@ -891,7 +924,8 @@ class ClaimTest {
                 val at = "$name step $index $op"
                 val expectedStepKeys = stepKeys[op].orEmpty() +
                     (if (op == "release" && step.has("receipt_of")) setOf("receipt_of") else emptySet()) +
-                    (if (op == "verify" && step.has("mode")) setOf("mode", "time") else emptySet())
+                    (if (op == "verify" && step.has("mode")) setOf("mode", "time") else emptySet()) +
+                    (if (op == "finalize" && step.has("allow_valid_until")) setOf("allow_valid_until") else emptySet())
                 assertEquals(at, expectedStepKeys, step.keys().asSequence().toSet())
                 when (op) {
                     "set_time" -> {
@@ -916,7 +950,25 @@ class ClaimTest {
                             expected.issuedAt, expected.expiresAt, req.maxChallengeAgeSeconds, req.futureSkewSeconds,
                             bundle.streamId, bundle.streamSeq, emptyList())
                         claimed[requestName] = claim
-                        assertEquals(at, want.getString("disposition"), store.claim(claim).disposition.spelling)
+                        val result = store.claim(claim)
+                        assertEquals(at, want.getString("disposition"), result.disposition.spelling)
+                        owners[requestName] = result.ownerToken
+                    }
+                    "finalize", "recover_direct" -> {
+                        val claim = checkNotNull(claimed[requestName]) { at }
+                        val terminal = Base64.getDecoder().decode(step.getString("terminal_b64"))
+                        val body = Base64.getDecoder().decode(step.getString("body_b64"))
+                        try {
+                            val changed = if (op == "finalize") store.finalize(claim.claimId,
+                                checkNotNull(owners[requestName]) { at }, terminal, body,
+                                if (step.has("allow_valid_until")) step.getLong("allow_valid_until") else 0)
+                                else store.recoverInterrupted(claim.claimId, terminal, body)
+                            assertEquals(at, setOf("finalize_result"), want.keys().asSequence().toSet())
+                            assertEquals(at, want.getString("finalize_result"), if (changed) "committed" else "identical")
+                        } catch (e: StoreError.Classified) {
+                            assertEquals(at, setOf("error_class"), want.keys().asSequence().toSet())
+                            assertEquals(at, want.getString("error_class"), e.errorClass.spelling)
+                        }
                     }
                     "verify" -> {
                         assertEquals(at, if (want.has("error_class")) setOf("stage", "error_class")
@@ -932,6 +984,9 @@ class ClaimTest {
                         } else if (name == "clock_regression_at_claim" && index == 2) {
                             assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
                             assertEquals(at, 1_799_999_999L, currentTime)
+                        } else if (name.startsWith("recover_") &&
+                            (index == 5 || name == "recover_direct_accepts_canonical_interrupted_body" && index == 6)) {
+                            assertEquals(at, 1_800_000_030L, currentTime)
                         } else if (name == "outbox_retained_past_challenge_expiry" && index == 5) {
                             assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
                             assertEquals(at, 1_800_000_290L, currentTime)

@@ -897,7 +897,23 @@ final class ClaimTests: XCTestCase {
             "lease_expires_during_status_then_recovery", "clock_regression_during_evaluation",
             "clock_regression_at_release_is_withheld", "withheld_after_recorded_release_records_nothing",
             "receipt_abandoned", "clock_regression_at_claim", "different_proof_for_claimed_challenge_is_replay",
-            "stream_sequence_rules", "outbox_retained_past_challenge_expiry"]
+            "stream_sequence_rules", "outbox_retained_past_challenge_expiry",
+            "finalize_rejects_body_with_other_verifier_id", "finalize_rejects_body_with_other_agent_id",
+            "finalize_rejects_body_with_other_bundle_hash", "finalize_rejects_body_with_other_issuer_ids",
+            "finalize_rejects_body_with_other_required_scope", "finalize_rejects_body_with_other_context_policy_digest",
+            "finalize_rejects_body_with_other_constraint_evaluators", "finalize_rejects_body_with_other_terminal_decision",
+            "finalize_rejects_body_with_other_terminal_identity_status", "finalize_rejects_body_with_other_terminal_members",
+            "finalize_rejects_body_with_other_terminal_spelling", "finalize_rejects_body_with_other_terminal_without_identity_status",
+            "finalize_rejects_body_with_null_context_policy_digest_unverified",
+            "finalize_rejects_body_with_null_context_policy_digest_unbound", "finalize_rejects_allow_without_allow_horizon",
+            "finalize_rejects_negative_allow_horizon_on_non_allow", "finalize_rejects_allow_horizon_beyond_timestamp_domain",
+            "finalize_rejects_allow_horizon_on_non_allow", "finalize_rejects_body_with_context_policy_digest_not_evaluated",
+            "resume_finalized_claim_without_handoff", "recover_rejects_malformed_body",
+            "recover_rejects_body_for_another_claim", "recover_rejects_context_policy_digest_not_evaluated",
+            "recover_rejects_other_decision", "recover_rejects_terminal_result_other_than_body",
+            "recover_direct_accepts_canonical_interrupted_body", "recover_rejects_terminal_result_with_other_members",
+            "recover_rejects_terminal_result_not_canonical", "recover_rejects_terminal_result_without_identity_status",
+            "recover_rejects_terminal_result_other_identity_status"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -916,13 +932,31 @@ final class ClaimTests: XCTestCase {
             "clock_regression_at_release_is_withheld": 7, "withheld_after_recorded_release_records_nothing": 8,
             "receipt_abandoned": 8, "clock_regression_at_claim": 5,
             "different_proof_for_claimed_challenge_is_replay": 3, "stream_sequence_rules": 7,
-            "outbox_retained_past_challenge_expiry": 6]
+            "outbox_retained_past_challenge_expiry": 6,
+            "finalize_rejects_body_with_other_verifier_id": 5, "finalize_rejects_body_with_other_agent_id": 5,
+            "finalize_rejects_body_with_other_bundle_hash": 5, "finalize_rejects_body_with_other_issuer_ids": 5,
+            "finalize_rejects_body_with_other_required_scope": 5, "finalize_rejects_body_with_other_context_policy_digest": 5,
+            "finalize_rejects_body_with_other_constraint_evaluators": 5, "finalize_rejects_body_with_other_terminal_decision": 5,
+            "finalize_rejects_body_with_other_terminal_identity_status": 5, "finalize_rejects_body_with_other_terminal_members": 5,
+            "finalize_rejects_body_with_other_terminal_spelling": 5, "finalize_rejects_body_with_other_terminal_without_identity_status": 5,
+            "finalize_rejects_body_with_null_context_policy_digest_unverified": 4,
+            "finalize_rejects_body_with_null_context_policy_digest_unbound": 4, "finalize_rejects_allow_without_allow_horizon": 4,
+            "finalize_rejects_negative_allow_horizon_on_non_allow": 3, "finalize_rejects_allow_horizon_beyond_timestamp_domain": 3,
+            "finalize_rejects_allow_horizon_on_non_allow": 4, "finalize_rejects_body_with_context_policy_digest_not_evaluated": 4,
+            "resume_finalized_claim_without_handoff": 6, "recover_rejects_malformed_body": 6,
+            "recover_rejects_body_for_another_claim": 6, "recover_rejects_context_policy_digest_not_evaluated": 6,
+            "recover_rejects_other_decision": 6, "recover_rejects_terminal_result_other_than_body": 6,
+            "recover_direct_accepts_canonical_interrupted_body": 7, "recover_rejects_terminal_result_with_other_members": 6,
+            "recover_rejects_terminal_result_not_canonical": 6, "recover_rejects_terminal_result_without_identity_status": 6,
+            "recover_rejects_terminal_result_other_identity_status": 6]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
             "set_time": ["op", "time", "expect"], "set_ack_withheld": ["op", "withheld", "expect"],
             "resume": ["op", "request", "expect"], "abandon": ["op", "expect"],
-            "claim_only": ["op", "request", "expect"], "recover": ["op", "request", "expect"]]
+            "claim_only": ["op", "request", "expect"], "recover": ["op", "request", "expect"],
+            "finalize": ["op", "request", "terminal_b64", "body_b64", "expect"],
+            "recover_direct": ["op", "request", "terminal_b64", "body_b64", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -931,6 +965,7 @@ final class ClaimTests: XCTestCase {
                 logId: corpus.s("log_id"), verifierKey: key)
             var committed: [String: CommittedOutcome] = [:]
             var claimed: [String: ChallengeClaim] = [:]
+            var owners: [String: Data] = [:]
             var receipts: [String: Data] = [:]
             var publishedWires: [String: Data] = [:]
             for (index, step) in scenario.arr("steps").enumerated() {
@@ -941,6 +976,7 @@ final class ClaimTests: XCTestCase {
                 var expectedStepKeys = stepKeys[op] ?? []
                 if op == "release" && step["receipt_of"] != nil { expectedStepKeys.insert("receipt_of") }
                 if op == "verify" && step["mode"] != nil { expectedStepKeys.formUnion(["mode", "time"]) }
+                if op == "finalize" && step["allow_valid_until"] != nil { expectedStepKeys.insert("allow_valid_until") }
                 XCTAssertEqual(Set(step.keys), expectedStepKeys, at)
                 switch op {
                 case "set_time":
@@ -968,6 +1004,28 @@ final class ClaimTests: XCTestCase {
                     claimed[requestName] = claim
                     let claimResult = try await store.claim(claim)
                     XCTAssertEqual(claimResult.disposition.rawValue, want.s("disposition"), at)
+                    owners[requestName] = claimResult.ownerToken
+                case "finalize", "recover_direct":
+                    let claim = try XCTUnwrap(claimed[requestName], at)
+                    let terminal = try XCTUnwrap(Data(base64Encoded: step.s("terminal_b64")), at)
+                    let body = try XCTUnwrap(Data(base64Encoded: step.s("body_b64")), at)
+                    do {
+                        let changed: Bool
+                        if op == "finalize" {
+                            changed = try await store.finalize(claimId: claim.claimId,
+                                ownerToken: try XCTUnwrap(owners[requestName], at), terminalResult: terminal,
+                                receiptBody: body, allowValidUntil: step["allow_valid_until"] == nil
+                                    ? 0 : Int64(step.int("allow_valid_until")))
+                        } else {
+                            changed = try await store.recoverInterrupted(claimId: claim.claimId,
+                                terminalResult: terminal, receiptBody: body)
+                        }
+                        XCTAssertEqual(Set(want.keys), ["finalize_result"], at)
+                        XCTAssertEqual(changed ? "committed" : "identical", want.s("finalize_result"), at)
+                    } catch {
+                        XCTAssertEqual(Set(want.keys), ["error_class"], at)
+                        XCTAssertEqual((error as? StoreError)?.errorClass?.rawValue, want.s("error_class"), at)
+                    }
                 case "verify":
                     XCTAssertEqual(Set(want.keys), want["error_class"] != nil ? ["stage", "error_class"]
                         : want["decision"] == nil ? ["stage", "disposition"]
@@ -981,6 +1039,9 @@ final class ClaimTests: XCTestCase {
                     } else if name == "clock_regression_at_claim" && index == 2 {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, 1_799_999_999, at)
+                    } else if name.hasPrefix("recover_") &&
+                        (index == 5 || name == "recover_direct_accepts_canonical_interrupted_body" && index == 6) {
+                        XCTAssertEqual(currentTime, 1_800_000_030, at)
                     } else if name == "outbox_retained_past_challenge_expiry" && index == 5 {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, 1_800_000_290, at)

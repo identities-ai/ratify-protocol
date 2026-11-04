@@ -16,6 +16,13 @@ import org.json.JSONObject
 import kotlinx.coroutines.delay
 
 class ClaimTest {
+    private class ReceiverProbe(private val reject: Boolean) : ReceiverBindingHook {
+        val calls = AtomicInteger()
+        override fun validate(bundle: ProofBundle, expected: ExpectedChallenge) {
+            calls.incrementAndGet()
+            if (reject) throw StoreError.Unavailable("scripted receiver rejection")
+        }
+    }
     private class UnavailableClaimStore : ClaimStore {
         var calls = 0
         override suspend fun authoritativeTime(): Long = error("preflight must not read store time")
@@ -46,6 +53,7 @@ class ClaimTest {
             expected.getLong("expires_at"), expected.getString("verifier_namespace"),
             expected.getLong("replay_epoch"), expected.getString("verifier_id"),
             expected.getString("expected_agent_id"), publicKeyOf(key),
+            expectedReceiverId = expected.opt("expected_receiver_id") as? String ?: "",
             expectedSessionContext = expected.b64("expected_session_context_b64"))
         val policyBounds = vector.getJSONObject("status_policy")
         val statusKeysObject = vector.getJSONObject("status_keys")
@@ -62,7 +70,14 @@ class ClaimTest {
             challenge, contextPolicy, vector.getString("required_scope"), vector.getString("configured_namespace"),
             vector.getLong("configured_replay_epoch"), vector.getString("configured_verifier_id"),
             vector.getLong("now"), vector.getLong("max_challenge_age_seconds"),
-            vector.getLong("future_skew_seconds"), ConstraintContext(extensionCounts = counts, extensionValues = values),
+            vector.getLong("future_skew_seconds"), ConstraintContext(
+                requestedAmountMicros = requestContext.optLong("requested_amount_micros"),
+                requestedCurrency = requestContext.optString("requested_currency"),
+                hasAmount = requestContext.optBoolean("has_amount"),
+                requestedResourceId = requestContext.optString("requested_resource_id"),
+                requestedPath = requestContext.optString("requested_path"),
+                hasResource = requestContext.optBoolean("has_resource"),
+                extensionCounts = counts, extensionValues = values),
             vector.getString("tzdb_version"),
             statusKeys, RevocationStatusPolicy(policyBounds.getLong("max_list_lifetime_seconds"),
                 policyBounds.getLong("max_status_age_seconds"), policyBounds.getLong("clock_skew_seconds")), evaluators)
@@ -75,6 +90,42 @@ class ClaimTest {
         assertEquals(VerifyStage.PREFLIGHT, outcome.stage)
         assertEquals(ErrorClass.CLAIM_STORE_UNAVAILABLE, outcome.errorClass)
         assertEquals(1, store.calls)
+    }
+
+    @Test fun verifierCorpusPreflightRefusesBeforeClaim() = runBlocking {
+        val root = File(System.getProperty("ratify.corpus")!!)
+        Corpus.read = { File(root, it).readBytes() }
+        val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter { vector ->
+            vector.getJSONObject("expected").getString("stage") == "preflight" &&
+            vector.optJSONObject("expected_challenge")?.optJSONObject("expected_agent_public_key") != null &&
+            vector.getJSONObject("expected_challenge").opt("expected_agent_id") is String &&
+            vector.getJSONObject("expected_challenge").opt("expected_session_context_b64") is String &&
+            vector.optJSONObject("context_policy")?.opt("expected_session_context_b64") is String &&
+            vector.getString("claim_store") == "create"
+        }
+        assertEquals(129, vectors.size)
+        for (vector in vectors) {
+            val name = vector.getString("name")
+            val store = UnavailableClaimStore()
+            val expectedClass = vector.getJSONObject("expected").getString("error_class")
+            val registrations = vector.optJSONArray("constraint_evaluators")?.let { array ->
+                (0 until array.length()).map { index ->
+                    val item = array.getJSONObject(index)
+                    ConstraintEvaluatorRegistration(ConstraintProfileDescriptor(
+                        item.getString("profile"), item.getString("type")), VectorEvaluator("pass"))
+                }
+            } ?: emptyList()
+            val registry = if (registrations.isEmpty()) null else ConstraintEvaluatorRegistry(1000u, registrations)
+            val req = request(name, registry)
+            val hookMode = vector.getString("receiver_binding_hook")
+            val hook = if (hookMode == "absent") null else ReceiverProbe(hookMode == "reject")
+            val outcome = verifyProofBundle(req, store, receiverBinding = hook)
+            assertEquals(name, VerifyStage.PREFLIGHT, outcome.stage)
+            assertEquals(name, expectedClass, outcome.errorClass?.spelling)
+            assertEquals(name, vector.getJSONObject("expected").getJSONObject("callback_counts").getInt("receiver_binding"),
+                hook?.calls?.get() ?: 0)
+            assertEquals(name, 0, store.calls)
+        }
     }
 
     private class CreatedClaimStore(private val onFinalize: (suspend () -> Unit)? = null) : RateAtFinalizationClaimStore {

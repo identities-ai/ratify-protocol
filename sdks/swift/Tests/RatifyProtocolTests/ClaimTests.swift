@@ -3,6 +3,17 @@ import XCTest
 import RatifyProtocol
 
 final class ClaimTests: XCTestCase {
+    final class ReceiverProbe: ReceiverBindingHook, @unchecked Sendable {
+        let reject: Bool
+        private let lock = NSLock()
+        private var count = 0
+        init(reject: Bool) { self.reject = reject }
+        var calls: Int { lock.lock(); defer { lock.unlock() }; return count }
+        func validate(bundle: ProofBundle, expected: ExpectedChallenge) throws {
+            lock.lock(); count += 1; lock.unlock()
+            if reject { throw StoreError.unavailable("scripted receiver rejection") }
+        }
+    }
     actor UnavailableClaimStore: ClaimStore {
         private(set) var calls = 0
         func authoritativeTime() -> Int64 { XCTFail("preflight must not read store time"); return 0 }
@@ -33,6 +44,7 @@ final class ClaimTests: XCTestCase {
             replayEpoch: Int64(expected.int("replay_epoch")), verifierId: expected.s("verifier_id"),
             expectedAgentId: expected.s("expected_agent_id"),
             expectedAgentPublicKey: HybridPublicKey(ed25519: key.b64("ed25519"), mlDsa65: key.b64("ml_dsa_65")),
+            expectedReceiverId: expected["expected_receiver_id"] as? String ?? "",
             expectedSessionContext: expected.b64("expected_session_context_b64"))
         let statusPolicy = vector.obj("status_policy")
         let statusKeys = vector.obj("status_keys").mapValues { value -> StatusKeyConfig in
@@ -50,7 +62,13 @@ final class ClaimTests: XCTestCase {
             verifierId: vector.s("configured_verifier_id"), now: Int64(vector.int("now")),
             maxChallengeAgeSeconds: Int64(vector.int("max_challenge_age_seconds")),
             futureSkewSeconds: Int64(vector.int("future_skew_seconds")),
-            context: ConstraintContext(extensionCounts: counts, extensionValues: values),
+            context: ConstraintContext(requestedAmountMicros: (requestContext["requested_amount_micros"] as? NSNumber)?.int64Value ?? 0,
+                requestedCurrency: requestContext["requested_currency"] as? String ?? "",
+                hasAmount: requestContext["has_amount"] as? Bool ?? false,
+                requestedResourceId: requestContext["requested_resource_id"] as? String ?? "",
+                requestedPath: requestContext["requested_path"] as? String ?? "",
+                hasResource: requestContext["has_resource"] as? Bool ?? false,
+                extensionCounts: counts, extensionValues: values),
             tzdbVersion: vector.s("tzdb_version"), statusKeys: statusKeys,
             statusPolicy: RevocationStatusPolicy(maxListLifetimeSeconds: Int64(statusPolicy.int("max_list_lifetime_seconds")),
                 maxStatusAgeSeconds: Int64(statusPolicy.int("max_status_age_seconds")),
@@ -66,6 +84,40 @@ final class ClaimTests: XCTestCase {
         XCTAssertEqual(outcome.errorClass, .claimStoreUnavailable, outcome.errorDetail ?? "")
         let calls = await store.calls
         XCTAssertEqual(calls, 1)
+    }
+
+    func testVerifierCorpusPreflightRefusesBeforeClaim() async throws {
+        let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
+            $0.obj("expected").s("stage") == "preflight" &&
+            $0["expected_challenge"] is [String: Any] &&
+            $0["context_policy"] is [String: Any] &&
+            ($0.obj("expected_challenge")["expected_agent_public_key"] is [String: Any]) &&
+            ($0.obj("expected_challenge")["expected_agent_id"] is String) &&
+            ($0.obj("expected_challenge")["expected_session_context_b64"] is String) &&
+            ($0.obj("context_policy")["expected_session_context_b64"] is String) &&
+            $0.s("claim_store") == "create"
+        }
+        XCTAssertEqual(vectors.count, 129)
+        for vector in vectors {
+            let name = vector.s("name")
+            let store = UnavailableClaimStore()
+            let registrations = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
+                ConstraintEvaluatorRegistration(descriptor: ConstraintProfileDescriptor(
+                    profile: $0.s("profile"), type: $0.s("type")), evaluator: VectorEvaluator(.pass))
+            }
+            let registry = registrations.isEmpty ? nil : try ConstraintEvaluatorRegistry(
+                timeoutMilliseconds: 1000, registrations: registrations)
+            let req = try request(name, evaluators: registry)
+            let hookMode = vector.s("receiver_binding_hook")
+            let probe = hookMode == "absent" ? nil : ReceiverProbe(reject: hookMode == "reject")
+            let hook: (any ReceiverBindingHook)? = probe
+            let outcome = try await Ratify.verifyProofBundle(req, claimStore: store, receiverBinding: hook)
+            XCTAssertEqual(outcome.stage, .preflight, name)
+            XCTAssertEqual(outcome.errorClass?.rawValue, vector.obj("expected").s("error_class"), name)
+            XCTAssertEqual(probe?.calls ?? 0, vector.obj("expected").obj("callback_counts").int("receiver_binding"), name)
+            let calls = await store.calls
+            XCTAssertEqual(calls, 0, name)
+        }
     }
 
     actor CreatedClaimStore: RateAtFinalizationClaimStore {

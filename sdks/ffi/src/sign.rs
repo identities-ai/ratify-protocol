@@ -141,7 +141,7 @@ pub trait FfiSigner: Send + Sync {
 
 /// Adapts a foreign signer to the core's `SignerV2`. One foreign call per
 /// trait method; the core verifies whatever comes back.
-struct Foreign(Arc<dyn FfiSigner>);
+pub(crate) struct Foreign(pub(crate) Arc<dyn FfiSigner>);
 
 impl SignerV2 for Foreign {
     fn public_key_v2(&self) -> HybridPublicKey {

@@ -7454,8 +7454,9 @@
  },
  "V2StatusPublication": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublication",
+  "status": "mapped",
+  "swift": "StatusPublication"
  },
  "V2StatusPublication::clone": {
   "kind": "fn",
@@ -7469,23 +7470,27 @@
  },
  "V2StatusPublication::list": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublication.list",
+  "status": "mapped",
+  "swift": "StatusPublication.list"
  },
  "V2StatusPublication::push": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublication.push",
+  "status": "mapped",
+  "swift": "StatusPublication.push"
  },
  "V2StatusPublication::state": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublication.state",
+  "status": "mapped",
+  "swift": "StatusPublication.state"
  },
  "V2StatusPublisher": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisher",
+  "status": "mapped",
+  "swift": "StatusPublisher"
  },
  "V2StatusPublisher::fmt": {
   "kind": "fn",
@@ -7494,33 +7499,39 @@
  },
  "V2StatusPublisher::genesis": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisher.genesis",
+  "status": "mapped",
+  "swift": "StatusPublisher.genesis"
  },
  "V2StatusPublisher::heartbeat": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisher.heartbeat",
+  "status": "mapped",
+  "swift": "StatusPublisher.heartbeat"
  },
  "V2StatusPublisher::issuer_id": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisher.issuerId",
+  "status": "mapped",
+  "swift": "StatusPublisher.issuerId"
  },
  "V2StatusPublisher::revoke": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisher.revoke",
+  "status": "mapped",
+  "swift": "StatusPublisher.revoke"
  },
  "V2StatusPublisher::status_key": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisher.statusKey",
+  "status": "mapped",
+  "swift": "StatusPublisher.statusKey"
  },
  "V2StatusPublisherState": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisherState",
+  "status": "mapped",
+  "swift": "StatusPublisherState"
  },
  "V2StatusPublisherState::clone": {
   "kind": "fn",
@@ -7544,28 +7555,33 @@
  },
  "V2StatusPublisherState::issuer_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisherState.issuerId",
+  "status": "mapped",
+  "swift": "StatusPublisherState.issuerId"
  },
  "V2StatusPublisherState::revoked": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisherState.revoked",
+  "status": "mapped",
+  "swift": "StatusPublisherState.revoked"
  },
  "V2StatusPublisherState::sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisherState.sequence",
+  "status": "mapped",
+  "swift": "StatusPublisherState.sequence"
  },
  "V2StatusPublisherState::status_key_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisherState.statusKeyId",
+  "status": "mapped",
+  "swift": "StatusPublisherState.statusKeyId"
  },
  "V2StatusPublisherState::updated_at": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "StatusPublisherState.updatedAt",
+  "status": "mapped",
+  "swift": "StatusPublisherState.updatedAt"
  },
  "V2StatusRoleBindings": {
   "kind": "struct",
@@ -8799,13 +8815,15 @@
  },
  "new_v2_status_publisher": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "newStatusPublisher",
+  "status": "mapped",
+  "swift": "Ratify.newStatusPublisher"
  },
  "new_v2_status_publisher_with_key": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "newStatusPublisher",
+  "status": "mapped",
+  "swift": "Ratify.newStatusPublisher"
  },
  "operation_context_v2_bytes": {
   "kind": "fn",

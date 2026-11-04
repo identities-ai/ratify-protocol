@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 /** security-journal.json through the public store callbacks and snapshot API. */
 object JournalVectors {
-    private class Store : SecurityJournalStore {
+    class Store : SecurityJournalStore {
         private var state = emptySecurityJournalSnapshot()
         override suspend fun load(): SecurityJournalSnapshot = synchronized(this) { state }
         override suspend fun compareAndSwap(expected: SecurityJournalHead, next: SecurityJournalSnapshot) {

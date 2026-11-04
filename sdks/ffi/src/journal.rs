@@ -85,7 +85,7 @@ pub trait FfiJournalStore: Send + Sync {
     ) -> Result<(), FfiJournalStoreError>;
 }
 
-struct ForeignJournalStore(Arc<dyn FfiJournalStore>);
+pub(crate) struct ForeignJournalStore(pub(crate) Arc<dyn FfiJournalStore>);
 
 impl ForeignJournalStore {
     fn context(ctx: &V2Context) -> Arc<FfiJournalContext> {

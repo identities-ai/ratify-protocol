@@ -2439,6 +2439,176 @@ func FfiConverterTypeFfiSplitKey_lower(_ value: FfiSplitKey) -> UInt64 {
 
 
 
+
+
+protocol FfiStatusPublisherProtocol: AnyObject, Sendable {
+    
+    func genesis(token: FfiCancelToken, updatedAt: Int64) throws  -> FfiStatusPublication
+    
+    func heartbeat(token: FfiCancelToken, state: FfiStatusPublisherState, updatedAt: Int64) throws  -> FfiStatusPublication
+    
+    func issuerId() throws  -> String
+    
+    func revoke(token: FfiCancelToken, state: FfiStatusPublisherState, certIds: [String], at: Int64) throws  -> FfiStatusPublication
+    
+    func statusKey() throws  -> FfiPublicKey
+    
+}
+class FfiStatusPublisher: FfiStatusPublisherProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffistatuspublisher(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffistatuspublisher(handle, $0) }
+    }
+
+    
+
+    
+func genesis(token: FfiCancelToken, updatedAt: Int64)throws  -> FfiStatusPublication  {
+    return try  FfiConverterTypeFfiStatusPublication_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffistatuspublisher_genesis(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterInt64.lower(updatedAt),uniffiCallStatus
+    )
+})
+}
+    
+func heartbeat(token: FfiCancelToken, state: FfiStatusPublisherState, updatedAt: Int64)throws  -> FfiStatusPublication  {
+    return try  FfiConverterTypeFfiStatusPublication_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffistatuspublisher_heartbeat(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterTypeFfiStatusPublisherState_lower(state),
+        FfiConverterInt64.lower(updatedAt),uniffiCallStatus
+    )
+})
+}
+    
+func issuerId()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffistatuspublisher_issuer_id(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+func revoke(token: FfiCancelToken, state: FfiStatusPublisherState, certIds: [String], at: Int64)throws  -> FfiStatusPublication  {
+    return try  FfiConverterTypeFfiStatusPublication_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffistatuspublisher_revoke(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterTypeFfiStatusPublisherState_lower(state),
+        FfiConverterSequenceString.lower(certIds),
+        FfiConverterInt64.lower(at),uniffiCallStatus
+    )
+})
+}
+    
+func statusKey()throws  -> FfiPublicKey  {
+    return try  FfiConverterTypeFfiPublicKey_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffistatuspublisher_status_key(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStatusPublisher: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiStatusPublisher
+
+    static func lift(_ handle: UInt64) throws -> FfiStatusPublisher {
+        return FfiStatusPublisher(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiStatusPublisher) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStatusPublisher {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiStatusPublisher, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusPublisher_lift(_ handle: UInt64) throws -> FfiStatusPublisher {
+    return try FfiConverterTypeFfiStatusPublisher.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusPublisher_lower(_ value: FfiStatusPublisher) -> UInt64 {
+    return FfiConverterTypeFfiStatusPublisher.lower(value)
+}
+
+
+
+
 /**
  * The §6.10 archival proof-bundle result. It has no decision and is never
  * actionable; `error_class` is None when every check passed.
@@ -4300,6 +4470,130 @@ func FfiConverterTypeFfiStatusPolicy_lower(_ value: FfiStatusPolicy) -> RustBuff
 }
 
 
+struct FfiStatusPublication: Equatable, Hashable {
+    var state: FfiStatusPublisherState
+    var list: FfiRevocationList
+    var push: FfiRevocationPush?
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(state: FfiStatusPublisherState, list: FfiRevocationList, push: FfiRevocationPush?) {
+        self.state = state
+        self.list = list
+        self.push = push
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiStatusPublication: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStatusPublication: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStatusPublication {
+        return
+            try FfiStatusPublication(
+                state: FfiConverterTypeFfiStatusPublisherState.read(from: &buf), 
+                list: FfiConverterTypeFfiRevocationList.read(from: &buf), 
+                push: FfiConverterOptionTypeFfiRevocationPush.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStatusPublication, into buf: inout [UInt8]) {
+        FfiConverterTypeFfiStatusPublisherState.write(value.state, into: &buf)
+        FfiConverterTypeFfiRevocationList.write(value.list, into: &buf)
+        FfiConverterOptionTypeFfiRevocationPush.write(value.push, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusPublication_lift(_ buf: RustBuffer) throws -> FfiStatusPublication {
+    return try FfiConverterTypeFfiStatusPublication.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusPublication_lower(_ value: FfiStatusPublication) -> RustBuffer {
+    return FfiConverterTypeFfiStatusPublication.lower(value)
+}
+
+
+struct FfiStatusPublisherState: Equatable, Hashable {
+    var issuerId: String
+    var statusKeyId: String
+    var sequence: Int64
+    var updatedAt: Int64
+    var revoked: [String]
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(issuerId: String, statusKeyId: String, sequence: Int64, updatedAt: Int64, revoked: [String]) {
+        self.issuerId = issuerId
+        self.statusKeyId = statusKeyId
+        self.sequence = sequence
+        self.updatedAt = updatedAt
+        self.revoked = revoked
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiStatusPublisherState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStatusPublisherState: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStatusPublisherState {
+        return
+            try FfiStatusPublisherState(
+                issuerId: FfiConverterString.read(from: &buf), 
+                statusKeyId: FfiConverterString.read(from: &buf), 
+                sequence: FfiConverterInt64.read(from: &buf), 
+                updatedAt: FfiConverterInt64.read(from: &buf), 
+                revoked: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStatusPublisherState, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.issuerId, into: &buf)
+        FfiConverterString.write(value.statusKeyId, into: &buf)
+        FfiConverterInt64.write(value.sequence, into: &buf)
+        FfiConverterInt64.write(value.updatedAt, into: &buf)
+        FfiConverterSequenceString.write(value.revoked, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusPublisherState_lift(_ buf: RustBuffer) throws -> FfiStatusPublisherState {
+    return try FfiConverterTypeFfiStatusPublisherState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStatusPublisherState_lower(_ value: FfiStatusPublisherState) -> RustBuffer {
+    return FfiConverterTypeFfiStatusPublisherState.lower(value)
+}
+
+
 /**
  * A certificate's revocation status from the reducer state.
  */
@@ -6078,6 +6372,30 @@ fileprivate struct FfiConverterOptionTypeFfiRevocationList: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiRevocationPush: FfiConverterRustBuffer {
+    typealias SwiftType = FfiRevocationPush?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiRevocationPush.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiRevocationPush.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiRotationRefusal: FfiConverterRustBuffer {
     typealias SwiftType = FfiRotationRefusal?
 
@@ -7274,6 +7592,30 @@ func ffiTransitionRevocationStatusEpoch(state: FfiStatusState, issuerId: String,
     )
 })
 }
+func ffiNewStatusPublisherWithKey(store: FfiJournalStore, token: FfiCancelToken, issuerKey: FfiPublicKey, statusKey: FfiSoftwareKey, lifetimeSeconds: Int64)throws  -> FfiStatusPublisher  {
+    return try  FfiConverterTypeFfiStatusPublisher_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_new_status_publisher_with_key(
+        FfiConverterTypeFfiJournalStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterTypeFfiPublicKey_lower(issuerKey),
+        FfiConverterTypeFfiSoftwareKey_lower(statusKey),
+        FfiConverterInt64.lower(lifetimeSeconds),uniffiCallStatus
+    )
+})
+}
+func ffiNewStatusPublisherWithSigner(store: FfiJournalStore, token: FfiCancelToken, issuerKey: FfiPublicKey, statusSigner: FfiSigner, lifetimeSeconds: Int64)throws  -> FfiStatusPublisher  {
+    return try  FfiConverterTypeFfiStatusPublisher_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_new_status_publisher_with_signer(
+        FfiConverterTypeFfiJournalStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(token),
+        FfiConverterTypeFfiPublicKey_lower(issuerKey),
+        FfiConverterTypeFfiSigner_lower(statusSigner),
+        FfiConverterInt64.lower(lifetimeSeconds),uniffiCallStatus
+    )
+})
+}
 /**
  * Encode a record of any type, validating it against its schema.
  */
@@ -7907,6 +8249,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_transition_revocation_status_epoch() != 56233) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_new_status_publisher_with_key() != 9427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_new_status_publisher_with_signer() != 12966) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_storage_record() != 54282) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8130,6 +8478,21 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffisplitkey_storage_record() != 3470) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffistatuspublisher_genesis() != 16412) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffistatuspublisher_heartbeat() != 49729) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffistatuspublisher_issuer_id() != 2563) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffistatuspublisher_revoke() != 55155) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffistatuspublisher_status_key() != 56964) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_fficanceltoken_new() != 4070) {

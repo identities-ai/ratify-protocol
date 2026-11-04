@@ -29,15 +29,18 @@ final class ProviderSigner: ExternalSigner, @unchecked Sendable {
     let name: String
     private let lock = NSLock()
     private var n = 0
+    private var signed = 0
     init(_ name: String) { self.name = name }
 
     var calls: Int { lock.lock(); defer { lock.unlock() }; return n }
+    var signCalls: Int { lock.lock(); defer { lock.unlock() }; return signed }
     private func count() { lock.withLock { n += 1 } }
 
     var publicKey: HybridPublicKey { count(); return Fixture.shared.key(name) }
     var mode: SignerMode { count(); return .direct }
     func sign(_ request: SignRequest) async throws -> HybridSignature {
         count()
+        lock.withLock { signed += 1 }
         guard request.publicKey == Fixture.shared.key(name), let ctx = request.mlDsaContext else {
             throw ProviderError.refused
         }

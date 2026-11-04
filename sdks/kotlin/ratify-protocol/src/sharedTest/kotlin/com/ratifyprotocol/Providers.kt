@@ -28,13 +28,16 @@ class ProviderException(message: String) : Exception(message)
 /** A direct-mode provider holding one fixture key, counting every call. */
 class ProviderSigner(private val name: String) : ExternalSigner {
     private val n = AtomicInteger()
+    private val signed = AtomicInteger()
     val calls: Int get() = n.get()
+    val signCalls: Int get() = signed.get()
 
     override val publicKey: HybridPublicKey get() = Fixture.key(name).also { n.incrementAndGet() }
     override val mode: SignerMode get() = SignerMode.DIRECT.also { n.incrementAndGet() }
 
     override suspend fun sign(request: SignRequest): HybridSignature {
         n.incrementAndGet()
+        signed.incrementAndGet()
         val ctx = request.mlDsaContext
         if (request.publicKey != Fixture.key(name) || ctx == null) throw ProviderException("refused")
         return emulatedProviderSign(Fixture.seeds.getValue(name), request.message, ctx) ?: throw ProviderException("refused")

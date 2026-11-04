@@ -739,6 +739,43 @@ public final class com/ratifyprotocol/StatusObject$Push : com/ratifyprotocol/Sta
 	public final fun getPush ()Lcom/ratifyprotocol/RevocationPush;
 }
 
+public final class com/ratifyprotocol/StatusPublication {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getList ()Lcom/ratifyprotocol/RevocationList;
+	public final fun getPush ()Lcom/ratifyprotocol/RevocationPush;
+	public final fun getState ()Lcom/ratifyprotocol/StatusPublisherState;
+	public fun hashCode ()I
+}
+
+public final class com/ratifyprotocol/StatusPublisher {
+	public final fun genesis-Kx4hsE0 (JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun genesis-Kx4hsE0$default (Lcom/ratifyprotocol/StatusPublisher;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun getIssuerId ()Ljava/lang/String;
+	public final fun getStatusKey ()Lcom/ratifyprotocol/HybridPublicKey;
+	public final fun heartbeat-5_5nbZA (Lcom/ratifyprotocol/StatusPublisherState;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun heartbeat-5_5nbZA$default (Lcom/ratifyprotocol/StatusPublisher;Lcom/ratifyprotocol/StatusPublisherState;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun revoke-51bEbmg (Lcom/ratifyprotocol/StatusPublisherState;Ljava/util/List;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun revoke-51bEbmg$default (Lcom/ratifyprotocol/StatusPublisher;Lcom/ratifyprotocol/StatusPublisherState;Ljava/util/List;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/StatusPublisherKt {
+	public static final fun newStatusPublisher-yV_PMig (Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/ExternalSigner;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun newStatusPublisher-yV_PMig (Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/SoftwarePrivateKey;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun newStatusPublisher-yV_PMig$default (Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/ExternalSigner;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun newStatusPublisher-yV_PMig$default (Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/SoftwarePrivateKey;JLkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/ratifyprotocol/StatusPublisherState {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JJLjava/util/List;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIssuerId ()Ljava/lang/String;
+	public final fun getRevoked ()Ljava/util/List;
+	public final fun getSequence ()J
+	public final fun getStatusKeyId ()Ljava/lang/String;
+	public final fun getUpdatedAt ()J
+	public fun hashCode ()I
+}
+
 public final class com/ratifyprotocol/TransactionReceipt {
 	public fun <init> (JLjava/lang/String;JLjava/lang/String;[BLjava/util/List;Ljava/util/List;)V
 	public fun equals (Ljava/lang/Object;)Z

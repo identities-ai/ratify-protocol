@@ -293,6 +293,8 @@ Ratify.keyRotationStatementSignableBytes(_:) [Func] -> Foundation.Data, RatifyPr
 Ratify.migrateSecurityJournalJSON(_:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, Foundation.Data
 Ratify.mldsaContext(_:) [Func] -> Foundation.Data, RatifyProtocol.ObjectType
 Ratify.newKeyRotationJournal(authorityId:recoveryEpoch:role:genesisKey:) [Func] -> RatifyProtocol.RotationJournal, Swift.String, Swift.Int64, Swift.String, RatifyProtocol.HybridPublicKey
+Ratify.newStatusPublisher(store:issuerKey:statusKey:lifetimeSeconds:timeout:) [Func] -> RatifyProtocol.StatusPublisher, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.HybridPublicKey, RatifyProtocol.SoftwarePrivateKey, Swift.Int64, Swift.Duration?
+Ratify.newStatusPublisher(store:issuerKey:statusSigner:lifetimeSeconds:timeout:) [Func] -> RatifyProtocol.StatusPublisher, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.HybridPublicKey, any RatifyProtocol.ExternalSigner, Swift.Int64, Swift.Duration?
 Ratify.operationContextHash(_:) [Func] -> Foundation.Data, RatifyProtocol.OperationContext
 Ratify.presentationSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.ProofBundle
 Ratify.protocolClaimId(namespace:replayEpoch:challenge:) [Func] -> Swift.String, Swift.String, Swift.Int64, Foundation.Data
@@ -603,6 +605,29 @@ StatusObject.hash(into:) [Func] -> (), Swift.Hasher
 StatusObject.hashValue [Var] -> Swift.Int
 StatusObject.list [EnumElement] -> (RatifyProtocol.StatusObject.Type) -> (RatifyProtocol.RevocationList) -> RatifyProtocol.StatusObject
 StatusObject.push [EnumElement] -> (RatifyProtocol.StatusObject.Type) -> (RatifyProtocol.RevocationPush) -> RatifyProtocol.StatusObject
+StatusPublication [Struct]
+StatusPublication.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.StatusPublication, RatifyProtocol.StatusPublication
+StatusPublication.hash(into:) [Func] -> (), Swift.Hasher
+StatusPublication.hashValue [Var] -> Swift.Int
+StatusPublication.list [Var] -> RatifyProtocol.RevocationList
+StatusPublication.push [Var] -> RatifyProtocol.RevocationPush?
+StatusPublication.state [Var] -> RatifyProtocol.StatusPublisherState
+StatusPublisher [Class]
+StatusPublisher.genesis(updatedAt:timeout:) [Func] -> RatifyProtocol.StatusPublication, Swift.Int64, Swift.Duration?
+StatusPublisher.heartbeat(state:updatedAt:timeout:) [Func] -> RatifyProtocol.StatusPublication, RatifyProtocol.StatusPublisherState, Swift.Int64, Swift.Duration?
+StatusPublisher.issuerId [Var] -> Swift.String
+StatusPublisher.revoke(state:certIds:at:timeout:) [Func] -> RatifyProtocol.StatusPublication, RatifyProtocol.StatusPublisherState, [Swift.String], Swift.Int64, Swift.Duration?
+StatusPublisher.statusKey [Var] -> RatifyProtocol.HybridPublicKey
+StatusPublisherState [Struct]
+StatusPublisherState.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.StatusPublisherState, RatifyProtocol.StatusPublisherState
+StatusPublisherState.hash(into:) [Func] -> (), Swift.Hasher
+StatusPublisherState.hashValue [Var] -> Swift.Int
+StatusPublisherState.init(issuerId:statusKeyId:sequence:updatedAt:revoked:) [Constructor] -> RatifyProtocol.StatusPublisherState, Swift.String, Swift.String, Swift.Int64, Swift.Int64, [Swift.String]
+StatusPublisherState.issuerId [Var] -> Swift.String
+StatusPublisherState.revoked [Var] -> [Swift.String]
+StatusPublisherState.sequence [Var] -> Swift.Int64
+StatusPublisherState.statusKeyId [Var] -> Swift.String
+StatusPublisherState.updatedAt [Var] -> Swift.Int64
 TransactionReceipt [Struct]
 TransactionReceipt.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.TransactionReceipt, RatifyProtocol.TransactionReceipt
 TransactionReceipt.createdAt [Var] -> Swift.Int64

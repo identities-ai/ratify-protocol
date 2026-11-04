@@ -833,7 +833,8 @@ class ClaimTest {
             "release_at_challenge_expiry_is_withheld", "release_at_allow_horizon_is_withheld",
             "release_before_allow_horizon", "signer_failure_then_retry", "head_of_line_blocking",
             "acknowledgement_for_another_entry_is_rejected", "repeated_release_reverifies_acknowledgement",
-            "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected")
+            "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected",
+            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -842,12 +843,15 @@ class ClaimTest {
             "release_at_challenge_expiry_is_withheld" to 4, "release_at_allow_horizon_is_withheld" to 4,
             "release_before_allow_horizon" to 3, "signer_failure_then_retry" to 5, "head_of_line_blocking" to 8,
             "acknowledgement_for_another_entry_is_rejected" to 4, "repeated_release_reverifies_acknowledgement" to 5,
-            "receipt_of_another_claim_is_rejected" to 7, "corrupt_receipt_signature_is_rejected" to 5)
+            "receipt_of_another_claim_is_rejected" to 7, "corrupt_receipt_signature_is_rejected" to 5,
+            "resume_replaces_lost_allow_handoff" to 5, "resume_abandoned_claim" to 6)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
             "set_time" to setOf("op", "time", "expect"),
-            "set_ack_withheld" to setOf("op", "withheld", "expect"))
+            "set_ack_withheld" to setOf("op", "withheld", "expect"),
+            "resume" to setOf("op", "request", "expect"),
+            "abandon" to setOf("op", "expect"))
         val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == corpus.getString("verifier_key") }
@@ -897,6 +901,25 @@ class ClaimTest {
                             assertEquals(at, want.getLong("allow_horizon"), value.allowHorizon)
                         } else assertEquals(at, null, result.committed)
                     }
+                    "resume" -> {
+                        assertEquals(at, setOf("stage", "decision", "decision_reason", "allow_horizon"),
+                            want.keys().asSequence().toSet())
+                        assertEquals(at, "committed", want.getString("stage"))
+                        val claimId = checkNotNull(committed[requestName]) { at }.claimId
+                        val value = resumeCommittedClaim(store, claimId)
+                        committed[requestName] = value
+                        val body = JSONObject(String(value.receiptBody))
+                        assertEquals(at, want.getString("decision"), body.getString("decision"))
+                        assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
+                        assertEquals(at, want.getLong("allow_horizon"), value.allowHorizon)
+                    }
+                    "abandon" -> {
+                        assertEquals(at, setOf("abandoned"), want.keys().asSequence().toSet())
+                        val expectedIds = want.getJSONArray("abandoned").strings().map {
+                            checkNotNull(committed[it]) { at }.claimId
+                        }
+                        assertEquals(at, expectedIds, store.abandonPendingReceipts())
+                    }
                     "publish" -> {
                         assertEquals(at, if (want.has("failed")) setOf("failed", "publish_error")
                             else setOf("receipt_sequence"), want.keys().asSequence().toSet())
@@ -909,15 +932,16 @@ class ClaimTest {
                         if (want.has("failed")) {
                             org.junit.Assert.assertTrue(at, want.getBoolean("failed"))
                             val failureCode = want.getString("publish_error")
-                            org.junit.Assert.assertTrue(at, failureCode in setOf("signer_unavailable", "head_of_line_blocked"))
-                            if (mode == "ok") assertEquals(at, "head_of_line_blocked", failureCode)
+                            val messages = mapOf("signer_unavailable" to "v2reference: receipt signer unavailable",
+                                "head_of_line_blocked" to "v2reference: an earlier receipt-log entry is still pending",
+                                "log_frozen" to "v2reference: the receipt log is frozen after abandonment")
+                            val expected = checkNotNull(messages[failureCode]) { at }
+                            if (mode == "ok") org.junit.Assert.assertTrue(at,
+                                failureCode == "head_of_line_blocked" || failureCode == "log_frozen")
                             try {
                                 store.publish(value.claimId, value.receiptBody)
                                 fail("$at: publication unexpectedly succeeded")
                             } catch (e: StoreError.Unavailable) {
-                                val expected = if (failureCode == "signer_unavailable")
-                                    "v2reference: receipt signer unavailable"
-                                    else "v2reference: an earlier receipt-log entry is still pending"
                                 assertEquals(at, expected, e.message)
                             }
                         } else {

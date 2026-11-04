@@ -885,7 +885,8 @@ final class ClaimTests: XCTestCase {
             "release_at_challenge_expiry_is_withheld", "release_at_allow_horizon_is_withheld",
             "release_before_allow_horizon", "signer_failure_then_retry", "head_of_line_blocking",
             "acknowledgement_for_another_entry_is_rejected", "repeated_release_reverifies_acknowledgement",
-            "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected"]
+            "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected",
+            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -894,11 +895,13 @@ final class ClaimTests: XCTestCase {
             "release_at_challenge_expiry_is_withheld": 4, "release_at_allow_horizon_is_withheld": 4,
             "release_before_allow_horizon": 3, "signer_failure_then_retry": 5, "head_of_line_blocking": 8,
             "acknowledgement_for_another_entry_is_rejected": 4, "repeated_release_reverifies_acknowledgement": 5,
-            "receipt_of_another_claim_is_rejected": 7, "corrupt_receipt_signature_is_rejected": 5]
+            "receipt_of_another_claim_is_rejected": 7, "corrupt_receipt_signature_is_rejected": 5,
+            "resume_replaces_lost_allow_handoff": 5, "resume_abandoned_claim": 6]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
-            "set_time": ["op", "time", "expect"], "set_ack_withheld": ["op", "withheld", "expect"]]
+            "set_time": ["op", "time", "expect"], "set_ack_withheld": ["op", "withheld", "expect"],
+            "resume": ["op", "request", "expect"], "abandon": ["op", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -943,6 +946,20 @@ final class ClaimTests: XCTestCase {
                         XCTAssertEqual(body["decision_reason"] as? String, want.s("decision_reason"), at)
                         XCTAssertEqual(value.allowHorizon, Int64(want.int("allow_horizon")), at)
                     } else { XCTAssertNil(result.committed, at) }
+                case "resume":
+                    XCTAssertEqual(Set(want.keys), ["stage", "decision", "decision_reason", "allow_horizon"], at)
+                    XCTAssertEqual(want.s("stage"), "committed", at)
+                    let claimId = try XCTUnwrap(committed[requestName], at).claimId
+                    let value = try await Ratify.resumeCommittedClaim(store: store, claimId: claimId)
+                    committed[requestName] = value
+                    let body = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
+                    XCTAssertEqual(body["decision"] as? String, want.s("decision"), at)
+                    XCTAssertEqual(body["decision_reason"] as? String, want.s("decision_reason"), at)
+                    XCTAssertEqual(value.allowHorizon, Int64(want.int("allow_horizon")), at)
+                case "abandon":
+                    XCTAssertEqual(Set(want.keys), ["abandoned"], at)
+                    let expectedIds = try want.strings("abandoned").map { try XCTUnwrap(committed[$0], at).claimId }
+                    XCTAssertEqual(try store.abandonPendingReceipts(), expectedIds, at)
                 case "publish":
                     XCTAssertEqual(Set(want.keys), want["failed"] == nil
                         ? ["receipt_sequence"] : ["failed", "publish_error"], at)
@@ -955,15 +972,15 @@ final class ClaimTests: XCTestCase {
                     if want.keys.contains("failed") {
                         XCTAssertTrue(want.bool("failed"), at)
                         let failureCode = want.s("publish_error")
-                        XCTAssertTrue(["signer_unavailable", "head_of_line_blocked"].contains(failureCode), at)
-                        if mode == "ok" { XCTAssertEqual(failureCode, "head_of_line_blocked", at) }
+                        let messages = ["signer_unavailable": "v2reference: receipt signer unavailable",
+                            "head_of_line_blocked": "v2reference: an earlier receipt-log entry is still pending",
+                            "log_frozen": "v2reference: the receipt log is frozen after abandonment"]
+                        let expected = try XCTUnwrap(messages[failureCode], at)
+                        if mode == "ok" { XCTAssertTrue(failureCode == "head_of_line_blocked" || failureCode == "log_frozen", at) }
                         do {
                             _ = try await store.publish(claimId: value.claimId, receiptBody: value.receiptBody)
                             XCTFail("\(at): publication unexpectedly succeeded")
                         } catch StoreError.unavailable(let detail) {
-                            let expected = failureCode == "signer_unavailable"
-                                ? "v2reference: receipt signer unavailable"
-                                : "v2reference: an earlier receipt-log entry is still pending"
                             XCTAssertEqual(detail, expected, at)
                         }
                     } else {

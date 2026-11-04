@@ -36,4 +36,6 @@ class DeviceVectorsTest {
     @Test fun referenceStoreClaimReplayAndLease() = ReferenceStoreVectors.claimReplayAndLease()
     @Test fun referenceStoreCommittedReceiptCheckpointAndRelease() =
         ClaimTest().referenceStoreCommittedReceiptCheckpointAndRelease()
+    @Test fun lifecycleAllowPublishedAcknowledgedReleased() =
+        ClaimTest().lifecycleAllowPublishedAcknowledgedReleased()
 }

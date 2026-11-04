@@ -53,9 +53,11 @@ class ClaimTest {
             receiptBody: ByteArray): Boolean = error("claim failed")
     }
 
-    private fun request(name: String, evaluators: ConstraintEvaluatorRegistry? = null): VerifyRequest {
-        val corpus = Corpus.load("verifier-ordering.json")
-        val vector = corpus.arr("vectors").first { it.getString("name") == name }
+    private fun request(name: String, evaluators: ConstraintEvaluatorRegistry? = null,
+        corpusName: String = "verifier-ordering.json"): VerifyRequest {
+        val corpus = Corpus.load(corpusName)
+        val vector = if (corpusName == "lifecycle-scenarios.json") corpus.getJSONObject("requests").getJSONObject(name)
+            else corpus.arr("vectors").first { it.getString("name") == name }
         val policy = vector.optJSONObject("context_policy")
         val contextPolicy = policy?.let {
             ContextPolicy(it.getString("profile"), it.getBoolean("require_bound"),
@@ -797,5 +799,45 @@ class ClaimTest {
         val released = releaseDecision(committed, wire, key.publicKey, logId, store, store)
         assertEquals(ReleaseStatus.RELEASED, released.status)
         assertEquals(ReleaseStatus.RELEASED, store.loadTerminal(committed.claimId).release?.outcome)
+    }
+
+    @Test fun lifecycleAllowPublishedAcknowledgedReleased() = runBlocking {
+        val corpus = Corpus.load("lifecycle-scenarios.json")
+        val scenario = corpus.arr("scenarios").first { it.getString("name") == "allow_published_acknowledged_released" }
+        val steps = scenario.arr("steps")
+        assertEquals(listOf("verify", "publish", "release", "publish", "release", "verify"),
+            steps.map { it.getString("op") })
+        org.junit.Assert.assertTrue(steps.all { it.getString("request") == "A" && !it.has("time") && !it.has("at") })
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject("A"), req)
+        val keys = Corpus.load("keys.json").getJSONArray("keys")
+        val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
+            .first { it.getString("name") == corpus.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val logId = corpus.getString("log_id")
+        val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"), logId, key)
+        val verified = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+        assertEquals(VerifyStage.COMMITTED, verified.stage)
+        val committed = verified.committed!!
+        val body = JSONObject(String(committed.receiptBody))
+        assertEquals(steps[0].getJSONObject("expect").getString("decision"), body.getString("decision"))
+        assertEquals(steps[0].getJSONObject("expect").getString("decision_reason"), body.getString("decision_reason"))
+        assertEquals(steps[0].getJSONObject("expect").getLong("allow_horizon"), committed.allowHorizon)
+        val wire = store.publish(committed.claimId, committed.receiptBody)
+        assertEquals(steps[1].getJSONObject("expect").getLong("receipt_sequence"), decodeVerificationReceipt(wire).sequence)
+        val released = releaseDecision(committed, wire, key.publicKey, logId, store, store)
+        assertEquals(ReleaseStatus.RELEASED, released.status)
+        assertEquals(steps[2].getJSONObject("expect").getString("decision"), released.decision?.decision)
+        assertEquals(steps[2].getJSONObject("expect").getLong("release_time"), released.decision?.releaseTime)
+        val repeatedWire = store.publish(committed.claimId, committed.receiptBody)
+        org.junit.Assert.assertArrayEquals(wire, repeatedWire)
+        assertEquals(steps[3].getJSONObject("expect").getLong("receipt_sequence"), decodeVerificationReceipt(repeatedWire).sequence)
+        val repeated = releaseDecision(committed, repeatedWire, key.publicKey, logId, store, store)
+        assertEquals(ReleaseStatus.RELEASED, repeated.status)
+        assertEquals(steps[4].getJSONObject("expect").getString("decision"), repeated.decision?.decision)
+        assertEquals(steps[4].getJSONObject("expect").getLong("release_time"), repeated.decision?.releaseTime)
+        val replay = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+        assertEquals(steps[5].getJSONObject("expect").getString("stage"), replay.stage.spelling)
+        assertEquals(steps[5].getJSONObject("expect").getString("disposition"), replay.disposition?.spelling)
     }
 }

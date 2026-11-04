@@ -42,9 +42,11 @@ final class ClaimTests: XCTestCase {
         }
     }
 
-    private func request(_ name: String, evaluators: ConstraintEvaluatorRegistry? = nil) throws -> VerifyRequest {
-        let corpus = Corpus.load("verifier-ordering.json")
-        let vector = corpus.arr("vectors").first { $0.s("name") == name }!
+    private func request(_ name: String, corpusName: String = "verifier-ordering.json",
+                         evaluators: ConstraintEvaluatorRegistry? = nil) throws -> VerifyRequest {
+        let corpus = Corpus.load(corpusName)
+        let vector = corpusName == "lifecycle-scenarios.json" ? corpus.obj("requests").obj(name)
+            : corpus.arr("vectors").first { $0.s("name") == name }!
         let policy = vector["context_policy"] as? [String: Any]
         let contextPolicy = try policy.map { policy in
             try ContextPolicy(profile: policy.s("profile"), requireBound: policy.bool("require_bound"),
@@ -857,5 +859,46 @@ final class ClaimTests: XCTestCase {
         XCTAssertEqual(released.status, .released)
         let terminal = try await store.loadTerminal(claimId: committed.claimId)
         XCTAssertEqual(terminal.release?.outcome, .released)
+    }
+
+    func testLifecycleAllowPublishedAcknowledgedReleased() async throws {
+        let corpus = Corpus.load("lifecycle-scenarios.json")
+        let scenario = corpus.arr("scenarios").first { $0.s("name") == "allow_published_acknowledged_released" }!
+        let steps = scenario.arr("steps")
+        XCTAssertEqual(steps.map { $0.s("op") }, ["verify", "publish", "release", "publish", "release", "verify"])
+        XCTAssertTrue(steps.allSatisfy { $0.s("request") == "A" && $0["time"] == nil && $0["at"] == nil })
+        let req = try request("A", corpusName: "lifecycle-scenarios.json")
+        let (trust, status, journal) = try await vectorProviders(corpus.obj("requests").obj("A"), request: req)
+        let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
+        let store = try Store(now: Int64(scenario.int("start_time")), leaseSeconds: Int64(corpus.int("lease_seconds")),
+            logId: corpus.s("log_id"), verifierKey: key)
+        let verified = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
+            statusEvidence: status, statusJournal: journal)
+        XCTAssertEqual(verified.stage, .committed, verified.errorDetail ?? "")
+        let committed = try XCTUnwrap(verified.committed)
+        let body = try JSONSerialization.jsonObject(with: committed.receiptBody) as! [String: Any]
+        XCTAssertEqual(body["decision"] as? String, steps[0].obj("expect").s("decision"))
+        XCTAssertEqual(body["decision_reason"] as? String, steps[0].obj("expect").s("decision_reason"))
+        XCTAssertEqual(committed.allowHorizon, Int64(steps[0].obj("expect").int("allow_horizon")))
+        let wire = try await store.publish(claimId: committed.claimId, receiptBody: committed.receiptBody)
+        XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence, Int64(steps[1].obj("expect").int("receipt_sequence")))
+        let released = try await Ratify.releaseDecision(committed, signedReceipt: wire,
+            verifierPublicKey: key.publicKey, logId: corpus.s("log_id"), claimStore: store, checkpoint: store)
+        XCTAssertEqual(released.status, .released)
+        XCTAssertEqual(released.decision?.decision, steps[2].obj("expect").s("decision"))
+        XCTAssertEqual(released.decision?.releaseTime, Int64(steps[2].obj("expect").int("release_time")))
+        let repeatedWire = try await store.publish(claimId: committed.claimId, receiptBody: committed.receiptBody)
+        XCTAssertEqual(repeatedWire, wire)
+        XCTAssertEqual(try Ratify.decodeVerificationReceipt(repeatedWire).sequence,
+            Int64(steps[3].obj("expect").int("receipt_sequence")))
+        let repeatedRelease = try await Ratify.releaseDecision(committed, signedReceipt: repeatedWire,
+            verifierPublicKey: key.publicKey, logId: corpus.s("log_id"), claimStore: store, checkpoint: store)
+        XCTAssertEqual(repeatedRelease.status, .released)
+        XCTAssertEqual(repeatedRelease.decision?.decision, steps[4].obj("expect").s("decision"))
+        XCTAssertEqual(repeatedRelease.decision?.releaseTime, Int64(steps[4].obj("expect").int("release_time")))
+        let replay = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
+            statusEvidence: status, statusJournal: journal)
+        XCTAssertEqual(replay.stage.rawValue, steps[5].obj("expect").s("stage"))
+        XCTAssertEqual(replay.disposition?.rawValue, steps[5].obj("expect").s("disposition"))
     }
 }

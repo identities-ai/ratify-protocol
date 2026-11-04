@@ -219,6 +219,29 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    actor CorpusEvaluator: ConstraintEvaluator {
+        let implementation: String
+        let validUntil: Int64
+        private(set) var calls = 0
+        init(implementation: String, validUntil: Int64) {
+            self.implementation = implementation
+            self.validUntil = validUntil
+        }
+        func evaluate(_ input: ConstraintEvaluationInput) async throws -> ConstraintEvaluationResult {
+            calls += 1
+            switch implementation {
+            case "com.ratifyprotocol.max_count/v1": return try Ratify.evaluateMaxCount(input)
+            case "com.ratifyprotocol.allowed_values/v1": return try Ratify.evaluateAllowedValues(input)
+            case "fault:pass_until": return ConstraintEvaluationResult(outcome: .pass, validUntil: validUntil)
+            case "fault:error": throw StoreError.unavailable("scripted evaluator failure")
+            case "fault:timeout":
+                try await Task.sleep(for: .milliseconds(100))
+                return ConstraintEvaluationResult(outcome: .pass)
+            default: XCTFail("Unsupported corpus evaluator: \(implementation)"); return ConstraintEvaluationResult(outcome: .invalid)
+            }
+        }
+    }
+
     private func vectorProviders(_ vector: [String: Any], request req: VerifyRequest) async throws
         -> (VectorTrust, VectorStatus, VectorJournal) {
         let root = vector.obj("trust")["root_public_key"] as? [String: Any]
@@ -271,16 +294,29 @@ final class ClaimTests: XCTestCase {
                 vector.s("claim_store") == "create" && trust["mode"] as? String == "ok" &&
                 trust["outcome"] as? String == "trusted" && vector.s("audience_mode") == "ok" &&
                 vector.s("rate") == "absent" && journal["mode"] as? String == "anchored" &&
-                (vector["constraint_evaluators"] as? [Any] ?? []).isEmpty &&
+                !(vector["constraint_evaluators"] as? [[String: Any]] ?? []).contains {
+                    ["fault:panic", "fault:invalid_outcome"].contains($0.s("implementation"))
+                } &&
                 vector.s("receiver_binding_hook") == "absent" &&
                 (vector["claim_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 evidence.values.allSatisfy { !["error", "panic"].contains($0["mode"] as? String ?? "") }
         }
-        XCTAssertEqual(vectors.count, 262)
+        XCTAssertEqual(vectors.count, 294)
         for vector in vectors {
             let name = vector.s("name")
-            let req = try request(name)
+            let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
+                CorpusEvaluator(implementation: $0.s("implementation"),
+                    validUntil: ($0["valid_until"] as? NSNumber)?.int64Value ?? 0)
+            }
+            let registrations = zip(vector["constraint_evaluators"] as? [[String: Any]] ?? [], evaluators).map {
+                ConstraintEvaluatorRegistration(descriptor: ConstraintProfileDescriptor(
+                    profile: $0.0.s("profile"), type: $0.0.s("type")), evaluator: $0.1)
+            }
+            let timeout: UInt64 = evaluators.contains { $0.implementation == "fault:timeout" } ? 10 : 1000
+            let registry = registrations.isEmpty ? nil : try ConstraintEvaluatorRegistry(
+                timeoutMilliseconds: timeout, registrations: registrations)
+            let req = try request(name, evaluators: registry)
             let (trust, status, journal) = try await vectorProviders(vector, request: req)
             let store = CreatedClaimStore(claimedAt: Int64(vector.int("now")))
             let baseStore: any ClaimStore = store
@@ -309,6 +345,9 @@ final class ClaimTests: XCTestCase {
             XCTAssertEqual(trustCalls, expectedCallbacks.int("trust"), name)
             XCTAssertEqual(statusRequests.count, expectedCallbacks.int("status"), name)
             XCTAssertEqual(audienceCalls, expectedCallbacks.int("audience"), name)
+            var evaluatorCalls = 0
+            for evaluator in evaluators { evaluatorCalls += await evaluator.calls }
+            XCTAssertEqual(evaluatorCalls, (expectedCallbacks["evaluator"] as? NSNumber)?.intValue ?? 0, name)
             let expectedRequests = vector.obj("expected").arr("status_requests")
             XCTAssertEqual(statusRequests.count, expectedRequests.count, name)
             for (actual, expected) in zip(statusRequests, expectedRequests) {

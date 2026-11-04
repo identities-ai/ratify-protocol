@@ -191,6 +191,21 @@ class ClaimTest {
         }
     }
 
+    private class CorpusEvaluator(private val implementation: String, private val validUntil: Long) : ConstraintEvaluator {
+        val calls = AtomicInteger()
+        override suspend fun evaluate(input: ConstraintEvaluationInput): ConstraintEvaluationResult {
+            calls.incrementAndGet()
+            return when (implementation) {
+                "com.ratifyprotocol.max_count/v1" -> evaluateMaxCount(input)
+                "com.ratifyprotocol.allowed_values/v1" -> evaluateAllowedValues(input)
+                "fault:pass_until" -> ConstraintEvaluationResult(ConstraintOutcome.PASS, validUntil)
+                "fault:error" -> error("scripted evaluator failure")
+                "fault:timeout" -> { delay(100); ConstraintEvaluationResult(ConstraintOutcome.PASS) }
+                else -> error("Unsupported corpus evaluator: $implementation")
+            }
+        }
+    }
+
     private class VectorTrust(private val key: HybridPublicKey) : TrustProvider {
         val calls = AtomicInteger()
         override suspend fun resolve(chain: List<DelegationCert>): TrustResolution {
@@ -272,17 +287,30 @@ class ClaimTest {
                 trust.optString("mode") == "ok" && trust.optString("outcome") == "trusted" &&
                 vector.getString("audience_mode") == "ok" && vector.getString("rate") == "absent" &&
                 journal.optString("mode") == "anchored" &&
-                (vector.optJSONArray("constraint_evaluators")?.length() ?: 0) == 0 &&
+                (vector.optJSONArray("constraint_evaluators")?.let { array ->
+                    (0 until array.length()).none { index ->
+                        array.getJSONObject(index).getString("implementation") in listOf("fault:panic", "fault:invalid_outcome")
+                    }
+                } ?: true) &&
                 vector.getString("receiver_binding_hook") == "absent" &&
                 vector.optLong("claim_time_offset") == 0L && vector.optLong("finalize_time_offset") == 0L &&
                 evidence.keys().asSequence().all { issuer ->
                     evidence.getJSONObject(issuer).optString("mode") !in listOf("error", "panic")
                 }
         }
-        assertEquals(262, vectors.size)
+        assertEquals(294, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
-            val req = request(name)
+            val registrationsJson = vector.optJSONArray("constraint_evaluators")
+            val entries = (0 until (registrationsJson?.length() ?: 0)).map { registrationsJson!!.getJSONObject(it) }
+            val evaluators = entries.map { CorpusEvaluator(it.getString("implementation"), it.optLong("valid_until")) }
+            val registrations = entries.zip(evaluators).map { (item, evaluator) ->
+                ConstraintEvaluatorRegistration(ConstraintProfileDescriptor(
+                    item.getString("profile"), item.getString("type")), evaluator)
+            }
+            val timeout = if (entries.any { it.getString("implementation") == "fault:timeout" }) 10uL else 1000uL
+            val registry = if (registrations.isEmpty()) null else ConstraintEvaluatorRegistry(timeout, registrations)
+            val req = request(name, registry)
             val (trust, status, journal) = vectorProviders(vector, req)
             val store = CreatedClaimStore(claimedAt = vector.getLong("now"))
             val baseStore: ClaimStore = store
@@ -309,6 +337,7 @@ class ClaimTest {
             assertEquals(name, callbacks.getInt("trust"), trust.calls.get())
             assertEquals(name, callbacks.getInt("status"), status.requests.size)
             assertEquals(name, callbacks.getInt("audience"), audience.calls.get())
+            assertEquals(name, callbacks.optInt("evaluator"), evaluators.sumOf { it.calls.get() })
             val expectedRequests = vector.getJSONObject("expected").arr("status_requests")
             assertEquals(name, expectedRequests.size, status.requests.size)
             for ((actual, expected) in status.requests.zip(expectedRequests)) {

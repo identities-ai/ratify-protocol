@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 import RatifyProtocol
+import RatifyProtocolTestSupport
 
 @_silgen_name("ratify_ffi_test_arm_callback_panic")
 private func armCallbackPanic(_ kind: UInt32)
@@ -823,5 +824,38 @@ final class ClaimTests: XCTestCase {
         XCTAssertFalse(allowed)
         let recorded = await store.recorded
         XCTAssertEqual(recorded?.outcome, .released)
+    }
+
+    func testReferenceStoreCommittedReceiptCheckpointAndRelease() async throws {
+        let req = try request("trust_unavailable")
+        let key = Fixture.shared.privateKey("verifier")
+        let logId = "0123456789abcdef0123456789abcdef"
+        let store = try Store(now: req.now, leaseSeconds: 30, logId: logId, verifierKey: key)
+        try store.setAcknowledgementWithheld(true)
+        let outcome = try await Ratify.verifyProofBundle(req, claimStore: store, trust: UnavailableTrust())
+        XCTAssertEqual(outcome.stage, .committed, outcome.errorDetail ?? "")
+        let committed = try XCTUnwrap(outcome.committed)
+        let saved = try await store.loadCommitted(claimId: committed.claimId)
+        XCTAssertEqual(saved.claim.claimId, committed.claimId)
+        let terminalResult = try JSONSerialization.jsonObject(with: saved.terminalResult) as! [String: Any]
+        XCTAssertEqual(terminalResult["decision_reason"] as? String, "trust_unavailable")
+        XCTAssertEqual(saved.receiptBody, committed.receiptBody)
+        XCTAssertEqual(saved.allowHorizon, committed.allowHorizon ?? 0)
+        let wire = try await store.publish(claimId: committed.claimId, receiptBody: saved.receiptBody)
+        let receipt = try Ratify.decodeVerificationReceipt(wire)
+        let digest = try Ratify.verificationReceiptDigest(receipt)
+        let acknowledgement = try await store.acknowledge(logId: logId, sequence: 1,
+            previousEntryHash: Data(repeating: 0, count: 48), entryHash: digest)
+        XCTAssertEqual(acknowledgement.logId, logId)
+        XCTAssertEqual(acknowledgement.sequence, 1)
+        XCTAssertEqual(acknowledgement.entryHash, digest)
+        XCTAssertEqual(acknowledgement.timestamp, req.now)
+        let storedAcknowledgement = try await store.get(logId: logId, sequence: 1)
+        XCTAssertEqual(storedAcknowledgement.entryHash, digest)
+        let released = try await Ratify.releaseDecision(committed, signedReceipt: wire,
+            verifierPublicKey: key.publicKey, logId: logId, claimStore: store, checkpoint: store)
+        XCTAssertEqual(released.status, .released)
+        let terminal = try await store.loadTerminal(claimId: committed.claimId)
+        XCTAssertEqual(terminal.release?.outcome, .released)
     }
 }

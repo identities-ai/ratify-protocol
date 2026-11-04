@@ -1,5 +1,6 @@
 package com.ratifyprotocol
 
+import com.ratifyprotocol.testing.Store as ReferenceStore
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -766,5 +767,35 @@ class ClaimTest {
         org.junit.Assert.assertArrayEquals(wire, released.decision!!.receiptWire)
         assertEquals(false, released.decision!!.isAllowed(store))
         assertEquals(ReleaseStatus.RELEASED, store.recorded?.outcome)
+    }
+
+    @Test fun referenceStoreCommittedReceiptCheckpointAndRelease() = runBlocking {
+        val req = request("trust_unavailable")
+        val keys = Corpus.load("keys.json").getJSONArray("keys")
+        val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
+            .first { it.getString("name") == "verifier" }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val logId = "0123456789abcdef0123456789abcdef"
+        val store = ReferenceStore(req.now, 30, logId, key)
+        store.setAcknowledgementWithheld(true)
+        val outcome = verifyProofBundle(req, store, trust = UnavailableTrust())
+        assertEquals(VerifyStage.COMMITTED, outcome.stage)
+        val committed = outcome.committed!!
+        val saved = store.loadCommitted(committed.claimId)
+        assertEquals(committed.claimId, saved.claim.claimId)
+        assertEquals("trust_unavailable", JSONObject(String(saved.terminalResult)).getString("decision_reason"))
+        org.junit.Assert.assertArrayEquals(committed.receiptBody, saved.receiptBody)
+        assertEquals(committed.allowHorizon ?: 0, saved.allowHorizon)
+        val wire = store.publish(committed.claimId, saved.receiptBody)
+        val digest = verificationReceiptDigest(decodeVerificationReceipt(wire))
+        val acknowledgement = store.acknowledge(logId, 1, ByteArray(48), digest)
+        assertEquals(logId, acknowledgement.logId)
+        assertEquals(1L, acknowledgement.sequence)
+        org.junit.Assert.assertArrayEquals(digest, acknowledgement.entryHash)
+        assertEquals(req.now, acknowledgement.timestamp)
+        org.junit.Assert.assertArrayEquals(digest, store.get(logId, 1).entryHash)
+        val released = releaseDecision(committed, wire, key.publicKey, logId, store, store)
+        assertEquals(ReleaseStatus.RELEASED, released.status)
+        assertEquals(ReleaseStatus.RELEASED, store.loadTerminal(committed.claimId).release?.outcome)
     }
 }

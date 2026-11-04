@@ -34,4 +34,6 @@ class DeviceVectorsTest {
     @Test fun referenceStoreClockAndClone() = ReferenceStoreVectors.clockAndClone()
     @Test fun referenceStoreClaimError() = ReferenceStoreVectors.invalidClaimId()
     @Test fun referenceStoreClaimReplayAndLease() = ReferenceStoreVectors.claimReplayAndLease()
+    @Test fun referenceStoreCommittedReceiptCheckpointAndRelease() =
+        ClaimTest().referenceStoreCommittedReceiptCheckpointAndRelease()
 }

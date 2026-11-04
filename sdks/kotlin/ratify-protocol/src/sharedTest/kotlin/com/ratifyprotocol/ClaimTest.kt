@@ -801,43 +801,101 @@ class ClaimTest {
         assertEquals(ReleaseStatus.RELEASED, store.loadTerminal(committed.claimId).release?.outcome)
     }
 
-    @Test fun lifecycleAllowPublishedAcknowledgedReleased() = runBlocking {
+    @Test fun lifecycleBasicReleaseScenarios() = runBlocking {
         val corpus = Corpus.load("lifecycle-scenarios.json")
-        val scenario = corpus.arr("scenarios").first { it.getString("name") == "allow_published_acknowledged_released" }
-        val steps = scenario.arr("steps")
-        assertEquals(listOf("verify", "publish", "release", "publish", "release", "verify"),
-            steps.map { it.getString("op") })
-        org.junit.Assert.assertTrue(steps.all { it.getString("request") == "A" && !it.has("time") && !it.has("at") })
-        val req = request("A", corpusName = "lifecycle-scenarios.json")
-        val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject("A"), req)
+        val names = setOf("allow_published_acknowledged_released", "release_without_receipt_is_pending",
+            "release_without_acknowledgement_is_pending_then_late_ack_releases",
+            "late_ack_at_challenge_expiry_is_withheld", "release_one_second_before_challenge_expiry",
+            "release_at_challenge_expiry_is_withheld", "release_at_allow_horizon_is_withheld",
+            "release_before_allow_horizon")
+        val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
+        assertEquals(names.size, scenarios.size)
+        val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
+            "release_without_acknowledgement_is_pending_then_late_ack_releases" to 7,
+            "late_ack_at_challenge_expiry_is_withheld" to 6, "release_one_second_before_challenge_expiry" to 4,
+            "release_at_challenge_expiry_is_withheld" to 4, "release_at_allow_horizon_is_withheld" to 4,
+            "release_before_allow_horizon" to 3)
+        val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
+            "publish" to setOf("op", "request", "mode", "expect"),
+            "release" to setOf("op", "request", "checkpoint", "expect"),
+            "set_time" to setOf("op", "time", "expect"),
+            "set_ack_withheld" to setOf("op", "withheld", "expect"))
         val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == corpus.getString("verifier_key") }
         val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
         val logId = corpus.getString("log_id")
-        val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"), logId, key)
-        val verified = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
-        assertEquals(VerifyStage.COMMITTED, verified.stage)
-        val committed = verified.committed!!
-        val body = JSONObject(String(committed.receiptBody))
-        assertEquals(steps[0].getJSONObject("expect").getString("decision"), body.getString("decision"))
-        assertEquals(steps[0].getJSONObject("expect").getString("decision_reason"), body.getString("decision_reason"))
-        assertEquals(steps[0].getJSONObject("expect").getLong("allow_horizon"), committed.allowHorizon)
-        val wire = store.publish(committed.claimId, committed.receiptBody)
-        assertEquals(steps[1].getJSONObject("expect").getLong("receipt_sequence"), decodeVerificationReceipt(wire).sequence)
-        val released = releaseDecision(committed, wire, key.publicKey, logId, store, store)
-        assertEquals(ReleaseStatus.RELEASED, released.status)
-        assertEquals(steps[2].getJSONObject("expect").getString("decision"), released.decision?.decision)
-        assertEquals(steps[2].getJSONObject("expect").getLong("release_time"), released.decision?.releaseTime)
-        val repeatedWire = store.publish(committed.claimId, committed.receiptBody)
-        org.junit.Assert.assertArrayEquals(wire, repeatedWire)
-        assertEquals(steps[3].getJSONObject("expect").getLong("receipt_sequence"), decodeVerificationReceipt(repeatedWire).sequence)
-        val repeated = releaseDecision(committed, repeatedWire, key.publicKey, logId, store, store)
-        assertEquals(ReleaseStatus.RELEASED, repeated.status)
-        assertEquals(steps[4].getJSONObject("expect").getString("decision"), repeated.decision?.decision)
-        assertEquals(steps[4].getJSONObject("expect").getLong("release_time"), repeated.decision?.releaseTime)
-        val replay = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
-        assertEquals(steps[5].getJSONObject("expect").getString("stage"), replay.stage.spelling)
-        assertEquals(steps[5].getJSONObject("expect").getString("disposition"), replay.disposition?.spelling)
+        for (scenario in scenarios) {
+            val name = scenario.getString("name")
+            assertEquals(name, counts[name], scenario.arr("steps").size)
+            val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"), logId, key)
+            val committed = mutableMapOf<String, CommittedOutcome>()
+            val receipts = mutableMapOf<String, ByteArray>()
+            for ((index, step) in scenario.arr("steps").withIndex()) {
+                val op = step.getString("op")
+                val requestName = step.optString("request")
+                val want = step.getJSONObject("expect")
+                val at = "$name step $index $op"
+                assertEquals(at, stepKeys[op], step.keys().asSequence().toSet())
+                when (op) {
+                    "set_time" -> {
+                        store.setTime(step.getLong("time"))
+                        assertEquals(at, 0, want.length())
+                    }
+                    "set_ack_withheld" -> {
+                        store.setAcknowledgementWithheld(step.getBoolean("withheld"))
+                        assertEquals(at, 0, want.length())
+                    }
+                    "verify" -> {
+                        assertEquals(at, if (want.has("decision"))
+                            setOf("stage", "decision", "decision_reason", "allow_horizon")
+                            else setOf("stage", "disposition"), want.keys().asSequence().toSet())
+                        val req = request(requestName, corpusName = "lifecycle-scenarios.json")
+                        assertEquals(at, req.now, store.now())
+                        val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(requestName), req)
+                        val result = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+                        assertEquals(at, want.getString("stage"), result.stage.spelling)
+                        if (want.has("disposition")) assertEquals(at, want.getString("disposition"), result.disposition?.spelling)
+                        else assertEquals(at, ClaimDisposition.CREATED, result.disposition)
+                        if (want.has("decision")) {
+                            val value = checkNotNull(result.committed) { at }
+                            committed[requestName] = value
+                            val body = JSONObject(String(value.receiptBody))
+                            assertEquals(at, want.getString("decision"), body.getString("decision"))
+                            assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
+                            assertEquals(at, want.getLong("allow_horizon"), value.allowHorizon)
+                        } else assertEquals(at, null, result.committed)
+                    }
+                    "publish" -> {
+                        assertEquals(at, setOf("receipt_sequence"), want.keys().asSequence().toSet())
+                        assertEquals(at, "ok", step.getString("mode"))
+                        val value = checkNotNull(committed[requestName]) { at }
+                        val wire = store.publish(value.claimId, value.receiptBody)
+                        receipts[requestName]?.let { org.junit.Assert.assertArrayEquals(at, it, wire) }
+                        receipts[requestName] = wire
+                        assertEquals(at, want.getLong("receipt_sequence"), decodeVerificationReceipt(wire).sequence)
+                    }
+                    "release" -> {
+                        assertEquals(at, "reference", step.getString("checkpoint"))
+                        assertEquals(at, if (want.has("decision"))
+                            setOf("release_status", "decision", "release_time", "receipt_sequence")
+                            else setOf("release_status", "release_reason"), want.keys().asSequence().toSet())
+                        val value = checkNotNull(committed[requestName]) { at }
+                        val result = releaseDecision(value, receipts[requestName], key.publicKey, logId, store, store)
+                        assertEquals(at, want.getString("release_status"), result.status.spelling)
+                        if (want.has("release_reason")) assertEquals(at, want.getString("release_reason"), result.reason)
+                        else assertEquals(at, "", result.reason)
+                        if (want.has("decision")) {
+                            val decision = checkNotNull(result.decision) { at }
+                            assertEquals(at, want.getString("decision"), decision.decision)
+                            org.junit.Assert.assertArrayEquals(at, checkNotNull(receipts[requestName]) { at }, decision.receiptWire)
+                            assertEquals(at, want.getLong("release_time"), decision.releaseTime)
+                            assertEquals(at, want.getLong("receipt_sequence"), decodeVerificationReceipt(decision.receiptWire).sequence)
+                        } else assertEquals(at, null, result.decision)
+                    }
+                    else -> error("$at: unsupported operation")
+                }
+            }
+        }
     }
 }

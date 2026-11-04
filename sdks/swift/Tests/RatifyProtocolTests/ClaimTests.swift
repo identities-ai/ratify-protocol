@@ -861,44 +861,98 @@ final class ClaimTests: XCTestCase {
         XCTAssertEqual(terminal.release?.outcome, .released)
     }
 
-    func testLifecycleAllowPublishedAcknowledgedReleased() async throws {
+    func testLifecycleBasicReleaseScenarios() async throws {
         let corpus = Corpus.load("lifecycle-scenarios.json")
-        let scenario = corpus.arr("scenarios").first { $0.s("name") == "allow_published_acknowledged_released" }!
-        let steps = scenario.arr("steps")
-        XCTAssertEqual(steps.map { $0.s("op") }, ["verify", "publish", "release", "publish", "release", "verify"])
-        XCTAssertTrue(steps.allSatisfy { $0.s("request") == "A" && $0["time"] == nil && $0["at"] == nil })
-        let req = try request("A", corpusName: "lifecycle-scenarios.json")
-        let (trust, status, journal) = try await vectorProviders(corpus.obj("requests").obj("A"), request: req)
+        let names: Set<String> = ["allow_published_acknowledged_released", "release_without_receipt_is_pending",
+            "release_without_acknowledgement_is_pending_then_late_ack_releases",
+            "late_ack_at_challenge_expiry_is_withheld", "release_one_second_before_challenge_expiry",
+            "release_at_challenge_expiry_is_withheld", "release_at_allow_horizon_is_withheld",
+            "release_before_allow_horizon"]
+        let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
+        XCTAssertEqual(scenarios.count, names.count)
+        let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
+            "release_without_acknowledgement_is_pending_then_late_ack_releases": 7,
+            "late_ack_at_challenge_expiry_is_withheld": 6, "release_one_second_before_challenge_expiry": 4,
+            "release_at_challenge_expiry_is_withheld": 4, "release_at_allow_horizon_is_withheld": 4,
+            "release_before_allow_horizon": 3]
+        let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
+            "publish": ["op", "request", "mode", "expect"],
+            "release": ["op", "request", "checkpoint", "expect"],
+            "set_time": ["op", "time", "expect"], "set_ack_withheld": ["op", "withheld", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
-        let store = try Store(now: Int64(scenario.int("start_time")), leaseSeconds: Int64(corpus.int("lease_seconds")),
-            logId: corpus.s("log_id"), verifierKey: key)
-        let verified = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
-            statusEvidence: status, statusJournal: journal)
-        XCTAssertEqual(verified.stage, .committed, verified.errorDetail ?? "")
-        let committed = try XCTUnwrap(verified.committed)
-        let body = try JSONSerialization.jsonObject(with: committed.receiptBody) as! [String: Any]
-        XCTAssertEqual(body["decision"] as? String, steps[0].obj("expect").s("decision"))
-        XCTAssertEqual(body["decision_reason"] as? String, steps[0].obj("expect").s("decision_reason"))
-        XCTAssertEqual(committed.allowHorizon, Int64(steps[0].obj("expect").int("allow_horizon")))
-        let wire = try await store.publish(claimId: committed.claimId, receiptBody: committed.receiptBody)
-        XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence, Int64(steps[1].obj("expect").int("receipt_sequence")))
-        let released = try await Ratify.releaseDecision(committed, signedReceipt: wire,
-            verifierPublicKey: key.publicKey, logId: corpus.s("log_id"), claimStore: store, checkpoint: store)
-        XCTAssertEqual(released.status, .released)
-        XCTAssertEqual(released.decision?.decision, steps[2].obj("expect").s("decision"))
-        XCTAssertEqual(released.decision?.releaseTime, Int64(steps[2].obj("expect").int("release_time")))
-        let repeatedWire = try await store.publish(claimId: committed.claimId, receiptBody: committed.receiptBody)
-        XCTAssertEqual(repeatedWire, wire)
-        XCTAssertEqual(try Ratify.decodeVerificationReceipt(repeatedWire).sequence,
-            Int64(steps[3].obj("expect").int("receipt_sequence")))
-        let repeatedRelease = try await Ratify.releaseDecision(committed, signedReceipt: repeatedWire,
-            verifierPublicKey: key.publicKey, logId: corpus.s("log_id"), claimStore: store, checkpoint: store)
-        XCTAssertEqual(repeatedRelease.status, .released)
-        XCTAssertEqual(repeatedRelease.decision?.decision, steps[4].obj("expect").s("decision"))
-        XCTAssertEqual(repeatedRelease.decision?.releaseTime, Int64(steps[4].obj("expect").int("release_time")))
-        let replay = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
-            statusEvidence: status, statusJournal: journal)
-        XCTAssertEqual(replay.stage.rawValue, steps[5].obj("expect").s("stage"))
-        XCTAssertEqual(replay.disposition?.rawValue, steps[5].obj("expect").s("disposition"))
+        for scenario in scenarios {
+            let name = scenario.s("name")
+            XCTAssertEqual(scenario.arr("steps").count, counts[name], name)
+            let store = try Store(now: Int64(scenario.int("start_time")), leaseSeconds: Int64(corpus.int("lease_seconds")),
+                logId: corpus.s("log_id"), verifierKey: key)
+            var committed: [String: CommittedOutcome] = [:]
+            var receipts: [String: Data] = [:]
+            for (index, step) in scenario.arr("steps").enumerated() {
+                let op = step.s("op")
+                let requestName = step["request"] as? String ?? ""
+                let want = step.obj("expect")
+                let at = "\(name) step \(index) \(op)"
+                XCTAssertEqual(Set(step.keys), stepKeys[op], at)
+                switch op {
+                case "set_time":
+                    try store.setTime(Int64(step.int("time")))
+                    XCTAssertTrue(want.isEmpty, at)
+                case "set_ack_withheld":
+                    try store.setAcknowledgementWithheld(step.bool("withheld"))
+                    XCTAssertTrue(want.isEmpty, at)
+                case "verify":
+                    XCTAssertEqual(Set(want.keys), want["decision"] == nil ? ["stage", "disposition"]
+                        : ["stage", "decision", "decision_reason", "allow_horizon"], at)
+                    let req = try request(requestName, corpusName: "lifecycle-scenarios.json")
+                    XCTAssertEqual(req.now, try store.now(), at)
+                    let (trust, status, journal) = try await vectorProviders(corpus.obj("requests").obj(requestName), request: req)
+                    let result = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
+                        statusEvidence: status, statusJournal: journal)
+                    XCTAssertEqual(result.stage.rawValue, want.s("stage"), at)
+                    if want.keys.contains("disposition") {
+                        XCTAssertEqual(result.disposition?.rawValue, want.s("disposition"), at)
+                    } else { XCTAssertEqual(result.disposition, .created, at) }
+                    if want.keys.contains("decision") {
+                        let value = try XCTUnwrap(result.committed, at)
+                        committed[requestName] = value
+                        let body = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
+                        XCTAssertEqual(body["decision"] as? String, want.s("decision"), at)
+                        XCTAssertEqual(body["decision_reason"] as? String, want.s("decision_reason"), at)
+                        XCTAssertEqual(value.allowHorizon, Int64(want.int("allow_horizon")), at)
+                    } else { XCTAssertNil(result.committed, at) }
+                case "publish":
+                    XCTAssertEqual(Set(want.keys), ["receipt_sequence"], at)
+                    XCTAssertEqual(step.s("mode"), "ok", at)
+                    let value = try XCTUnwrap(committed[requestName], at)
+                    let wire = try await store.publish(claimId: value.claimId, receiptBody: value.receiptBody)
+                    if let previous = receipts[requestName] { XCTAssertEqual(wire, previous, at) }
+                    receipts[requestName] = wire
+                    XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence,
+                        Int64(want.int("receipt_sequence")), at)
+                case "release":
+                    XCTAssertEqual(step.s("checkpoint"), "reference", at)
+                    XCTAssertEqual(Set(want.keys), want["decision"] == nil
+                        ? ["release_status", "release_reason"]
+                        : ["release_status", "decision", "release_time", "receipt_sequence"], at)
+                    let value = try XCTUnwrap(committed[requestName], at)
+                    let result = try await Ratify.releaseDecision(value, signedReceipt: receipts[requestName],
+                        verifierPublicKey: key.publicKey, logId: corpus.s("log_id"), claimStore: store, checkpoint: store)
+                    XCTAssertEqual(result.status.rawValue, want.s("release_status"), at)
+                    if want.keys.contains("release_reason") {
+                        XCTAssertEqual(result.reason, want.s("release_reason"), at)
+                    } else { XCTAssertTrue(result.reason.isEmpty, at) }
+                    if want.keys.contains("decision") {
+                        let decision = try XCTUnwrap(result.decision, at)
+                        XCTAssertEqual(decision.decision, want.s("decision"), at)
+                        XCTAssertEqual(decision.receiptWire, try XCTUnwrap(receipts[requestName], at), at)
+                        XCTAssertEqual(decision.releaseTime, Int64(want.int("release_time")), at)
+                        XCTAssertEqual(try Ratify.decodeVerificationReceipt(decision.receiptWire).sequence,
+                            Int64(want.int("receipt_sequence")), at)
+                    } else { XCTAssertNil(result.decision, at) }
+                default:
+                    XCTFail("\(at): unsupported operation")
+                }
+            }
+        }
     }
 }

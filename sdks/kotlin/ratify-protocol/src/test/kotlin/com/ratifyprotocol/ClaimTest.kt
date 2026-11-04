@@ -132,14 +132,16 @@ class ClaimTest {
 
     private class CreatedClaimStore(private val onFinalize: (suspend () -> Unit)? = null,
         private val claimedAt: Long = 1_800_000_000L,
-        private val finalizeTimeOffset: Long = 0L) : RateAtFinalizationClaimStore {
+        private val finalizeTimeOffset: Long = 0L,
+        private val disposition: ClaimDisposition = ClaimDisposition.CREATED) : RateAtFinalizationClaimStore {
         var claims = 0
         var progressWrites = 0
         var finalizations = 0
         override suspend fun authoritativeTime(): Long = claimedAt
         override suspend fun claim(claim: ChallengeClaim): ClaimResult {
             claims++
-            return ClaimResult(ClaimDisposition.CREATED, claimedAt, ByteArray(32) { 7 })
+            return ClaimResult(disposition, claimedAt,
+                if (disposition == ClaimDisposition.CREATED) ByteArray(32) { 7 } else ByteArray(0))
         }
         override suspend fun finalize(claimId: String, ownerToken: ByteArray, terminalResult: ByteArray,
             receiptBody: ByteArray, allowValidUntil: Long): Boolean {
@@ -157,6 +159,37 @@ class ClaimTest {
         override suspend fun loadInterrupted(claimId: String): InterruptedClaim = error("no interruption")
         override suspend fun recoverInterrupted(claimId: String, terminalResult: ByteArray,
             receiptBody: ByteArray): Boolean = error("no interruption")
+    }
+
+    @Test fun verifierCorpusReplay() = runBlocking {
+        val root = File(System.getProperty("ratify.corpus")!!)
+        Corpus.read = { File(root, it).readBytes() }
+        val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
+            it.getJSONObject("expected").getString("stage") == "replay"
+        }
+        assertEquals(2, vectors.size)
+        for (vector in vectors) {
+            val name = vector.getString("name")
+            val disposition = ClaimDisposition.entries.first {
+                it.spelling == vector.getJSONObject("expected").getString("disposition")
+            }
+            val store = CreatedClaimStore(disposition = disposition)
+            val trust = VectorTrust(HybridPublicKey(ByteArray(0), ByteArray(0)), TrustOutcome.TRUSTED)
+            val status = VectorStatus(emptyMap())
+            val audience = CountingAudience()
+            val outcome = verifyProofBundle(request(name), store, trust = trust,
+                audience = audience, statusEvidence = status)
+            val callbacks = vector.getJSONObject("expected").getJSONObject("callback_counts")
+            assertEquals(name, VerifyStage.REPLAY, outcome.stage)
+            assertEquals(name, disposition, outcome.disposition)
+            assertEquals(name, null, outcome.committed)
+            assertEquals(name, callbacks.getInt("claim"), store.claims)
+            assertEquals(name, callbacks.getInt("finalize"), store.finalizations)
+            assertEquals(name, callbacks.getInt("progress"), store.progressWrites)
+            assertEquals(name, callbacks.getInt("trust"), trust.calls.get())
+            assertEquals(name, callbacks.getInt("status"), status.requests.size)
+            assertEquals(name, callbacks.getInt("audience"), audience.calls.get())
+        }
     }
 
     private class VectorRate(private val mode: String) : RateReservationStore {

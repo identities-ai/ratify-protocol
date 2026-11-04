@@ -125,19 +125,20 @@ final class ClaimTests: XCTestCase {
         let onFinalize: (@Sendable () async -> Void)?
         let claimedAt: Int64
         let finalizeTimeOffset: Int64
+        let disposition: ClaimDisposition
         private(set) var claims = 0
         private(set) var progressWrites = 0
         private(set) var finalizations = 0
         init(onFinalize: (@Sendable () async -> Void)? = nil, claimedAt: Int64 = 1_800_000_000,
-             finalizeTimeOffset: Int64 = 0) {
+             finalizeTimeOffset: Int64 = 0, disposition: ClaimDisposition = .created) {
             self.onFinalize = onFinalize; self.claimedAt = claimedAt
-            self.finalizeTimeOffset = finalizeTimeOffset
+            self.finalizeTimeOffset = finalizeTimeOffset; self.disposition = disposition
         }
         func authoritativeTime() -> Int64 { claimedAt }
         func claim(_ claim: ChallengeClaim) -> ClaimResult {
             claims += 1
-            return ClaimResult(disposition: .created, claimedAt: claimedAt,
-                ownerToken: Data(repeating: 7, count: 32))
+            return ClaimResult(disposition: disposition, claimedAt: claimedAt,
+                ownerToken: disposition == .created ? Data(repeating: 7, count: 32) : Data())
         }
         func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data,
                       allowValidUntil: Int64) async -> Bool {
@@ -157,6 +158,39 @@ final class ClaimTests: XCTestCase {
         func loadInterrupted(claimId: String) -> InterruptedClaim { fatalError("no interruption") }
         func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) -> Bool {
             XCTFail("no interruption"); return false
+        }
+    }
+
+    func testVerifierCorpusReplay() async throws {
+        let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
+            $0.obj("expected").s("stage") == "replay"
+        }
+        XCTAssertEqual(vectors.count, 2)
+        for vector in vectors {
+            let name = vector.s("name")
+            let disposition = ClaimDisposition(rawValue: vector.obj("expected").s("disposition"))!
+            let store = CreatedClaimStore(disposition: disposition)
+            let trust = VectorTrust(key: HybridPublicKey(ed25519: Data(), mlDsa65: Data()), outcome: .trusted)
+            let status = VectorStatus(byIssuer: [:])
+            let audience = EmptyAudience()
+            let outcome = try await Ratify.verifyProofBundle(request(name), claimStore: store,
+                trust: trust, audience: audience, statusEvidence: status)
+            let callbacks = vector.obj("expected").obj("callback_counts")
+            XCTAssertEqual(outcome.stage, .replay, name)
+            XCTAssertEqual(outcome.disposition, disposition, name)
+            XCTAssertNil(outcome.committed, name)
+            let claims = await store.claims
+            let finalizations = await store.finalizations
+            let progress = await store.progressWrites
+            let trustCalls = await trust.calls
+            let statusCalls = await status.requests.count
+            let audienceCalls = await audience.calls
+            XCTAssertEqual(claims, callbacks.int("claim"), name)
+            XCTAssertEqual(finalizations, callbacks.int("finalize"), name)
+            XCTAssertEqual(progress, callbacks.int("progress"), name)
+            XCTAssertEqual(trustCalls, callbacks.int("trust"), name)
+            XCTAssertEqual(statusCalls, callbacks.int("status"), name)
+            XCTAssertEqual(audienceCalls, callbacks.int("audience"), name)
         }
     }
 

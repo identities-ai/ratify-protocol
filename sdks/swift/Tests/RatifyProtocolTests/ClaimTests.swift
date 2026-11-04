@@ -154,6 +154,20 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    actor VectorRate: RateReservationStore {
+        let mode: String
+        private(set) var batches: [[RateReservation]] = []
+        init(_ mode: String) { self.mode = mode }
+        func reserve(claimId: String, ownerToken: Data, bundleHash: String,
+                     batch: [RateReservation]) throws {
+            XCTAssertEqual(ownerToken, Data(repeating: 7, count: 32))
+            XCTAssertFalse(bundleHash.isEmpty)
+            batches.append(batch)
+            if mode == "exceeded" { throw StoreError.rateLimitExceeded }
+            if mode == "unavailable" { throw StoreError.unavailable("scripted rate failure") }
+        }
+    }
+
     actor UnavailableTrust: TrustProvider {
         private(set) var calls = 0
         func resolve(chain: [DelegationCert]) -> TrustResolution {
@@ -314,7 +328,8 @@ final class ClaimTests: XCTestCase {
                     trust["mode"] as? String == "ok" &&
                     TrustOutcome(rawValue: trust["outcome"] as? String ?? "") != nil) &&
                 ["ok", "error"].contains(vector.s("audience_mode")) &&
-                vector.s("rate") == "absent" && journal["mode"] as? String == "anchored" &&
+                ["absent", "reserve", "exceeded", "unavailable"].contains(vector.s("rate")) &&
+                journal["mode"] as? String == "anchored" &&
                 !(vector["constraint_evaluators"] as? [[String: Any]] ?? []).contains {
                     ["fault:panic", "fault:invalid_outcome"].contains($0.s("implementation"))
                 } &&
@@ -322,7 +337,7 @@ final class ClaimTests: XCTestCase {
                 (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 evidence.values.allSatisfy { $0["mode"] as? String != "panic" }
         }
-        XCTAssertEqual(vectors.count, 322)
+        XCTAssertEqual(vectors.count, 342)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
@@ -349,8 +364,9 @@ final class ClaimTests: XCTestCase {
             }
             let audience = EmptyAudience(memberships: memberships,
                 fails: vector.s("audience_mode") == "error")
+            let rate = vector.s("rate") == "absent" ? nil : VectorRate(vector.s("rate"))
             let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore, trust: trust,
-                audience: audience, statusEvidence: status, statusJournal: journal)
+                audience: audience, statusEvidence: status, statusJournal: journal, rate: rate)
             XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))
             XCTAssertEqual(outcome.committed?.receiptBody,
                 Data(base64Encoded: vector.obj("expected").s("receipt_body_b64"))!, name)
@@ -367,6 +383,15 @@ final class ClaimTests: XCTestCase {
             XCTAssertEqual(trustCalls, expectedCallbacks.int("trust"), name)
             XCTAssertEqual(statusRequests.count, expectedCallbacks.int("status"), name)
             XCTAssertEqual(audienceCalls, expectedCallbacks.int("audience"), name)
+            let rateBatches = await rate?.batches ?? []
+            XCTAssertEqual(rateBatches.count, expectedCallbacks.int("rate"), name)
+            if let first = rateBatches.first {
+                let expectedBatch = vector.obj("expected").arr("rate_batch").map {
+                    RateReservation(issuerId: $0.s("issuer_id"), certId: $0.s("cert_id"),
+                        windowSeconds: Int64($0.int("window_s")), limit: Int64($0.int("limit")))
+                }
+                XCTAssertEqual(first, expectedBatch, name)
+            }
             var evaluatorCalls = 0
             for evaluator in evaluators { evaluatorCalls += await evaluator.calls }
             XCTAssertEqual(evaluatorCalls, (expectedCallbacks["evaluator"] as? NSNumber)?.intValue ?? 0, name)

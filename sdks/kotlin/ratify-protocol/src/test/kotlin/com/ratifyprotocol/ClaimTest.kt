@@ -157,6 +157,18 @@ class ClaimTest {
             receiptBody: ByteArray): Boolean = error("no interruption")
     }
 
+    private class VectorRate(private val mode: String) : RateReservationStore {
+        val batches = java.util.Collections.synchronizedList(mutableListOf<List<RateReservation>>())
+        override suspend fun reserve(claimId: String, ownerToken: ByteArray, bundleHash: String,
+            batch: List<RateReservation>) {
+            org.junit.Assert.assertArrayEquals(ByteArray(32) { 7 }, ownerToken)
+            org.junit.Assert.assertTrue(bundleHash.isNotEmpty())
+            batches.add(batch)
+            if (mode == "exceeded") throw StoreError.RateLimitExceeded()
+            if (mode == "unavailable") throw StoreError.Unavailable("scripted rate failure")
+        }
+    }
+
     private class UnavailableTrust : TrustProvider {
         var calls = 0
         override suspend fun resolve(chain: List<DelegationCert>): TrustResolution {
@@ -298,7 +310,8 @@ class ClaimTest {
                 vector.getString("claim_store") == "create" &&
                 (trust.optString("mode") == "error" || trust.optString("mode") == "ok" &&
                     TrustOutcome.fromSpelling(trust.optString("outcome")) != null) &&
-                vector.getString("audience_mode") in listOf("ok", "error") && vector.getString("rate") == "absent" &&
+                vector.getString("audience_mode") in listOf("ok", "error") &&
+                vector.getString("rate") in listOf("absent", "reserve", "exceeded", "unavailable") &&
                 journal.optString("mode") == "anchored" &&
                 (vector.optJSONArray("constraint_evaluators")?.let { array ->
                     (0 until array.length()).none { index ->
@@ -311,7 +324,7 @@ class ClaimTest {
                     evidence.getJSONObject(issuer).optString("mode") != "panic"
                 }
         }
-        assertEquals(322, vectors.size)
+        assertEquals(342, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")
@@ -337,8 +350,9 @@ class ClaimTest {
                 }
             } ?: emptyList()
             val audience = CountingAudience(memberships, vector.getString("audience_mode") == "error")
+            val rate = if (vector.getString("rate") == "absent") null else VectorRate(vector.getString("rate"))
             val outcome = verifyProofBundle(req, baseStore, trust = trust, audience = audience,
-                statusEvidence = status, statusJournal = journal)
+                statusEvidence = status, statusJournal = journal, rate = rate)
             assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)
             org.junit.Assert.assertArrayEquals(name, vector.getJSONObject("expected").b64("receipt_body_b64"),
                 outcome.committed?.receiptBody)
@@ -350,6 +364,14 @@ class ClaimTest {
             assertEquals(name, callbacks.getInt("trust"), trust.calls.get())
             assertEquals(name, callbacks.getInt("status"), status.requests.size)
             assertEquals(name, callbacks.getInt("audience"), audience.calls.get())
+            assertEquals(name, callbacks.getInt("rate"), rate?.batches?.size ?: 0)
+            rate?.batches?.firstOrNull()?.let { batch ->
+                val expectedBatch = vector.getJSONObject("expected").arr("rate_batch").map {
+                    RateReservation(it.getString("issuer_id"), it.getString("cert_id"),
+                        it.getLong("window_s"), it.getLong("limit"))
+                }
+                assertEquals(name, expectedBatch, batch)
+            }
             assertEquals(name, callbacks.optInt("evaluator"), evaluators.sumOf { it.calls.get() })
             val expectedRequests = vector.getJSONObject("expected").arr("status_requests")
             assertEquals(name, expectedRequests.size, status.requests.size)

@@ -190,12 +190,26 @@ class ClaimTest {
         }
     }
 
-    private suspend fun vectorProviders(vector: JSONObject, req: VerifyRequest): Triple<TrustProvider, StatusEvidenceProvider, VectorJournal> {
+    private class VectorTrust(private val key: HybridPublicKey) : TrustProvider {
+        val calls = AtomicInteger()
+        override suspend fun resolve(chain: List<DelegationCert>): TrustResolution {
+            calls.incrementAndGet()
+            return TrustResolution(TrustOutcome.TRUSTED, key)
+        }
+    }
+
+    private class VectorStatus(private val evidence: Map<String, List<StatusEvidenceObject>>) : StatusEvidenceProvider {
+        val requests = java.util.Collections.synchronizedList(mutableListOf<StatusEvidenceRequest>())
+        override suspend fun provide(request: StatusEvidenceRequest): List<StatusEvidenceObject> {
+            requests.add(request)
+            return evidence[request.issuerId] ?: emptyList()
+        }
+    }
+
+    private suspend fun vectorProviders(vector: JSONObject, req: VerifyRequest): Triple<VectorTrust, VectorStatus, VectorJournal> {
         val trustKey = vector.getJSONObject("trust").optJSONObject("root_public_key")?.let(::publicKeyOf)
             ?: HybridPublicKey(ByteArray(0), ByteArray(0))
-        val trust = object : TrustProvider {
-            override suspend fun resolve(chain: List<DelegationCert>) = TrustResolution(TrustOutcome.TRUSTED, trustKey)
-        }
+        val trust = VectorTrust(trustKey)
         val evidenceObject = vector.getJSONObject("status_evidence")
         val evidence = evidenceObject.keys().asSequence().associateWith { issuer ->
             val objects = evidenceObject.getJSONObject(issuer).getJSONArray("objects")
@@ -204,15 +218,21 @@ class ClaimTest {
                 StatusEvidenceObject(item.getInt("object_type_code").toUShort(), item.b64("wire_b64"))
             }
         }
-        val status = object : StatusEvidenceProvider {
-            override suspend fun provide(request: StatusEvidenceRequest) = evidence[request.issuerId] ?: emptyList()
-        }
+        val status = VectorStatus(evidence)
         val journal = VectorJournal(emptySecurityJournalSnapshot())
         for (issuer in req.statusKeys.keys.sorted()) {
             val key = req.statusKeys.getValue(issuer)
             configureStatusKeyEpoch(journal, issuer, key.epoch, key.key)
         }
         return Triple(trust, status, journal)
+    }
+
+    private class CountingAudience : AudienceProvider {
+        val calls = AtomicInteger()
+        override suspend fun memberships(deferred: List<DeferredConstraint>, receiverId: String): List<AudienceMembership> {
+            calls.incrementAndGet()
+            return emptyList()
+        }
     }
 
     @Test fun verifierCorpusCommittedReceipts() = runBlocking {
@@ -245,7 +265,8 @@ class ClaimTest {
             val (trust, status, journal) = vectorProviders(vector, req)
             val store = CreatedClaimStore()
             val baseStore: ClaimStore = store
-            val outcome = verifyProofBundle(req, baseStore, trust = trust, audience = emptyAudience,
+            val audience = CountingAudience()
+            val outcome = verifyProofBundle(req, baseStore, trust = trust, audience = audience,
                 statusEvidence = status, statusJournal = journal)
             assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)
             org.junit.Assert.assertArrayEquals(name, vector.getJSONObject("expected").b64("receipt_body_b64"),
@@ -254,6 +275,23 @@ class ClaimTest {
             assertEquals(name, 1, store.finalizations)
             assertEquals(name, vector.getJSONObject("expected").getJSONObject("callback_counts").getInt("progress"),
                 store.progressWrites)
+            val callbacks = vector.getJSONObject("expected").getJSONObject("callback_counts")
+            assertEquals(name, callbacks.getInt("trust"), trust.calls.get())
+            assertEquals(name, callbacks.getInt("status"), status.requests.size)
+            assertEquals(name, callbacks.getInt("audience"), audience.calls.get())
+            val expectedRequests = vector.getJSONObject("expected").arr("status_requests")
+            assertEquals(name, expectedRequests.size, status.requests.size)
+            for ((actual, expected) in status.requests.zip(expectedRequests)) {
+                assertEquals(name, expected.getString("issuer_id"), actual.issuerId)
+                assertEquals(name, expected.getLong("status_key_epoch").toULong(), actual.statusKeyEpoch)
+                assertEquals(name, expected.getString("status_key_id"), actual.statusKeyId)
+                val refs = expected.arr("refs")
+                assertEquals(name, refs.size, actual.refs.size)
+                for ((actualRef, expectedRef) in actual.refs.zip(refs)) {
+                    assertEquals(name, expectedRef.getString("issuer_id"), actualRef.issuerId)
+                    assertEquals(name, expectedRef.getString("cert_id"), actualRef.certId)
+                }
+            }
         }
     }
 

@@ -171,22 +171,32 @@ final class ClaimTests: XCTestCase {
         }
     }
 
-    struct VectorTrust: TrustProvider {
+    actor VectorTrust: TrustProvider {
         let key: HybridPublicKey
+        private(set) var calls = 0
+        init(key: HybridPublicKey) { self.key = key }
         func resolve(chain: [DelegationCert]) -> TrustResolution {
-            TrustResolution(outcome: .trusted, rootKey: key)
+            calls += 1
+            return TrustResolution(outcome: .trusted, rootKey: key)
         }
     }
 
-    struct VectorStatus: StatusEvidenceProvider {
+    actor VectorStatus: StatusEvidenceProvider {
         let byIssuer: [String: [StatusEvidenceObject]]
+        private(set) var requests: [StatusEvidenceRequest] = []
+        init(byIssuer: [String: [StatusEvidenceObject]]) { self.byIssuer = byIssuer }
         func provide(_ request: StatusEvidenceRequest) -> [StatusEvidenceObject] {
-            byIssuer[request.issuerId] ?? []
+            requests.append(request)
+            return byIssuer[request.issuerId] ?? []
         }
     }
 
-    struct EmptyAudience: AudienceProvider {
-        func memberships(for deferred: [DeferredConstraint], receiverId: String) -> [AudienceMembership] { [] }
+    actor EmptyAudience: AudienceProvider {
+        private(set) var calls = 0
+        func memberships(for deferred: [DeferredConstraint], receiverId: String) -> [AudienceMembership] {
+            calls += 1
+            return []
+        }
     }
 
     actor VectorEvaluator: ConstraintEvaluator {
@@ -246,17 +256,38 @@ final class ClaimTests: XCTestCase {
             let (trust, status, journal) = try await vectorProviders(vector, request: req)
             let store = CreatedClaimStore()
             let baseStore: any ClaimStore = store
+            let audience = EmptyAudience()
             let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore, trust: trust,
-                audience: EmptyAudience(), statusEvidence: status, statusJournal: journal)
+                audience: audience, statusEvidence: status, statusJournal: journal)
             XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))
             XCTAssertEqual(outcome.committed?.receiptBody,
                 Data(base64Encoded: vector.obj("expected").s("receipt_body_b64"))!, name)
             let claims = await store.claims
             let finalizations = await store.finalizations
             let progressWrites = await store.progressWrites
+            let trustCalls = await trust.calls
+            let statusRequests = await status.requests
+            let audienceCalls = await audience.calls
+            let expectedCallbacks = vector.obj("expected").obj("callback_counts")
             XCTAssertEqual(claims, 1, name)
             XCTAssertEqual(finalizations, 1, name)
-            XCTAssertEqual(progressWrites, vector.obj("expected").obj("callback_counts").int("progress"), name)
+            XCTAssertEqual(progressWrites, expectedCallbacks.int("progress"), name)
+            XCTAssertEqual(trustCalls, expectedCallbacks.int("trust"), name)
+            XCTAssertEqual(statusRequests.count, expectedCallbacks.int("status"), name)
+            XCTAssertEqual(audienceCalls, expectedCallbacks.int("audience"), name)
+            let expectedRequests = vector.obj("expected").arr("status_requests")
+            XCTAssertEqual(statusRequests.count, expectedRequests.count, name)
+            for (actual, expected) in zip(statusRequests, expectedRequests) {
+                XCTAssertEqual(actual.issuerId, expected.s("issuer_id"), name)
+                XCTAssertEqual(actual.statusKeyEpoch, UInt64(expected.int("status_key_epoch")), name)
+                XCTAssertEqual(actual.statusKeyId, expected.s("status_key_id"), name)
+                let refs = expected.arr("refs")
+                XCTAssertEqual(actual.refs.count, refs.count, name)
+                for (actualRef, expectedRef) in zip(actual.refs, refs) {
+                    XCTAssertEqual(actualRef.issuerId, expectedRef.s("issuer_id"), name)
+                    XCTAssertEqual(actualRef.certId, expectedRef.s("cert_id"), name)
+                }
+            }
         }
     }
 

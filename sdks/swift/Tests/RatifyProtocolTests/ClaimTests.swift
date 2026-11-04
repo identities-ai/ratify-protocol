@@ -229,9 +229,35 @@ final class ClaimTests: XCTestCase {
             return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }
         }
         let journal = VectorJournal(try Ratify.emptySecurityJournalSnapshot())
-        for issuer in req.statusKeys.keys.sorted() {
-            let key = req.statusKeys[issuer]!
-            _ = try await Ratify.configureStatusKeyEpoch(store: journal, issuerId: issuer, epoch: key.epoch, key: key.key)
+        let script = vector.obj("journal")
+        if let setup = script["setup"] as? [[String: Any]] {
+            for step in setup {
+                let publicKey = step.obj("public_key")
+                let key = HybridPublicKey(ed25519: publicKey.b64("ed25519"), mlDsa65: publicKey.b64("ml_dsa_65"))
+                if step.s("op") == "configure_status_key" {
+                    _ = try await Ratify.configureStatusKeyEpoch(store: journal, issuerId: step.s("issuer_id"),
+                        epoch: UInt64(step.int("epoch")), key: key)
+                } else {
+                    XCTAssertEqual(step.s("op"), "apply")
+                    XCTAssertEqual(step.int("object_type_code"), 3)
+                    _ = try await Ratify.applyRevocationListToJournal(store: journal,
+                        list: Ratify.decodeRevocationList(step.b64("wire_b64")), issuerId: step.s("issuer_id"),
+                        epoch: UInt64(step.int("epoch")), key: key, policy: req.statusPolicy,
+                        now: Int64(step.int("now")))
+                }
+            }
+        } else {
+            for issuer in req.statusKeys.keys.sorted() {
+                let key = req.statusKeys[issuer]!
+                _ = try await Ratify.configureStatusKeyEpoch(store: journal, issuerId: issuer, epoch: key.epoch, key: key.key)
+            }
+            for step in script["preload"] as? [[String: Any]] ?? [] {
+                XCTAssertEqual(step.int("object_type_code"), 3)
+                let key = req.statusKeys[step.s("issuer_id")]!
+                _ = try await Ratify.applyRevocationListToJournal(store: journal,
+                    list: Ratify.decodeRevocationList(step.b64("wire_b64")), issuerId: step.s("issuer_id"),
+                    epoch: key.epoch, key: key.key, policy: req.statusPolicy, now: Int64(step.int("now")))
+            }
         }
         return (trust, VectorStatus(byIssuer: evidence), journal)
     }
@@ -245,14 +271,13 @@ final class ClaimTests: XCTestCase {
                 vector.s("claim_store") == "create" && trust["mode"] as? String == "ok" &&
                 trust["outcome"] as? String == "trusted" && vector.s("audience_mode") == "ok" &&
                 vector.s("rate") == "absent" && journal["mode"] as? String == "anchored" &&
-                (journal["preload"] as? [Any] ?? []).isEmpty && (journal["setup"] as? [Any] ?? []).isEmpty &&
                 (vector["constraint_evaluators"] as? [Any] ?? []).isEmpty &&
                 vector.s("receiver_binding_hook") == "absent" &&
                 (vector["claim_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 evidence.values.allSatisfy { !["error", "panic"].contains($0["mode"] as? String ?? "") }
         }
-        XCTAssertEqual(vectors.count, 241)
+        XCTAssertEqual(vectors.count, 262)
         for vector in vectors {
             let name = vector.s("name")
             let req = try request(name)

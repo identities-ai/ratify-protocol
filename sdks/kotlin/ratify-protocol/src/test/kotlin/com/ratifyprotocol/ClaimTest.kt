@@ -221,9 +221,33 @@ class ClaimTest {
         }
         val status = VectorStatus(evidence)
         val journal = VectorJournal(emptySecurityJournalSnapshot())
-        for (issuer in req.statusKeys.keys.sorted()) {
-            val key = req.statusKeys.getValue(issuer)
-            configureStatusKeyEpoch(journal, issuer, key.epoch, key.key)
+        val script = vector.getJSONObject("journal")
+        if (script.optJSONArray("setup") != null) {
+            for (step in script.arr("setup")) {
+                val key = publicKeyOf(step.getJSONObject("public_key"))
+                when (step.getString("op")) {
+                    "configure_status_key" -> configureStatusKeyEpoch(journal, step.getString("issuer_id"),
+                        step.getLong("epoch").toULong(), key)
+                    "apply" -> {
+                        assertEquals(3, step.getInt("object_type_code"))
+                        applyRevocationListToJournal(journal, decodeRevocationList(step.b64("wire_b64")),
+                            step.getString("issuer_id"), step.getLong("epoch").toULong(), key,
+                            req.statusPolicy, step.getLong("now"))
+                    }
+                    else -> error("unknown journal setup operation")
+                }
+            }
+        } else {
+            for (issuer in req.statusKeys.keys.sorted()) {
+                val key = req.statusKeys.getValue(issuer)
+                configureStatusKeyEpoch(journal, issuer, key.epoch, key.key)
+            }
+            for (step in script.arr("preload")) {
+                assertEquals(3, step.getInt("object_type_code"))
+                val key = req.statusKeys.getValue(step.getString("issuer_id"))
+                applyRevocationListToJournal(journal, decodeRevocationList(step.b64("wire_b64")),
+                    step.getString("issuer_id"), key.epoch, key.key, req.statusPolicy, step.getLong("now"))
+            }
         }
         return Triple(trust, status, journal)
     }
@@ -248,8 +272,6 @@ class ClaimTest {
                 trust.optString("mode") == "ok" && trust.optString("outcome") == "trusted" &&
                 vector.getString("audience_mode") == "ok" && vector.getString("rate") == "absent" &&
                 journal.optString("mode") == "anchored" &&
-                (journal.optJSONArray("preload")?.length() ?: 0) == 0 &&
-                (journal.optJSONArray("setup")?.length() ?: 0) == 0 &&
                 (vector.optJSONArray("constraint_evaluators")?.length() ?: 0) == 0 &&
                 vector.getString("receiver_binding_hook") == "absent" &&
                 vector.optLong("claim_time_offset") == 0L && vector.optLong("finalize_time_offset") == 0L &&
@@ -257,7 +279,7 @@ class ClaimTest {
                     evidence.getJSONObject(issuer).optString("mode") !in listOf("error", "panic")
                 }
         }
-        assertEquals(241, vectors.size)
+        assertEquals(262, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val req = request(name)

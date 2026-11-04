@@ -861,20 +861,40 @@ final class ClaimTests: XCTestCase {
         XCTAssertEqual(terminal.release?.outcome, .released)
     }
 
+    struct WrongEntryCheckpoint: ReceiptCheckpoint, @unchecked Sendable {
+        let store: Store
+        func acknowledge(logId: String, sequence: Int64, previousEntryHash: Data,
+                         entryHash: Data) async throws -> CheckpointAcknowledgement {
+            try await store.acknowledge(logId: logId, sequence: sequence,
+                previousEntryHash: previousEntryHash, entryHash: entryHash)
+        }
+        func get(logId: String, sequence: Int64) async throws -> CheckpointAcknowledgement {
+            let ack = try await store.get(logId: logId, sequence: sequence)
+            var hash = ack.entryHash
+            hash[hash.startIndex] ^= 1
+            return CheckpointAcknowledgement(logId: ack.logId, sequence: ack.sequence,
+                entryHash: hash, timestamp: ack.timestamp)
+        }
+    }
+
     func testLifecycleBasicReleaseScenarios() async throws {
         let corpus = Corpus.load("lifecycle-scenarios.json")
         let names: Set<String> = ["allow_published_acknowledged_released", "release_without_receipt_is_pending",
             "release_without_acknowledgement_is_pending_then_late_ack_releases",
             "late_ack_at_challenge_expiry_is_withheld", "release_one_second_before_challenge_expiry",
             "release_at_challenge_expiry_is_withheld", "release_at_allow_horizon_is_withheld",
-            "release_before_allow_horizon"]
+            "release_before_allow_horizon", "signer_failure_then_retry", "head_of_line_blocking",
+            "acknowledgement_for_another_entry_is_rejected", "repeated_release_reverifies_acknowledgement",
+            "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
             "release_without_acknowledgement_is_pending_then_late_ack_releases": 7,
             "late_ack_at_challenge_expiry_is_withheld": 6, "release_one_second_before_challenge_expiry": 4,
             "release_at_challenge_expiry_is_withheld": 4, "release_at_allow_horizon_is_withheld": 4,
-            "release_before_allow_horizon": 3]
+            "release_before_allow_horizon": 3, "signer_failure_then_retry": 5, "head_of_line_blocking": 8,
+            "acknowledgement_for_another_entry_is_rejected": 4, "repeated_release_reverifies_acknowledgement": 5,
+            "receipt_of_another_claim_is_rejected": 7, "corrupt_receipt_signature_is_rejected": 5]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -887,12 +907,15 @@ final class ClaimTests: XCTestCase {
                 logId: corpus.s("log_id"), verifierKey: key)
             var committed: [String: CommittedOutcome] = [:]
             var receipts: [String: Data] = [:]
+            var publishedWires: [String: Data] = [:]
             for (index, step) in scenario.arr("steps").enumerated() {
                 let op = step.s("op")
                 let requestName = step["request"] as? String ?? ""
                 let want = step.obj("expect")
                 let at = "\(name) step \(index) \(op)"
-                XCTAssertEqual(Set(step.keys), stepKeys[op], at)
+                var expectedStepKeys = stepKeys[op] ?? []
+                if op == "release" && step["receipt_of"] != nil { expectedStepKeys.insert("receipt_of") }
+                XCTAssertEqual(Set(step.keys), expectedStepKeys, at)
                 switch op {
                 case "set_time":
                     try store.setTime(Int64(step.int("time")))
@@ -921,22 +944,57 @@ final class ClaimTests: XCTestCase {
                         XCTAssertEqual(value.allowHorizon, Int64(want.int("allow_horizon")), at)
                     } else { XCTAssertNil(result.committed, at) }
                 case "publish":
-                    XCTAssertEqual(Set(want.keys), ["receipt_sequence"], at)
-                    XCTAssertEqual(step.s("mode"), "ok", at)
+                    XCTAssertEqual(Set(want.keys), want["failed"] == nil
+                        ? ["receipt_sequence"] : ["failed", "publish_error"], at)
+                    let mode = step.s("mode")
+                    XCTAssertTrue(["ok", "signer_failure", "corrupt_signature"].contains(mode), at)
+                    if mode == "signer_failure" { XCTAssertEqual(want.s("publish_error"), "signer_unavailable", at) }
+                    if mode == "corrupt_signature" { XCTAssertFalse(want.keys.contains("failed"), at) }
                     let value = try XCTUnwrap(committed[requestName], at)
-                    let wire = try await store.publish(claimId: value.claimId, receiptBody: value.receiptBody)
-                    if let previous = receipts[requestName] { XCTAssertEqual(wire, previous, at) }
-                    receipts[requestName] = wire
-                    XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence,
-                        Int64(want.int("receipt_sequence")), at)
+                    if mode == "signer_failure" { try store.setSignerFailure(true) }
+                    if want.keys.contains("failed") {
+                        XCTAssertTrue(want.bool("failed"), at)
+                        let failureCode = want.s("publish_error")
+                        XCTAssertTrue(["signer_unavailable", "head_of_line_blocked"].contains(failureCode), at)
+                        if mode == "ok" { XCTAssertEqual(failureCode, "head_of_line_blocked", at) }
+                        do {
+                            _ = try await store.publish(claimId: value.claimId, receiptBody: value.receiptBody)
+                            XCTFail("\(at): publication unexpectedly succeeded")
+                        } catch StoreError.unavailable(let detail) {
+                            let expected = failureCode == "signer_unavailable"
+                                ? "v2reference: receipt signer unavailable"
+                                : "v2reference: an earlier receipt-log entry is still pending"
+                            XCTAssertEqual(detail, expected, at)
+                        }
+                    } else {
+                        let wire = try await store.publish(claimId: value.claimId, receiptBody: value.receiptBody)
+                        if let previous = publishedWires[requestName] { XCTAssertEqual(wire, previous, at) }
+                        publishedWires[requestName] = wire
+                        XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence,
+                            Int64(want.int("receipt_sequence")), at)
+                        if mode == "corrupt_signature" {
+                            var receipt = try Ratify.decodeVerificationReceipt(wire)
+                            receipt.signature.ed25519[receipt.signature.ed25519.startIndex] ^= 1
+                            receipts[requestName] = try Ratify.encodeVerificationReceipt(receipt)
+                        } else { receipts[requestName] = wire }
+                    }
+                    if mode == "signer_failure" { try store.setSignerFailure(false) }
                 case "release":
-                    XCTAssertEqual(step.s("checkpoint"), "reference", at)
+                    let checkpointMode = step.s("checkpoint")
+                    XCTAssertTrue(checkpointMode == "reference" || checkpointMode == "wrong_entry", at)
                     XCTAssertEqual(Set(want.keys), want["decision"] == nil
                         ? ["release_status", "release_reason"]
                         : ["release_status", "decision", "release_time", "receipt_sequence"], at)
                     let value = try XCTUnwrap(committed[requestName], at)
-                    let result = try await Ratify.releaseDecision(value, signedReceipt: receipts[requestName],
-                        verifierPublicKey: key.publicKey, logId: corpus.s("log_id"), claimStore: store, checkpoint: store)
+                    let checkpoint: any ReceiptCheckpoint = checkpointMode == "wrong_entry"
+                        ? WrongEntryCheckpoint(store: store) : store
+                    let receiptName = step.keys.contains("receipt_of") ? step.s("receipt_of") : requestName
+                    if step.keys.contains("receipt_of") {
+                        XCTAssertNotEqual(receiptName, requestName, at)
+                        _ = try XCTUnwrap(receipts[receiptName], at)
+                    }
+                    let result = try await Ratify.releaseDecision(value, signedReceipt: receipts[receiptName],
+                        verifierPublicKey: key.publicKey, logId: corpus.s("log_id"), claimStore: store, checkpoint: checkpoint)
                     XCTAssertEqual(result.status.rawValue, want.s("release_status"), at)
                     if want.keys.contains("release_reason") {
                         XCTAssertEqual(result.reason, want.s("release_reason"), at)

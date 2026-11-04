@@ -801,20 +801,48 @@ class ClaimTest {
         assertEquals(ReleaseStatus.RELEASED, store.loadTerminal(committed.claimId).release?.outcome)
     }
 
+    private class WrongEntryCheckpoint(private val store: ReferenceStore) : ReceiptCheckpoint {
+        override suspend fun acknowledge(logId: String, sequence: Long, previousEntryHash: ByteArray,
+            entryHash: ByteArray): CheckpointAcknowledgement = store.acknowledge(logId, sequence, previousEntryHash, entryHash)
+        override suspend fun get(logId: String, sequence: Long): CheckpointAcknowledgement {
+            val ack = store.get(logId, sequence)
+            val hash = ack.entryHash.copyOf()
+            hash[0] = (hash[0].toInt() xor 1).toByte()
+            return CheckpointAcknowledgement(ack.logId, ack.sequence, hash, ack.timestamp)
+        }
+    }
+
+    private fun corruptReceiptSignature(wire: ByteArray): ByteArray {
+        val receipt = decodeVerificationReceipt(wire)
+        val ed25519 = receipt.signature.ed25519
+        ed25519[0] = (ed25519[0].toInt() xor 1).toByte()
+        return encodeVerificationReceipt(VerificationReceipt(receipt.version, receipt.logId, receipt.sequence,
+            receipt.verifierId, receipt.agentId, receipt.humanId, receipt.bundleHash, receipt.issuerIds,
+            receipt.decision, receipt.decisionReason, receipt.identityStatus, receipt.trustAssessment,
+            receipt.statusAssessment, receipt.challengeAssessment, receipt.constraintEvaluators,
+            receipt.contextAssessment, receipt.contextPolicyDigest, receipt.verifiedAt, receipt.requiredScope,
+            receipt.grantedScope, receipt.statusEvidence, receipt.previousReceiptHash,
+            HybridSignature(ed25519, receipt.signature.mlDsa65)))
+    }
+
     @Test fun lifecycleBasicReleaseScenarios() = runBlocking {
         val corpus = Corpus.load("lifecycle-scenarios.json")
         val names = setOf("allow_published_acknowledged_released", "release_without_receipt_is_pending",
             "release_without_acknowledgement_is_pending_then_late_ack_releases",
             "late_ack_at_challenge_expiry_is_withheld", "release_one_second_before_challenge_expiry",
             "release_at_challenge_expiry_is_withheld", "release_at_allow_horizon_is_withheld",
-            "release_before_allow_horizon")
+            "release_before_allow_horizon", "signer_failure_then_retry", "head_of_line_blocking",
+            "acknowledgement_for_another_entry_is_rejected", "repeated_release_reverifies_acknowledgement",
+            "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
             "release_without_acknowledgement_is_pending_then_late_ack_releases" to 7,
             "late_ack_at_challenge_expiry_is_withheld" to 6, "release_one_second_before_challenge_expiry" to 4,
             "release_at_challenge_expiry_is_withheld" to 4, "release_at_allow_horizon_is_withheld" to 4,
-            "release_before_allow_horizon" to 3)
+            "release_before_allow_horizon" to 3, "signer_failure_then_retry" to 5, "head_of_line_blocking" to 8,
+            "acknowledgement_for_another_entry_is_rejected" to 4, "repeated_release_reverifies_acknowledgement" to 5,
+            "receipt_of_another_claim_is_rejected" to 7, "corrupt_receipt_signature_is_rejected" to 5)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -831,12 +859,15 @@ class ClaimTest {
             val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"), logId, key)
             val committed = mutableMapOf<String, CommittedOutcome>()
             val receipts = mutableMapOf<String, ByteArray>()
+            val publishedWires = mutableMapOf<String, ByteArray>()
             for ((index, step) in scenario.arr("steps").withIndex()) {
                 val op = step.getString("op")
                 val requestName = step.optString("request")
                 val want = step.getJSONObject("expect")
                 val at = "$name step $index $op"
-                assertEquals(at, stepKeys[op], step.keys().asSequence().toSet())
+                val expectedStepKeys = stepKeys[op].orEmpty() + if (op == "release" && step.has("receipt_of"))
+                    setOf("receipt_of") else emptySet()
+                assertEquals(at, expectedStepKeys, step.keys().asSequence().toSet())
                 when (op) {
                     "set_time" -> {
                         store.setTime(step.getLong("time"))
@@ -867,21 +898,51 @@ class ClaimTest {
                         } else assertEquals(at, null, result.committed)
                     }
                     "publish" -> {
-                        assertEquals(at, setOf("receipt_sequence"), want.keys().asSequence().toSet())
-                        assertEquals(at, "ok", step.getString("mode"))
+                        assertEquals(at, if (want.has("failed")) setOf("failed", "publish_error")
+                            else setOf("receipt_sequence"), want.keys().asSequence().toSet())
+                        val mode = step.getString("mode")
+                        org.junit.Assert.assertTrue(at, mode in setOf("ok", "signer_failure", "corrupt_signature"))
+                        if (mode == "signer_failure") assertEquals(at, "signer_unavailable", want.getString("publish_error"))
+                        if (mode == "corrupt_signature") org.junit.Assert.assertFalse(at, want.has("failed"))
                         val value = checkNotNull(committed[requestName]) { at }
-                        val wire = store.publish(value.claimId, value.receiptBody)
-                        receipts[requestName]?.let { org.junit.Assert.assertArrayEquals(at, it, wire) }
-                        receipts[requestName] = wire
-                        assertEquals(at, want.getLong("receipt_sequence"), decodeVerificationReceipt(wire).sequence)
+                        if (mode == "signer_failure") store.setSignerFailure(true)
+                        if (want.has("failed")) {
+                            org.junit.Assert.assertTrue(at, want.getBoolean("failed"))
+                            val failureCode = want.getString("publish_error")
+                            org.junit.Assert.assertTrue(at, failureCode in setOf("signer_unavailable", "head_of_line_blocked"))
+                            if (mode == "ok") assertEquals(at, "head_of_line_blocked", failureCode)
+                            try {
+                                store.publish(value.claimId, value.receiptBody)
+                                fail("$at: publication unexpectedly succeeded")
+                            } catch (e: StoreError.Unavailable) {
+                                val expected = if (failureCode == "signer_unavailable")
+                                    "v2reference: receipt signer unavailable"
+                                    else "v2reference: an earlier receipt-log entry is still pending"
+                                assertEquals(at, expected, e.message)
+                            }
+                        } else {
+                            val wire = store.publish(value.claimId, value.receiptBody)
+                            publishedWires[requestName]?.let { org.junit.Assert.assertArrayEquals(at, it, wire) }
+                            publishedWires[requestName] = wire
+                            assertEquals(at, want.getLong("receipt_sequence"), decodeVerificationReceipt(wire).sequence)
+                            receipts[requestName] = if (mode == "corrupt_signature") corruptReceiptSignature(wire) else wire
+                        }
+                        if (mode == "signer_failure") store.setSignerFailure(false)
                     }
                     "release" -> {
-                        assertEquals(at, "reference", step.getString("checkpoint"))
+                        val checkpointMode = step.getString("checkpoint")
+                        org.junit.Assert.assertTrue(at, checkpointMode == "reference" || checkpointMode == "wrong_entry")
                         assertEquals(at, if (want.has("decision"))
                             setOf("release_status", "decision", "release_time", "receipt_sequence")
                             else setOf("release_status", "release_reason"), want.keys().asSequence().toSet())
                         val value = checkNotNull(committed[requestName]) { at }
-                        val result = releaseDecision(value, receipts[requestName], key.publicKey, logId, store, store)
+                        val checkpoint: ReceiptCheckpoint = if (checkpointMode == "wrong_entry") WrongEntryCheckpoint(store) else store
+                        val receiptName = if (step.has("receipt_of")) step.getString("receipt_of") else requestName
+                        if (step.has("receipt_of")) {
+                            org.junit.Assert.assertNotEquals(at, requestName, receiptName)
+                            checkNotNull(receipts[receiptName]) { at }
+                        }
+                        val result = releaseDecision(value, receipts[receiptName], key.publicKey, logId, store, checkpoint)
                         assertEquals(at, want.getString("release_status"), result.status.spelling)
                         if (want.has("release_reason")) assertEquals(at, want.getString("release_reason"), result.reason)
                         else assertEquals(at, "", result.reason)

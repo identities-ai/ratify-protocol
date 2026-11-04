@@ -834,7 +834,9 @@ class ClaimTest {
             "release_before_allow_horizon", "signer_failure_then_retry", "head_of_line_blocking",
             "acknowledgement_for_another_entry_is_rejected", "repeated_release_reverifies_acknowledgement",
             "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected",
-            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery")
+            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery",
+            "resume_refuses_claims_without_a_committed_record", "clock_regression_at_resume_and_recovery",
+            "clock_beyond_timestamp_domain_at_resume_and_recovery")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -845,7 +847,10 @@ class ClaimTest {
             "acknowledgement_for_another_entry_is_rejected" to 4, "repeated_release_reverifies_acknowledgement" to 5,
             "receipt_of_another_claim_is_rejected" to 7, "corrupt_receipt_signature_is_rejected" to 5,
             "resume_replaces_lost_allow_handoff" to 5, "resume_abandoned_claim" to 6,
-            "crash_after_claim_lease_recovery" to 9)
+            "crash_after_claim_lease_recovery" to 9,
+            "resume_refuses_claims_without_a_committed_record" to 7,
+            "clock_regression_at_resume_and_recovery" to 7,
+            "clock_beyond_timestamp_domain_at_resume_and_recovery" to 7)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -928,16 +933,31 @@ class ClaimTest {
                         } else assertEquals(at, null, result.committed)
                     }
                     "resume" -> {
-                        assertEquals(at, setOf("stage", "decision", "decision_reason", "allow_horizon"),
-                            want.keys().asSequence().toSet())
-                        assertEquals(at, "committed", want.getString("stage"))
-                        val claimId = checkNotNull(committed[requestName]) { at }.claimId
-                        val value = resumeCommittedClaim(store, claimId)
-                        committed[requestName] = value
-                        val body = JSONObject(String(value.receiptBody))
-                        assertEquals(at, want.getString("decision"), body.getString("decision"))
-                        assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
-                        assertEquals(at, want.getLong("allow_horizon"), value.allowHorizon)
+                        val claimId = committed[requestName]?.claimId ?: claimed[requestName]?.claimId ?: run {
+                            val expected = checkNotNull(request(requestName, corpusName = "lifecycle-scenarios.json").expected) { at }
+                            protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value)
+                        }
+                        if (want.has("error_class")) {
+                            assertEquals(at, setOf("error_class"), want.keys().asSequence().toSet())
+                            try {
+                                resumeCommittedClaim(store, claimId)
+                                fail("$at: resume unexpectedly succeeded")
+                            } catch (e: RatifyException.Protocol) {
+                                assertEquals(at, want.getString("error_class"), e.errorClass.spelling)
+                            }
+                        } else {
+                            assertEquals(at, if (want.has("allow_horizon"))
+                                setOf("stage", "decision", "decision_reason", "allow_horizon")
+                                else setOf("stage", "decision", "decision_reason"), want.keys().asSequence().toSet())
+                            assertEquals(at, "committed", want.getString("stage"))
+                            val value = resumeCommittedClaim(store, claimId)
+                            committed[requestName] = value
+                            val body = JSONObject(String(value.receiptBody))
+                            assertEquals(at, want.getString("decision"), body.getString("decision"))
+                            assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
+                            assertEquals(at, if (want.has("allow_horizon")) want.getLong("allow_horizon") else null,
+                                value.allowHorizon)
+                        }
                     }
                     "recover" -> {
                         val claimId = checkNotNull(claimed[requestName]) { at }.claimId

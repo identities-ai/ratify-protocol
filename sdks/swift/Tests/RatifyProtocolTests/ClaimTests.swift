@@ -886,7 +886,9 @@ final class ClaimTests: XCTestCase {
             "release_before_allow_horizon", "signer_failure_then_retry", "head_of_line_blocking",
             "acknowledgement_for_another_entry_is_rejected", "repeated_release_reverifies_acknowledgement",
             "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected",
-            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery"]
+            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery",
+            "resume_refuses_claims_without_a_committed_record", "clock_regression_at_resume_and_recovery",
+            "clock_beyond_timestamp_domain_at_resume_and_recovery"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -897,7 +899,10 @@ final class ClaimTests: XCTestCase {
             "acknowledgement_for_another_entry_is_rejected": 4, "repeated_release_reverifies_acknowledgement": 5,
             "receipt_of_another_claim_is_rejected": 7, "corrupt_receipt_signature_is_rejected": 5,
             "resume_replaces_lost_allow_handoff": 5, "resume_abandoned_claim": 6,
-            "crash_after_claim_lease_recovery": 9]
+            "crash_after_claim_lease_recovery": 9,
+            "resume_refuses_claims_without_a_committed_record": 7,
+            "clock_regression_at_resume_and_recovery": 7,
+            "clock_beyond_timestamp_domain_at_resume_and_recovery": 7]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -976,15 +981,35 @@ final class ClaimTests: XCTestCase {
                         XCTAssertEqual(value.allowHorizon, Int64(want.int("allow_horizon")), at)
                     } else { XCTAssertNil(result.committed, at) }
                 case "resume":
-                    XCTAssertEqual(Set(want.keys), ["stage", "decision", "decision_reason", "allow_horizon"], at)
-                    XCTAssertEqual(want.s("stage"), "committed", at)
-                    let claimId = try XCTUnwrap(committed[requestName], at).claimId
-                    let value = try await Ratify.resumeCommittedClaim(store: store, claimId: claimId)
-                    committed[requestName] = value
-                    let body = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
-                    XCTAssertEqual(body["decision"] as? String, want.s("decision"), at)
-                    XCTAssertEqual(body["decision_reason"] as? String, want.s("decision_reason"), at)
-                    XCTAssertEqual(value.allowHorizon, Int64(want.int("allow_horizon")), at)
+                    let claimId: String
+                    if let existing = committed[requestName]?.claimId ?? claimed[requestName]?.claimId {
+                        claimId = existing
+                    } else {
+                        let expected = try XCTUnwrap(request(requestName, corpusName: "lifecycle-scenarios.json").expected, at)
+                        claimId = try Ratify.protocolClaimId(namespace: expected.verifierNamespace,
+                            replayEpoch: expected.replayEpoch, challenge: expected.value)
+                    }
+                    if want.keys.contains("error_class") {
+                        XCTAssertEqual(Set(want.keys), ["error_class"], at)
+                        do {
+                            _ = try await Ratify.resumeCommittedClaim(store: store, claimId: claimId)
+                            XCTFail("\(at): resume unexpectedly succeeded")
+                        } catch let error {
+                            XCTAssertEqual(error.errorClass?.rawValue, want.s("error_class"), at)
+                        }
+                    } else {
+                        XCTAssertEqual(Set(want.keys), want.keys.contains("allow_horizon")
+                            ? ["stage", "decision", "decision_reason", "allow_horizon"]
+                            : ["stage", "decision", "decision_reason"], at)
+                        XCTAssertEqual(want.s("stage"), "committed", at)
+                        let value = try await Ratify.resumeCommittedClaim(store: store, claimId: claimId)
+                        committed[requestName] = value
+                        let body = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
+                        XCTAssertEqual(body["decision"] as? String, want.s("decision"), at)
+                        XCTAssertEqual(body["decision_reason"] as? String, want.s("decision_reason"), at)
+                        XCTAssertEqual(value.allowHorizon, want.keys.contains("allow_horizon")
+                            ? Int64(want.int("allow_horizon")) : nil, at)
+                    }
                 case "recover":
                     let claimId = try XCTUnwrap(claimed[requestName], at).claimId
                     if want.keys.contains("error_class") {

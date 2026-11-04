@@ -52,6 +52,13 @@ public class VerifyOutcome internal constructor(f: FfiLiveVerifyOutcome) {
     public val committed: CommittedOutcome? = f.committed?.let(::CommittedOutcome)
 }
 
+/** Runs verification without a claim capability; valid preflight fails closed before a claim. */
+public suspend fun verifyProofBundleWithoutClaimStore(request: VerifyRequest,
+    receiverBinding: ReceiverBindingHook? = null, timeout: Duration? = null): VerifyOutcome = onWorker(timeout) { token ->
+    VerifyOutcome(ffi { ffiLiveVerifyProofBundle(request.toFfi(), null,
+        receiverBinding?.let(::ReceiverBindingBridge), null, null, null, null, null, token) })
+}
+
 public suspend fun verifyProofBundle(request: VerifyRequest, claimStore: RateAtFinalizationClaimStore,
     receiverBinding: ReceiverBindingHook? = null,
     trust: TrustProvider? = null, audience: AudienceProvider? = null,

@@ -327,6 +327,22 @@ public final class com/ratifyprotocol/DelegationCert {
 	public fun hashCode ()I
 }
 
+public final class com/ratifyprotocol/DeviceStateProjectionBridge {
+	public static final field Companion Lcom/ratifyprotocol/DeviceStateProjectionBridge$Companion;
+	public synthetic fun <init> ([B[B[B[B[B[B[BLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getClaims ()[B
+	public final fun getCompleteStateDigest ()[B
+	public final fun getIssuanceRecords ()[B
+	public final fun getProjection ()[B
+	public final fun getRateCounters ()[B
+	public final fun getReceiptLog ()[B
+	public final fun getStreams ()[B
+}
+
+public final class com/ratifyprotocol/DeviceStateProjectionBridge$Companion {
+	public final fun fromRecordsTestOnly ([B)Lcom/ratifyprotocol/DeviceStateProjectionBridge;
+}
+
 public final class com/ratifyprotocol/ErrorClass : java/lang/Enum {
 	public static final field ALLOW_HORIZON_PASSED Lcom/ratifyprotocol/ErrorClass;
 	public static final field BUNDLE_HASH_MISMATCH Lcom/ratifyprotocol/ErrorClass;
@@ -567,6 +583,8 @@ public final class com/ratifyprotocol/LiveVerifyKt {
 	public static synthetic fun verifyProofBundle-7-Fau3A$default (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RateReservationStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static final fun verifyProofBundle-D5qb1SI (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/RateAtFinalizationClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun verifyProofBundle-D5qb1SI$default (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/RateAtFinalizationClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun verifyProofBundleWithoutClaimStore-5_5nbZA (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ReceiverBindingHook;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun verifyProofBundleWithoutClaimStore-5_5nbZA$default (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ReceiverBindingHook;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class com/ratifyprotocol/LogResult : java/lang/Enum {

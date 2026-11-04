@@ -213,6 +213,14 @@ DelegationCert.signature [Var] -> RatifyProtocol.HybridSignature
 DelegationCert.subjectId [Var] -> Swift.String
 DelegationCert.subjectPubKey [Var] -> RatifyProtocol.HybridPublicKey
 DelegationCert.version [Var] -> Swift.Int64
+DeviceStateProjectionBridge [Struct]
+DeviceStateProjectionBridge.claims [Var] -> Foundation.Data
+DeviceStateProjectionBridge.completeStateDigest [Var] -> Foundation.Data
+DeviceStateProjectionBridge.issuanceRecords [Var] -> Foundation.Data
+DeviceStateProjectionBridge.projection [Var] -> Foundation.Data
+DeviceStateProjectionBridge.rateCounters [Var] -> Foundation.Data
+DeviceStateProjectionBridge.receiptLog [Var] -> Foundation.Data
+DeviceStateProjectionBridge.streams [Var] -> Foundation.Data
 ErrorClass [Enum]
 ErrorClass.AllCases [TypeAlias]
 ErrorClass.RawValue [TypeAlias]
@@ -461,6 +469,7 @@ Ratify.decodeVerificationReceipt(_:) [Func] -> RatifyProtocol.VerificationReceip
 Ratify.decodeVerificationReceiptBody(_:) [Func] -> RatifyProtocol.VerificationReceipt, Foundation.Data
 Ratify.decodeWitnessEntry(_:) [Func] -> RatifyProtocol.WitnessEntry, Foundation.Data
 Ratify.delegationCertSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.DelegationCert
+Ratify.deviceStateProjectionTestOnly(_:) [Func] -> RatifyProtocol.DeviceStateProjectionBridge, Foundation.Data
 Ratify.emptyRevocationStatusState() [Func] -> RatifyProtocol.RevocationStatusState
 Ratify.emptySecurityJournalSnapshot() [Func] -> RatifyProtocol.SecurityJournalSnapshot
 Ratify.encodeDelegationCert(_:) [Func] -> Foundation.Data, RatifyProtocol.DelegationCert
@@ -563,6 +572,7 @@ Ratify.verifyKeyRotationStatement(_:state:now:futureSkew:) [Func] -> (), RatifyP
 Ratify.verifyProofBundle(_:claimStore:receiverBinding:trust:audience:statusEvidence:statusJournal:rate:timeout:) [Func] -> RatifyProtocol.VerifyOutcome, RatifyProtocol.VerifyRequest, any RatifyProtocol.ClaimStore, (any RatifyProtocol.ReceiverBindingHook)?, (any RatifyProtocol.TrustProvider)?, (any RatifyProtocol.AudienceProvider)?, (any RatifyProtocol.StatusEvidenceProvider)?, (any RatifyProtocol.SecurityJournalStore)?, (any RatifyProtocol.RateReservationStore)?, Swift.Duration?
 Ratify.verifyProofBundle(_:claimStore:receiverBinding:trust:audience:statusEvidence:statusJournal:timeout:) [Func] -> RatifyProtocol.VerifyOutcome, RatifyProtocol.VerifyRequest, any RatifyProtocol.RateAtFinalizationClaimStore, (any RatifyProtocol.ReceiverBindingHook)?, (any RatifyProtocol.TrustProvider)?, (any RatifyProtocol.AudienceProvider)?, (any RatifyProtocol.StatusEvidenceProvider)?, (any RatifyProtocol.SecurityJournalStore)?, Swift.Duration?
 Ratify.verifyProofBundleSignatures(_:) [Func] -> (), RatifyProtocol.ProofBundle
+Ratify.verifyProofBundleWithoutClaimStore(_:receiverBinding:timeout:) [Func] -> RatifyProtocol.VerifyOutcome, RatifyProtocol.VerifyRequest, (any RatifyProtocol.ReceiverBindingHook)?, Swift.Duration?
 Ratify.verifyRevocationListSignature(_:trustedIssuerId:statusKey:) [Func] -> (), RatifyProtocol.RevocationList, Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.verifyRevocationPushSignature(_:trustedIssuerId:statusKey:) [Func] -> (), RatifyProtocol.RevocationPush, Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.verifyStatement(_:signable:signature:publicKey:) [Func] -> (), RatifyProtocol.ObjectType, Foundation.Data, RatifyProtocol.HybridSignature, RatifyProtocol.HybridPublicKey

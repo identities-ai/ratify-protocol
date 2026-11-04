@@ -74,6 +74,19 @@ public struct VerifyOutcome: Sendable {
 }
 
 extension Ratify {
+    /// Runs verification with no claim capability. A valid preflight fails
+    /// closed before a claim can be created.
+    public static func verifyProofBundleWithoutClaimStore(_ request: VerifyRequest,
+                                         receiverBinding: (any ReceiverBindingHook)? = nil,
+                                         timeout: Duration? = nil) async throws(RatifyError) -> VerifyOutcome {
+        try await onWorker(timeout: timeout) { token throws(RatifyError) in
+            try VerifyOutcome(ffi { try ffiLiveVerifyProofBundle(request: request.ffi,
+                claimStore: nil, receiverBinding: receiverBinding.map(ReceiverBindingBridge.init),
+                trust: nil, audience: nil, statusEvidence: nil, statusJournal: nil,
+                rate: nil, token: token) })
+        }
+    }
+
     public static func verifyProofBundle(_ request: VerifyRequest, claimStore: any RateAtFinalizationClaimStore,
                                          receiverBinding: (any ReceiverBindingHook)? = nil,
                                          trust: (any TrustProvider)? = nil,

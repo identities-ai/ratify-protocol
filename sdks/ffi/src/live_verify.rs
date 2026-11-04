@@ -103,7 +103,7 @@ impl From<core::V2VerifyOutcome> for FfiLiveVerifyOutcome {
 #[uniffi::export]
 pub fn ffi_live_verify_proof_bundle(
     request: FfiLiveVerifyRequest,
-    claim_store: Arc<dyn FfiClaimStore>,
+    claim_store: Option<Arc<dyn FfiClaimStore>>,
     receiver_binding: Option<Arc<dyn FfiReceiverBindingHook>>,
     trust: Option<Arc<dyn FfiTrustProvider>>,
     audience: Option<Arc<dyn FfiAudienceProvider>>,
@@ -114,7 +114,7 @@ pub fn ffi_live_verify_proof_bundle(
 ) -> FfiResult<FfiLiveVerifyOutcome> {
     call(|| {
         let request = request.try_into()?;
-        Ok(verify(request, Arc::new(ForeignClaimStore(claim_store)),
+        Ok(verify(request, claim_store.map(|store| Arc::new(ForeignClaimStore(store)) as Arc<dyn core::ClaimStoreV2>),
             rate.map(|s| Arc::new(ForeignRateReservationStore(s)) as Arc<dyn core::V2RateReservationStore>),
             receiver_binding, trust, audience, status_evidence, status_journal, token))
     })
@@ -135,14 +135,14 @@ pub fn ffi_live_verify_proof_bundle_barrier(
     call(|| {
         let request = request.try_into()?;
         let store = Arc::new(ForeignBarrierClaimStore(ForeignClaimStore(claim_store)));
-        Ok(verify(request, store.clone(), Some(store), receiver_binding, trust,
+        Ok(verify(request, Some(store.clone()), Some(store), receiver_binding, trust,
             audience, status_evidence, status_journal, token))
     })
 }
 
 fn verify(
     request: V2VerifyRequest,
-    claim_store: Arc<dyn core::ClaimStoreV2>,
+    claim_store: Option<Arc<dyn core::ClaimStoreV2>>,
     rate: Option<Arc<dyn core::V2RateReservationStore>>,
     receiver_binding: Option<Arc<dyn FfiReceiverBindingHook>>,
     trust: Option<Arc<dyn FfiTrustProvider>>,
@@ -152,7 +152,7 @@ fn verify(
     token: Arc<FfiCancelToken>,
 ) -> FfiLiveVerifyOutcome {
     let callbacks = V2VerifyCallbacks {
-        claim_store: Some(claim_store),
+        claim_store,
         receiver_binding: receiver_binding.map(receiver_binding_callback),
         trust: trust.map(trust_callback),
         audience: audience.map(audience_callback),

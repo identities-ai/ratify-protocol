@@ -95,10 +95,9 @@ final class ClaimTests: XCTestCase {
 
     func testVerifierCorpusPreflightOrdering() async throws {
         let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
-            $0.obj("expected").s("stage") == "preflight" &&
-            $0.s("claim_store") != "absent"
+            $0.obj("expected").s("stage") == "preflight"
         }
-        XCTAssertEqual(vectors.count, 145)
+        XCTAssertEqual(vectors.count, 149)
         for vector in vectors {
             let name = vector.s("name")
             let store = UnavailableClaimStore(conflict: vector.s("claim_store") == "proof_conflict")
@@ -112,7 +111,11 @@ final class ClaimTests: XCTestCase {
             let hookMode = vector.s("receiver_binding_hook")
             let probe = hookMode == "absent" ? nil : ReceiverProbe(reject: hookMode == "reject")
             let hook: (any ReceiverBindingHook)? = probe
-            let outcome = try await Ratify.verifyProofBundle(req, claimStore: store, receiverBinding: hook)
+            let outcome = if vector.s("claim_store") == "absent" {
+                try await Ratify.verifyProofBundleWithoutClaimStore(req, receiverBinding: hook)
+            } else {
+                try await Ratify.verifyProofBundle(req, claimStore: store, receiverBinding: hook)
+            }
             XCTAssertEqual(outcome.stage, .preflight, name)
             XCTAssertEqual(outcome.errorClass?.rawValue, vector.obj("expected").s("error_class"), name)
             XCTAssertEqual(probe?.calls ?? 0, vector.obj("expected").obj("callback_counts").int("receiver_binding"), name)

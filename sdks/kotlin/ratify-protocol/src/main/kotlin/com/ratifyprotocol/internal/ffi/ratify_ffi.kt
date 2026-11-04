@@ -1980,7 +1980,7 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_valid_id(`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
-    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_live_verify_proof_bundle(`request`: RustBuffer.ByValue,`claimStore`: Long,`receiverBinding`: RustBuffer.ByValue,`trust`: RustBuffer.ByValue,`audience`: RustBuffer.ByValue,`statusEvidence`: RustBuffer.ByValue,`statusJournal`: RustBuffer.ByValue,`rate`: RustBuffer.ByValue,`token`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_live_verify_proof_bundle(`request`: RustBuffer.ByValue,`claimStore`: RustBuffer.ByValue,`receiverBinding`: RustBuffer.ByValue,`trust`: RustBuffer.ByValue,`audience`: RustBuffer.ByValue,`statusEvidence`: RustBuffer.ByValue,`statusJournal`: RustBuffer.ByValue,`rate`: RustBuffer.ByValue,`token`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_live_verify_proof_bundle_barrier(`request`: RustBuffer.ByValue,`claimStore`: Long,`receiverBinding`: RustBuffer.ByValue,`trust`: RustBuffer.ByValue,`audience`: RustBuffer.ByValue,`statusEvidence`: RustBuffer.ByValue,`statusJournal`: RustBuffer.ByValue,`token`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -2401,7 +2401,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_valid_id() and 0xFFFF) != 18371) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle() and 0xFFFF) != 28543) {
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle() and 0xFFFF) != 35181) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle_barrier() and 0xFFFF) != 1120) {
@@ -18254,6 +18254,38 @@ internal object FfiConverterOptionalTypeFfiAudienceProvider: FfiConverterRustBuf
 /**
  * @suppress
  */
+internal object FfiConverterOptionalTypeFfiClaimStore: FfiConverterRustBuffer<FfiClaimStore?> {
+    override fun read(buf: ByteBuffer): FfiClaimStore? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiClaimStore.read(buf)
+    }
+
+    override fun allocationSize(value: FfiClaimStore?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiClaimStore.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiClaimStore?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiClaimStore.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterOptionalTypeFfiCommittedOutcome: FfiConverterRustBuffer<FfiCommittedOutcome?> {
     override fun read(buf: ByteBuffer): FfiCommittedOutcome? {
         if (buf.get().toInt() == 0) {
@@ -20280,14 +20312,14 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
     }
     
 
-    @Throws(FfiException::class) internal fun `ffiLiveVerifyProofBundle`(`request`: FfiLiveVerifyRequest, `claimStore`: FfiClaimStore, `receiverBinding`: FfiReceiverBindingHook?, `trust`: FfiTrustProvider?, `audience`: FfiAudienceProvider?, `statusEvidence`: FfiStatusEvidenceProvider?, `statusJournal`: FfiJournalStore?, `rate`: FfiRateReservationStore?, `token`: FfiCancelToken): FfiLiveVerifyOutcome {
+    @Throws(FfiException::class) internal fun `ffiLiveVerifyProofBundle`(`request`: FfiLiveVerifyRequest, `claimStore`: FfiClaimStore?, `receiverBinding`: FfiReceiverBindingHook?, `trust`: FfiTrustProvider?, `audience`: FfiAudienceProvider?, `statusEvidence`: FfiStatusEvidenceProvider?, `statusJournal`: FfiJournalStore?, `rate`: FfiRateReservationStore?, `token`: FfiCancelToken): FfiLiveVerifyOutcome {
             return FfiConverterTypeFfiLiveVerifyOutcome.lift(
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_live_verify_proof_bundle(
     
         
         FfiConverterTypeFfiLiveVerifyRequest.lower(`request`),
-        FfiConverterTypeFfiClaimStore.lower(`claimStore`),
+        FfiConverterOptionalTypeFfiClaimStore.lower(`claimStore`),
         FfiConverterOptionalTypeFfiReceiverBindingHook.lower(`receiverBinding`),
         FfiConverterOptionalTypeFfiTrustProvider.lower(`trust`),
         FfiConverterOptionalTypeFfiAudienceProvider.lower(`audience`),

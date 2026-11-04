@@ -142,6 +142,9 @@ def cmd_check():
 # Public declarations that no inventory item maps, each with its reason.
 # Everything else public must be named by a mapped inventory entry.
 EXTRA_SWIFT = {
+    "DeviceStateProjectionBridge": "internal SPI carrier for the separate TestSupport product; the reference primary remains pending",
+    "Ratify.deviceStateProjectionTestOnly": "internal SPI entry point for the device-state vector corpus",
+    "Ratify.verifyProofBundleWithoutClaimStore": "fail-closed verifier configuration without a claim capability",
     "Ratify.publishReceipt": "SDK helper invoking the mapped V2ReceiptPublisher callback",
     "SecurityJournalSnapshot": "SDK carrier for canonical snapshot bytes and an independent head",
     "Ratify.validateSecurityJournalSnapshot": "SDK boundary validation before a journal store load",
@@ -157,6 +160,8 @@ EXTRA_SWIFT = {
     "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
 }
 EXTRA_KOTLIN = {
+    "DeviceStateProjectionBridge": "internal-use carrier for the separate testing artifact; the reference primary remains pending",
+    "verifyProofBundleWithoutClaimStore": "fail-closed verifier configuration without a claim capability",
     "publishReceipt": "SDK helper invoking the mapped V2ReceiptPublisher callback",
     "SecurityJournalSnapshot": "SDK carrier for canonical snapshot bytes and an independent head",
     "validateSecurityJournalSnapshot": "SDK boundary validation before a journal store load",
@@ -191,6 +196,14 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "DeviceStateProjectionBridge.claims": "test-only projection member",
+    "DeviceStateProjectionBridge.streams": "test-only projection member",
+    "DeviceStateProjectionBridge.rateCounters": "test-only projection member",
+    "DeviceStateProjectionBridge.receiptLog": "test-only projection member",
+    "DeviceStateProjectionBridge.issuanceRecords": "test-only projection member",
+    "DeviceStateProjectionBridge.projection": "test-only canonical projection",
+    "DeviceStateProjectionBridge.completeStateDigest": "test-only complete-state digest",
+    "DeviceStateProjectionBridge.fromRecordsTestOnly": "Kotlin factory for the device-state vector corpus",
     "ReleaseStatus.spelling": "Kotlin spelling of the mapped release status enum",
     "ConstraintEvaluator.evaluate": "callback operation of the mapped ConstraintEvaluatorFnV2",
     "ChallengeRandomSource.fill": "the V2RandomSource read callback",

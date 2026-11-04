@@ -102,10 +102,9 @@ class ClaimTest {
         val root = File(System.getProperty("ratify.corpus")!!)
         Corpus.read = { File(root, it).readBytes() }
         val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter { vector ->
-            vector.getJSONObject("expected").getString("stage") == "preflight" &&
-            vector.getString("claim_store") != "absent"
+            vector.getJSONObject("expected").getString("stage") == "preflight"
         }
-        assertEquals(145, vectors.size)
+        assertEquals(149, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val store = UnavailableClaimStore(vector.getString("claim_store") == "proof_conflict")
@@ -121,7 +120,11 @@ class ClaimTest {
             val req = request(name, registry)
             val hookMode = vector.getString("receiver_binding_hook")
             val hook = if (hookMode == "absent") null else ReceiverProbe(hookMode == "reject")
-            val outcome = verifyProofBundle(req, store, receiverBinding = hook)
+            val outcome = if (vector.getString("claim_store") == "absent") {
+                verifyProofBundleWithoutClaimStore(req, receiverBinding = hook)
+            } else {
+                verifyProofBundle(req, store, receiverBinding = hook)
+            }
             assertEquals(name, VerifyStage.PREFLIGHT, outcome.stage)
             assertEquals(name, expectedClass, outcome.errorClass?.spelling)
             assertEquals(name, vector.getJSONObject("expected").getJSONObject("callback_counts").getInt("receiver_binding"),

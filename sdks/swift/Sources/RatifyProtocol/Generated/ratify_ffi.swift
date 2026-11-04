@@ -12570,6 +12570,30 @@ fileprivate struct FfiConverterOptionTypeFfiAudienceProvider: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiClaimStore: FfiConverterRustBuffer {
+    typealias SwiftType = FfiClaimStore?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiClaimStore.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiClaimStore.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiCommittedOutcome: FfiConverterRustBuffer {
     typealias SwiftType = FfiCommittedOutcome?
 
@@ -14128,12 +14152,12 @@ func ffiValidId(id: String)throws  -> Bool  {
     )
 })
 }
-func ffiLiveVerifyProofBundle(request: FfiLiveVerifyRequest, claimStore: FfiClaimStore, receiverBinding: FfiReceiverBindingHook?, trust: FfiTrustProvider?, audience: FfiAudienceProvider?, statusEvidence: FfiStatusEvidenceProvider?, statusJournal: FfiJournalStore?, rate: FfiRateReservationStore?, token: FfiCancelToken)throws  -> FfiLiveVerifyOutcome  {
+func ffiLiveVerifyProofBundle(request: FfiLiveVerifyRequest, claimStore: FfiClaimStore?, receiverBinding: FfiReceiverBindingHook?, trust: FfiTrustProvider?, audience: FfiAudienceProvider?, statusEvidence: FfiStatusEvidenceProvider?, statusJournal: FfiJournalStore?, rate: FfiRateReservationStore?, token: FfiCancelToken)throws  -> FfiLiveVerifyOutcome  {
     return try  FfiConverterTypeFfiLiveVerifyOutcome_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_live_verify_proof_bundle(
         FfiConverterTypeFfiLiveVerifyRequest_lower(request),
-        FfiConverterTypeFfiClaimStore_lower(claimStore),
+        FfiConverterOptionTypeFfiClaimStore.lower(claimStore),
         FfiConverterOptionTypeFfiReceiverBindingHook.lower(receiverBinding),
         FfiConverterOptionTypeFfiTrustProvider.lower(trust),
         FfiConverterOptionTypeFfiAudienceProvider.lower(audience),
@@ -15212,7 +15236,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_valid_id() != 18371) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle() != 28543) {
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle() != 35181) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle_barrier() != 1120) {

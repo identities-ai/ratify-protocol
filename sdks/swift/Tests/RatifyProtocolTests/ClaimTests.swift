@@ -180,9 +180,19 @@ final class ClaimTests: XCTestCase {
 
     actor VectorJournal: SecurityJournalStore {
         private var current: SecurityJournalSnapshot
+        private var mode = "anchored"
+        private var conflicts = 0
         init(_ initial: SecurityJournalSnapshot) { current = initial }
-        func load() -> SecurityJournalSnapshot { current }
+        func setMode(_ value: String) { mode = value }
+        func load() throws -> SecurityJournalSnapshot {
+            if mode == "load_error" { throw StoreError.unavailable("scripted journal load failure") }
+            return current
+        }
         func compareAndSwap(expected: SecurityJournalHead, next: SecurityJournalSnapshot) throws {
+            if mode == "cas_conflict" || mode == "cas_conflict_once" && conflicts == 0 {
+                conflicts += 1
+                throw SecurityJournalStoreError.conflict
+            }
             guard current.head == expected else { throw SecurityJournalStoreError.conflict }
             current = next
         }
@@ -302,7 +312,7 @@ final class ClaimTests: XCTestCase {
                         now: Int64(step.int("now")))
                 }
             }
-        } else {
+        } else if script.s("mode") != "unanchored" && script.s("mode") != "absent" {
             for issuer in req.statusKeys.keys.sorted() {
                 let key = req.statusKeys[issuer]!
                 _ = try await Ratify.configureStatusKeyEpoch(store: journal, issuerId: issuer, epoch: key.epoch, key: key.key)
@@ -315,6 +325,7 @@ final class ClaimTests: XCTestCase {
                     epoch: key.epoch, key: key.key, policy: req.statusPolicy, now: Int64(step.int("now")))
             }
         }
+        await journal.setMode(script.s("mode"))
         return (trust, VectorStatus(byIssuer: evidence, failures: statusFailures), journal)
     }
 
@@ -330,7 +341,8 @@ final class ClaimTests: XCTestCase {
                     TrustOutcome(rawValue: trust["outcome"] as? String ?? "") != nil) &&
                 ["ok", "error"].contains(vector.s("audience_mode")) &&
                 ["absent", "reserve", "exceeded", "unavailable"].contains(vector.s("rate")) &&
-                journal["mode"] as? String == "anchored" &&
+                ["anchored", "absent", "unanchored", "load_error", "cas_conflict", "cas_conflict_once"]
+                    .contains(journal["mode"] as? String ?? "") &&
                 !(vector["constraint_evaluators"] as? [[String: Any]] ?? []).contains {
                     ["fault:panic", "fault:invalid_outcome"].contains($0.s("implementation"))
                 } &&
@@ -338,7 +350,7 @@ final class ClaimTests: XCTestCase {
                 (vector["finalize_time_offset"] as? NSNumber)?.intValue ?? 0 == 0 &&
                 evidence.values.allSatisfy { $0["mode"] as? String != "panic" }
         }
-        XCTAssertEqual(vectors.count, 345)
+        XCTAssertEqual(vectors.count, 350)
         for vector in vectors {
             let name = vector.s("name")
             let evaluators = (vector["constraint_evaluators"] as? [[String: Any]] ?? []).map {
@@ -367,9 +379,10 @@ final class ClaimTests: XCTestCase {
                 fails: vector.s("audience_mode") == "error")
             let rate = vector.s("rate") == "absent" ? nil : VectorRate(vector.s("rate"))
             let receiver = vector.s("receiver_binding_hook") == "accept" ? ReceiverProbe(reject: false) : nil
+            let journalStore: (any SecurityJournalStore)? = vector.obj("journal").s("mode") == "absent" ? nil : journal
             let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore,
                 receiverBinding: receiver, trust: trust, audience: audience, statusEvidence: status,
-                statusJournal: journal, rate: rate)
+                statusJournal: journalStore, rate: rate)
             XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))
             XCTAssertEqual(outcome.committed?.receiptBody,
                 Data(base64Encoded: vector.obj("expected").s("receipt_body_b64"))!, name)

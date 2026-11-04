@@ -180,9 +180,19 @@ class ClaimTest {
 
     private class VectorJournal(initial: SecurityJournalSnapshot) : SecurityJournalStore {
         private var current = initial
-        override suspend fun load(): SecurityJournalSnapshot = synchronized(this) { current }
+        private var mode = "anchored"
+        private var conflicts = 0
+        fun setMode(value: String) { synchronized(this) { mode = value } }
+        override suspend fun load(): SecurityJournalSnapshot = synchronized(this) {
+            if (mode == "load_error") error("scripted journal load failure")
+            current
+        }
         override suspend fun compareAndSwap(expected: SecurityJournalHead, next: SecurityJournalSnapshot) {
             synchronized(this) {
+                if (mode == "cas_conflict" || mode == "cas_conflict_once" && conflicts == 0) {
+                    conflicts++
+                    throw SecurityJournalStoreError.Conflict()
+                }
                 if (current.head != expected) throw SecurityJournalStoreError.Conflict()
                 current = next
             }
@@ -274,7 +284,7 @@ class ClaimTest {
                     else -> error("unknown journal setup operation")
                 }
             }
-        } else {
+        } else if (script.getString("mode") !in listOf("unanchored", "absent")) {
             for (issuer in req.statusKeys.keys.sorted()) {
                 val key = req.statusKeys.getValue(issuer)
                 configureStatusKeyEpoch(journal, issuer, key.epoch, key.key)
@@ -286,6 +296,7 @@ class ClaimTest {
                     step.getString("issuer_id"), key.epoch, key.key, req.statusPolicy, step.getLong("now"))
             }
         }
+        journal.setMode(script.getString("mode"))
         return Triple(trust, status, journal)
     }
 
@@ -312,7 +323,8 @@ class ClaimTest {
                     TrustOutcome.fromSpelling(trust.optString("outcome")) != null) &&
                 vector.getString("audience_mode") in listOf("ok", "error") &&
                 vector.getString("rate") in listOf("absent", "reserve", "exceeded", "unavailable") &&
-                journal.optString("mode") == "anchored" &&
+                journal.optString("mode") in listOf("anchored", "absent", "unanchored", "load_error",
+                    "cas_conflict", "cas_conflict_once") &&
                 (vector.optJSONArray("constraint_evaluators")?.let { array ->
                     (0 until array.length()).none { index ->
                         array.getJSONObject(index).getString("implementation") in listOf("fault:panic", "fault:invalid_outcome")
@@ -324,7 +336,7 @@ class ClaimTest {
                     evidence.getJSONObject(issuer).optString("mode") != "panic"
                 }
         }
-        assertEquals(345, vectors.size)
+        assertEquals(350, vectors.size)
         for (vector in vectors) {
             val name = vector.getString("name")
             val registrationsJson = vector.optJSONArray("constraint_evaluators")
@@ -352,8 +364,10 @@ class ClaimTest {
             val audience = CountingAudience(memberships, vector.getString("audience_mode") == "error")
             val rate = if (vector.getString("rate") == "absent") null else VectorRate(vector.getString("rate"))
             val receiver = if (vector.getString("receiver_binding_hook") == "accept") ReceiverProbe(false) else null
+            val journalStore: SecurityJournalStore? = if (vector.getJSONObject("journal").getString("mode") == "absent")
+                null else journal
             val outcome = verifyProofBundle(req, baseStore, trust = trust, audience = audience,
-                receiverBinding = receiver, statusEvidence = status, statusJournal = journal, rate = rate)
+                receiverBinding = receiver, statusEvidence = status, statusJournal = journalStore, rate = rate)
             assertEquals(name + ": " + (outcome.errorDetail ?: ""), VerifyStage.COMMITTED, outcome.stage)
             org.junit.Assert.assertArrayEquals(name, vector.getJSONObject("expected").b64("receipt_body_b64"),
                 outcome.committed?.receiptBody)

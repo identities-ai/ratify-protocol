@@ -54,7 +54,7 @@ class ClaimTest {
     }
 
     private fun request(name: String, evaluators: ConstraintEvaluatorRegistry? = null,
-        corpusName: String = "verifier-ordering.json"): VerifyRequest {
+        corpusName: String = "verifier-ordering.json", atTime: Long? = null): VerifyRequest {
         val corpus = Corpus.load(corpusName)
         val vector = if (corpusName == "lifecycle-scenarios.json") corpus.getJSONObject("requests").getJSONObject(name)
             else corpus.arr("vectors").first { it.getString("name") == name }
@@ -88,7 +88,7 @@ class ClaimTest {
         return VerifyRequest(Base64.getDecoder().decode(corpus.getJSONObject("bundles_b64").getString(vector.getString("bundle"))),
             challenge, contextPolicy, vector.getString("required_scope"), vector.getString("configured_namespace"),
             vector.getLong("configured_replay_epoch"), vector.getString("configured_verifier_id"),
-            vector.getLong("now"), vector.getLong("max_challenge_age_seconds"),
+            atTime ?: vector.getLong("now"), vector.getLong("max_challenge_age_seconds"),
             vector.getLong("future_skew_seconds"), ConstraintContext(
                 requestedAmountMicros = requestContext.optLong("requested_amount_micros"),
                 requestedCurrency = requestContext.optString("requested_currency"),
@@ -834,7 +834,7 @@ class ClaimTest {
             "release_before_allow_horizon", "signer_failure_then_retry", "head_of_line_blocking",
             "acknowledgement_for_another_entry_is_rejected", "repeated_release_reverifies_acknowledgement",
             "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected",
-            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim")
+            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -844,14 +844,16 @@ class ClaimTest {
             "release_before_allow_horizon" to 3, "signer_failure_then_retry" to 5, "head_of_line_blocking" to 8,
             "acknowledgement_for_another_entry_is_rejected" to 4, "repeated_release_reverifies_acknowledgement" to 5,
             "receipt_of_another_claim_is_rejected" to 7, "corrupt_receipt_signature_is_rejected" to 5,
-            "resume_replaces_lost_allow_handoff" to 5, "resume_abandoned_claim" to 6)
+            "resume_replaces_lost_allow_handoff" to 5, "resume_abandoned_claim" to 6,
+            "crash_after_claim_lease_recovery" to 9)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
             "set_time" to setOf("op", "time", "expect"),
             "set_ack_withheld" to setOf("op", "withheld", "expect"),
             "resume" to setOf("op", "request", "expect"),
-            "abandon" to setOf("op", "expect"))
+            "abandon" to setOf("op", "expect"), "claim_only" to setOf("op", "request", "expect"),
+            "recover" to setOf("op", "request", "expect"))
         val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == corpus.getString("verifier_key") }
@@ -862,6 +864,7 @@ class ClaimTest {
             assertEquals(name, counts[name], scenario.arr("steps").size)
             val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"), logId, key)
             val committed = mutableMapOf<String, CommittedOutcome>()
+            val claimed = mutableMapOf<String, ChallengeClaim>()
             val receipts = mutableMapOf<String, ByteArray>()
             val publishedWires = mutableMapOf<String, ByteArray>()
             for ((index, step) in scenario.arr("steps").withIndex()) {
@@ -881,15 +884,38 @@ class ClaimTest {
                         store.setAcknowledgementWithheld(step.getBoolean("withheld"))
                         assertEquals(at, 0, want.length())
                     }
+                    "claim_only" -> {
+                        assertEquals(at, setOf("disposition"), want.keys().asSequence().toSet())
+                        val req = request(requestName, corpusName = "lifecycle-scenarios.json")
+                        val expected = checkNotNull(req.expected) { at }
+                        val bundle = decodeProofBundle(req.bundle)
+                        org.junit.Assert.assertTrue(at, bundle.delegations.all { it.constraints.isEmpty() })
+                        val hash = bundleHash(bundle)
+                        val claim = ChallengeClaim(protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value),
+                            expected.verifierNamespace, expected.replayEpoch, "sha384:" + challengeClaimDigest(expected.value).hex(),
+                            hash, hash, bundle.delegations.map { it.issuerId }.distinct().sorted(), req.requiredScope,
+                            req.contextPolicy?.digest ?: "", expected.verifierId, bundle.agentId, false, emptyList(),
+                            expected.issuedAt, expected.expiresAt, req.maxChallengeAgeSeconds, req.futureSkewSeconds,
+                            bundle.streamId, bundle.streamSeq, emptyList())
+                        claimed[requestName] = claim
+                        assertEquals(at, want.getString("disposition"), store.claim(claim).disposition.spelling)
+                    }
                     "verify" -> {
                         assertEquals(at, if (want.has("decision"))
                             setOf("stage", "decision", "decision_reason", "allow_horizon")
                             else setOf("stage", "disposition"), want.keys().asSequence().toSet())
-                        val req = request(requestName, corpusName = "lifecycle-scenarios.json")
-                        assertEquals(at, req.now, store.now())
+                        val fixtureRequest = request(requestName, corpusName = "lifecycle-scenarios.json")
+                        val currentTime = store.now()
+                        if (name == "crash_after_claim_lease_recovery" && index == 6) {
+                            assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
+                            assertEquals(at, 1_800_000_030L, currentTime)
+                        } else assertEquals(at, fixtureRequest.now, currentTime)
+                        val req = if (fixtureRequest.now == currentTime) fixtureRequest
+                            else request(requestName, corpusName = "lifecycle-scenarios.json", atTime = currentTime)
                         val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(requestName), req)
                         val result = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
                         assertEquals(at, want.getString("stage"), result.stage.spelling)
+                        claimed[requestName]?.let { assertEquals(at, it, result.claim) }
                         if (want.has("disposition")) assertEquals(at, want.getString("disposition"), result.disposition?.spelling)
                         else assertEquals(at, ClaimDisposition.CREATED, result.disposition)
                         if (want.has("decision")) {
@@ -912,6 +938,29 @@ class ClaimTest {
                         assertEquals(at, want.getString("decision"), body.getString("decision"))
                         assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
                         assertEquals(at, want.getLong("allow_horizon"), value.allowHorizon)
+                    }
+                    "recover" -> {
+                        val claimId = checkNotNull(claimed[requestName]) { at }.claimId
+                        if (want.has("error_class")) {
+                            assertEquals(at, setOf("error_class"), want.keys().asSequence().toSet())
+                            try {
+                                recoverInterruptedClaim(store, claimId)
+                                fail("$at: recovery unexpectedly succeeded")
+                            } catch (e: RatifyException.Protocol) {
+                                assertEquals(at, want.getString("error_class"), e.errorClass.spelling)
+                            }
+                        } else {
+                            assertEquals(at, setOf("stage", "decision", "decision_reason", "trust_assessment",
+                                "status_assessment", "context_assessment"), want.keys().asSequence().toSet())
+                            assertEquals(at, "committed", want.getString("stage"))
+                            val value = recoverInterruptedClaim(store, claimId)
+                            committed[requestName]?.let { org.junit.Assert.assertArrayEquals(at, it.receiptBody, value.receiptBody) }
+                            committed[requestName] = value
+                            val body = JSONObject(String(value.receiptBody))
+                            for (field in listOf("decision", "decision_reason", "trust_assessment", "status_assessment", "context_assessment"))
+                                assertEquals(at, want.getString(field), body.getString(field))
+                            assertEquals(at, null, value.allowHorizon)
+                        }
                     }
                     "abandon" -> {
                         assertEquals(at, setOf("abandoned"), want.keys().asSequence().toSet())

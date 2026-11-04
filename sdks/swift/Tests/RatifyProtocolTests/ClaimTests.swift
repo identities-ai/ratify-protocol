@@ -43,7 +43,7 @@ final class ClaimTests: XCTestCase {
     }
 
     private func request(_ name: String, corpusName: String = "verifier-ordering.json",
-                         evaluators: ConstraintEvaluatorRegistry? = nil) throws -> VerifyRequest {
+                         evaluators: ConstraintEvaluatorRegistry? = nil, atTime: Int64? = nil) throws -> VerifyRequest {
         let corpus = Corpus.load(corpusName)
         let vector = corpusName == "lifecycle-scenarios.json" ? corpus.obj("requests").obj(name)
             : corpus.arr("vectors").first { $0.s("name") == name }!
@@ -76,7 +76,7 @@ final class ClaimTests: XCTestCase {
         return VerifyRequest(bundle: Data(base64Encoded: corpus.obj("bundles_b64").s(vector.s("bundle")))!,
             expected: challenge, contextPolicy: contextPolicy, requiredScope: vector.s("required_scope"),
             verifierNamespace: vector.s("configured_namespace"), replayEpoch: Int64(vector.int("configured_replay_epoch")),
-            verifierId: vector.s("configured_verifier_id"), now: Int64(vector.int("now")),
+            verifierId: vector.s("configured_verifier_id"), now: atTime ?? Int64(vector.int("now")),
             maxChallengeAgeSeconds: Int64(vector.int("max_challenge_age_seconds")),
             futureSkewSeconds: Int64(vector.int("future_skew_seconds")),
             context: ConstraintContext(requestedAmountMicros: (requestContext["requested_amount_micros"] as? NSNumber)?.int64Value ?? 0,
@@ -886,7 +886,7 @@ final class ClaimTests: XCTestCase {
             "release_before_allow_horizon", "signer_failure_then_retry", "head_of_line_blocking",
             "acknowledgement_for_another_entry_is_rejected", "repeated_release_reverifies_acknowledgement",
             "receipt_of_another_claim_is_rejected", "corrupt_receipt_signature_is_rejected",
-            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim"]
+            "resume_replaces_lost_allow_handoff", "resume_abandoned_claim", "crash_after_claim_lease_recovery"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -896,12 +896,14 @@ final class ClaimTests: XCTestCase {
             "release_before_allow_horizon": 3, "signer_failure_then_retry": 5, "head_of_line_blocking": 8,
             "acknowledgement_for_another_entry_is_rejected": 4, "repeated_release_reverifies_acknowledgement": 5,
             "receipt_of_another_claim_is_rejected": 7, "corrupt_receipt_signature_is_rejected": 5,
-            "resume_replaces_lost_allow_handoff": 5, "resume_abandoned_claim": 6]
+            "resume_replaces_lost_allow_handoff": 5, "resume_abandoned_claim": 6,
+            "crash_after_claim_lease_recovery": 9]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
             "set_time": ["op", "time", "expect"], "set_ack_withheld": ["op", "withheld", "expect"],
-            "resume": ["op", "request", "expect"], "abandon": ["op", "expect"]]
+            "resume": ["op", "request", "expect"], "abandon": ["op", "expect"],
+            "claim_only": ["op", "request", "expect"], "recover": ["op", "request", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -909,6 +911,7 @@ final class ClaimTests: XCTestCase {
             let store = try Store(now: Int64(scenario.int("start_time")), leaseSeconds: Int64(corpus.int("lease_seconds")),
                 logId: corpus.s("log_id"), verifierKey: key)
             var committed: [String: CommittedOutcome] = [:]
+            var claimed: [String: ChallengeClaim] = [:]
             var receipts: [String: Data] = [:]
             var publishedWires: [String: Data] = [:]
             for (index, step) in scenario.arr("steps").enumerated() {
@@ -926,15 +929,41 @@ final class ClaimTests: XCTestCase {
                 case "set_ack_withheld":
                     try store.setAcknowledgementWithheld(step.bool("withheld"))
                     XCTAssertTrue(want.isEmpty, at)
+                case "claim_only":
+                    XCTAssertEqual(Set(want.keys), ["disposition"], at)
+                    let req = try request(requestName, corpusName: "lifecycle-scenarios.json")
+                    let expected = try XCTUnwrap(req.expected, at)
+                    let bundle = try Ratify.decodeProofBundle(req.bundle)
+                    XCTAssertTrue(bundle.delegations.allSatisfy { $0.constraints.isEmpty }, at)
+                    let hash = try Ratify.bundleHash(bundle)
+                    let claim = ChallengeClaim(claimId: try Ratify.protocolClaimId(namespace: expected.verifierNamespace,
+                        replayEpoch: expected.replayEpoch, challenge: expected.value), namespace: expected.verifierNamespace,
+                        replayEpoch: expected.replayEpoch, challengeDigest: "sha384:" + (try Ratify.challengeClaimDigest(expected.value)).hex,
+                        proofDigest: hash, bundleHash: hash, issuerIds: Array(Set(bundle.delegations.map(\.issuerId))).sorted(),
+                        requiredScope: req.requiredScope, contextPolicyDigest: req.contextPolicy?.digest ?? "",
+                        verifierId: expected.verifierId, agentId: bundle.agentId, requiresRate: false, rateBatch: [],
+                        issuedAt: expected.issuedAt, expiresAt: expected.expiresAt,
+                        maxAgeSeconds: req.maxChallengeAgeSeconds, clockSkewSeconds: req.futureSkewSeconds,
+                        streamId: bundle.streamId, streamSeq: bundle.streamSeq, constraintEvaluators: [])
+                    claimed[requestName] = claim
+                    let claimResult = try await store.claim(claim)
+                    XCTAssertEqual(claimResult.disposition.rawValue, want.s("disposition"), at)
                 case "verify":
                     XCTAssertEqual(Set(want.keys), want["decision"] == nil ? ["stage", "disposition"]
                         : ["stage", "decision", "decision_reason", "allow_horizon"], at)
-                    let req = try request(requestName, corpusName: "lifecycle-scenarios.json")
-                    XCTAssertEqual(req.now, try store.now(), at)
+                    let fixtureRequest = try request(requestName, corpusName: "lifecycle-scenarios.json")
+                    let currentTime = try store.now()
+                    if name == "crash_after_claim_lease_recovery" && index == 6 {
+                        XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
+                        XCTAssertEqual(currentTime, 1_800_000_030, at)
+                    } else { XCTAssertEqual(fixtureRequest.now, currentTime, at) }
+                    let req = fixtureRequest.now == currentTime ? fixtureRequest
+                        : try request(requestName, corpusName: "lifecycle-scenarios.json", atTime: currentTime)
                     let (trust, status, journal) = try await vectorProviders(corpus.obj("requests").obj(requestName), request: req)
                     let result = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
                         statusEvidence: status, statusJournal: journal)
                     XCTAssertEqual(result.stage.rawValue, want.s("stage"), at)
+                    if let seeded = claimed[requestName] { XCTAssertEqual(result.claim, seeded, at) }
                     if want.keys.contains("disposition") {
                         XCTAssertEqual(result.disposition?.rawValue, want.s("disposition"), at)
                     } else { XCTAssertEqual(result.disposition, .created, at) }
@@ -956,6 +985,29 @@ final class ClaimTests: XCTestCase {
                     XCTAssertEqual(body["decision"] as? String, want.s("decision"), at)
                     XCTAssertEqual(body["decision_reason"] as? String, want.s("decision_reason"), at)
                     XCTAssertEqual(value.allowHorizon, Int64(want.int("allow_horizon")), at)
+                case "recover":
+                    let claimId = try XCTUnwrap(claimed[requestName], at).claimId
+                    if want.keys.contains("error_class") {
+                        XCTAssertEqual(Set(want.keys), ["error_class"], at)
+                        do {
+                            _ = try await Ratify.recoverInterruptedClaim(store: store, claimId: claimId)
+                            XCTFail("\(at): recovery unexpectedly succeeded")
+                        } catch let error {
+                            XCTAssertEqual(error.errorClass?.rawValue, want.s("error_class"), at)
+                        }
+                    } else {
+                        XCTAssertEqual(Set(want.keys), ["stage", "decision", "decision_reason", "trust_assessment",
+                            "status_assessment", "context_assessment"], at)
+                        XCTAssertEqual(want.s("stage"), "committed", at)
+                        let value = try await Ratify.recoverInterruptedClaim(store: store, claimId: claimId)
+                        if let previous = committed[requestName] { XCTAssertEqual(value.receiptBody, previous.receiptBody, at) }
+                        committed[requestName] = value
+                        let body = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
+                        for field in ["decision", "decision_reason", "trust_assessment", "status_assessment", "context_assessment"] {
+                            XCTAssertEqual(body[field] as? String, want.s(field), at)
+                        }
+                        XCTAssertNil(value.allowHorizon, at)
+                    }
                 case "abandon":
                     XCTAssertEqual(Set(want.keys), ["abandoned"], at)
                     let expectedIds = try want.strings("abandoned").map { try XCTUnwrap(committed[$0], at).claimId }

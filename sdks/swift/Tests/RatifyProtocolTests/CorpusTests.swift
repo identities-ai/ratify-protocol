@@ -36,7 +36,7 @@ final class CorpusTests: XCTestCase {
         "device-state.json": DeviceStateRunner.run,
         "verifier-ordering.json": VerifierOrderingRunner.run,
         "lifecycle-scenarios.json": {
-            let test = ClaimTests(selector: #selector(XCTestCase.invokeTest))
+            let test = ClaimTests(selector: #selector(ClaimTests.corpusHarness))
             try await test.testLifecycleBasicReleaseScenarios()
         },
     ]

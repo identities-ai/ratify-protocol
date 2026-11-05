@@ -1499,6 +1499,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_snapshot(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_stage_revocation_list(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_stage_status_key(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_startup(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_submit_pending(
@@ -1898,6 +1902,10 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_snapshot(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_stage_revocation_list(`ptr`: Long,`wire`: RustBuffer.ByValue,`issuerId`: RustBuffer.ByValue,`epoch`: Long,`key`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`now`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_stage_status_key(`ptr`: Long,`issuerId`: RustBuffer.ByValue,`epoch`: Long,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_startup(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_submit_pending(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3027,6 +3035,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_snapshot() and 0xFFFF) != 41178) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_stage_revocation_list() and 0xFFFF) != 13801) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_stage_status_key() and 0xFFFF) != 33111) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_startup() and 0xFFFF) != 28128) {
@@ -8638,6 +8652,10 @@ internal interface FfiOfflineDeviceInterface {
 
     fun `snapshot`(): FfiDeviceSnapshot
 
+    fun `stageRevocationList`(`wire`: kotlin.ByteArray, `issuerId`: kotlin.String, `epoch`: kotlin.ULong, `key`: FfiPublicKey, `policy`: FfiStatusPolicy, `now`: kotlin.Long)
+
+    fun `stageStatusKey`(`issuerId`: kotlin.String, `epoch`: kotlin.ULong, `key`: FfiPublicKey)
+
     fun `startup`(): FfiDeviceReply
 
     fun `submitPending`(): FfiDeviceReply
@@ -8864,6 +8882,41 @@ internal open class FfiOfflineDevice: Disposable, AutoCloseable, FfiOfflineDevic
     }
     )
     }
+
+
+
+    @Throws(FfiException::class)override fun `stageRevocationList`(`wire`: kotlin.ByteArray, `issuerId`: kotlin.String, `epoch`: kotlin.ULong, `key`: FfiPublicKey, `policy`: FfiStatusPolicy, `now`: kotlin.Long)
+        =
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_stage_revocation_list(
+        it,
+
+        FfiConverterByteArray.lower(`wire`),
+        FfiConverterString.lower(`issuerId`),
+        FfiConverterULong.lower(`epoch`),
+        FfiConverterTypeFfiPublicKey.lower(`key`),
+        FfiConverterTypeFfiStatusPolicy.lower(`policy`),
+        FfiConverterLong.lower(`now`),_status)
+}
+    }
+
+
+
+
+    @Throws(FfiException::class)override fun `stageStatusKey`(`issuerId`: kotlin.String, `epoch`: kotlin.ULong, `key`: FfiPublicKey)
+        =
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_stage_status_key(
+        it,
+
+        FfiConverterString.lower(`issuerId`),
+        FfiConverterULong.lower(`epoch`),
+        FfiConverterTypeFfiPublicKey.lower(`key`),_status)
+}
+    }
+
 
 
 

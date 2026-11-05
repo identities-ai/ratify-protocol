@@ -1065,7 +1065,7 @@ final class ClaimTests: XCTestCase {
             "device_altered_release_record", "device_state_digest_mismatch",
             "device_primary_rollback", "device_rollback_loses_consumed_challenge",
             "device_rollback_loses_stream_advance", "device_rollback_loses_release_record",
-            "device_rollback_loses_rate_state"]
+            "device_rollback_loses_rate_state", "device_rollback_loses_journal_state"]
         let scenarios = (corpus.arr("scenarios") + corpus.arr("profile_scenarios"))
             .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
@@ -1141,7 +1141,8 @@ final class ClaimTests: XCTestCase {
             "device_rollback_loses_consumed_challenge": 11,
             "device_rollback_loses_stream_advance": 9,
             "device_rollback_loses_release_record": 10,
-            "device_rollback_loses_rate_state": 9]
+            "device_rollback_loses_rate_state": 9,
+            "device_rollback_loses_journal_state": 9]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1161,6 +1162,7 @@ final class ClaimTests: XCTestCase {
             "device_submit": ["op", "expect"], "upload": ["op", "expect"],
             "corrupt_state": ["op", "request", "expect"],
             "snapshot": ["op", "snapshot", "expect"],
+            "stage_status": ["op", "request", "expect"],
             "device_power_loss": ["op", "mode", "expect"],
             "device_startup": ["op", "expect"],
             "device_resubmit": ["op", "sequence", "expect"]]
@@ -1304,6 +1306,39 @@ final class ClaimTests: XCTestCase {
                     XCTAssertTrue(want.isEmpty, at)
                     deviceSnapshot = try XCTUnwrap(device, at).snapshot()
                     deviceSnapshotName = step.s("snapshot")
+                case "stage_status":
+                    XCTAssertTrue(want.isEmpty, at)
+                    let inputs = corpus.obj("requests").obj(requestName)
+                    let statusKeys = inputs.obj("status_keys")
+                    let journal = inputs.obj("journal")
+                    let preload = journal.arr("preload")
+                    XCTAssertEqual(journal.s("mode"), "anchored", at)
+                    XCTAssertNil(journal["setup"], at)
+                    XCTAssertEqual(statusKeys.count, 3, at)
+                    XCTAssertEqual(preload.count, 2, at)
+                    let staged = try XCTUnwrap(device, at)
+                    for issuer in statusKeys.keys.sorted() {
+                        let item = statusKeys.obj(issuer)
+                        let publicKey = item.obj("public_key")
+                        try staged.stageStatusKey(issuerId: issuer, epoch: UInt64(item.int("epoch")),
+                            key: HybridPublicKey(ed25519: publicKey.b64("ed25519"),
+                                mlDsa65: publicKey.b64("ml_dsa_65")))
+                    }
+                    let bounds = inputs.obj("status_policy")
+                    let policy = RevocationStatusPolicy(maxListLifetimeSeconds: Int64(bounds.int("max_list_lifetime_seconds")),
+                        maxStatusAgeSeconds: Int64(bounds.int("max_status_age_seconds")),
+                        clockSkewSeconds: Int64(bounds.int("clock_skew_seconds")))
+                    for item in preload {
+                        XCTAssertEqual(item.int("object_type_code"), 3, at)
+                        let issuer = item.s("issuer_id")
+                        let keyItem = statusKeys.obj(issuer)
+                        let publicKey = keyItem.obj("public_key")
+                        try staged.stageRevocationList(wire: item.b64("wire_b64"), issuerId: issuer,
+                            epoch: UInt64(keyItem.int("epoch")),
+                            key: HybridPublicKey(ed25519: publicKey.b64("ed25519"),
+                                mlDsa65: publicKey.b64("ml_dsa_65")), policy: policy,
+                            now: Int64(item.int("now")))
+                    }
                 case "device_power_loss":
                     XCTAssertTrue(want.isEmpty, at)
                     try XCTUnwrap(device, at).setPowerLoss(step.s("mode"))

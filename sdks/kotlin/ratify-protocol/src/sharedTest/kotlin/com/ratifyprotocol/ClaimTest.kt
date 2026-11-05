@@ -246,7 +246,8 @@ class ClaimTest {
             "device_rollback_loses_consumed_challenge" to 11,
             "device_rollback_loses_stream_advance" to 9,
             "device_rollback_loses_release_record" to 10,
-            "device_rollback_loses_rate_state" to 9)
+            "device_rollback_loses_rate_state" to 9,
+            "device_rollback_loses_journal_state" to 9)
         val scenarios = corpus.arr("profile_scenarios").filter { expectedCounts.containsKey(it.getString("name")) }
         assertEquals(expectedCounts.size, scenarios.size)
         val keys = Corpus.load("keys.json").getJSONArray("keys")
@@ -368,6 +369,34 @@ class ClaimTest {
                     assertEquals(at, 0, want.length())
                     deviceSnapshot = device.snapshot()
                     deviceSnapshotName = step.getString("snapshot")
+                }
+                "stage_status" -> {
+                    assertEquals(at, setOf("op", "request", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, 0, want.length())
+                    val inputs = corpus.getJSONObject("requests").getJSONObject(name)
+                    val statusKeys = inputs.getJSONObject("status_keys")
+                    val journal = inputs.getJSONObject("journal")
+                    val preload = journal.getJSONArray("preload")
+                    assertEquals(at, "anchored", journal.getString("mode"))
+                    assertEquals(at, null, journal.optJSONArray("setup"))
+                    assertEquals(at, 3, statusKeys.length())
+                    assertEquals(at, 2, preload.length())
+                    for (issuer in statusKeys.keys().asSequence().sorted()) {
+                        val item = statusKeys.getJSONObject(issuer)
+                        device.stageStatusKey(issuer, item.getLong("epoch").toULong(),
+                            publicKeyOf(item.getJSONObject("public_key")))
+                    }
+                    val bounds = inputs.getJSONObject("status_policy")
+                    val policy = RevocationStatusPolicy(bounds.getLong("max_list_lifetime_seconds"),
+                        bounds.getLong("max_status_age_seconds"), bounds.getLong("clock_skew_seconds"))
+                    for (item in journal.arr("preload")) {
+                        assertEquals(at, 3, item.getInt("object_type_code"))
+                        val issuer = item.getString("issuer_id")
+                        val keyItem = statusKeys.getJSONObject(issuer)
+                        device.stageRevocationList(item.b64("wire_b64"), issuer,
+                            keyItem.getLong("epoch").toULong(),
+                            publicKeyOf(keyItem.getJSONObject("public_key")), policy, item.getLong("now"))
+                    }
                 }
                 "restore" -> {
                     assertEquals(at, setOf("op", "mode", "snapshot", "expect"), step.keys().asSequence().toSet())

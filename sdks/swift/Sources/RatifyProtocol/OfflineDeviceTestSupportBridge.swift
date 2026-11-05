@@ -54,6 +54,14 @@ import Foundation
     public func primaryStore() throws(RatifyError) -> ReferenceStoreBridge {
         try ReferenceStoreBridge(ffi { try handle.primaryStore() })
     }
+    public func stageStatusKey(issuerId: String, epoch: UInt64, key: HybridPublicKey) throws(RatifyError) {
+        try ffi { try handle.stageStatusKey(issuerId: issuerId, epoch: epoch, key: key.ffi) }
+    }
+    public func stageRevocationList(wire: Data, issuerId: String, epoch: UInt64,
+                                    key: HybridPublicKey, policy: RevocationStatusPolicy, now: Int64) throws(RatifyError) {
+        try ffi { try handle.stageRevocationList(wire: wire, issuerId: issuerId, epoch: epoch,
+            key: key.ffi, policy: policy.ffi, now: now) }
+    }
     public func setPowerLoss(_ mode: String) throws(RatifyError) {
         try ffi { try handle.setPowerLoss(mode: mode) }
     }

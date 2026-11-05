@@ -39,6 +39,11 @@ public class OfflineDeviceBridge internal constructor(private val handle: FfiOff
     public fun restore(snapshot: OfflineDeviceSnapshotBridge): OfflineDeviceBridge =
         OfflineDeviceBridge(ffi { handle.restore(snapshot.handle) })
     public fun primaryStore(): ReferenceStoreBridge = ReferenceStoreBridge(ffi { handle.primaryStore() })
+    public fun stageStatusKey(issuerId: String, epoch: ULong, key: HybridPublicKey): Unit =
+        ffi { handle.stageStatusKey(issuerId, epoch, key.toFfi()) }
+    public fun stageRevocationList(wire: ByteArray, issuerId: String, epoch: ULong,
+        key: HybridPublicKey, policy: RevocationStatusPolicy, now: Long): Unit =
+        ffi { handle.stageRevocationList(wire, issuerId, epoch, key.toFfi(), policy.toFfi(), now) }
     public fun setPowerLoss(mode: String): Unit = ffi { handle.setPowerLoss(mode) }
     public fun submitPending(): OfflineDeviceReplyBridge = OfflineDeviceReplyBridge(ffi { handle.submitPending() })
     public fun resubmit(sequence: Long): OfflineDeviceReplyBridge = OfflineDeviceReplyBridge(ffi { handle.resubmit(sequence) })

@@ -4,12 +4,15 @@ use std::sync::Arc;
 
 use ratify_protocol::v2::reference::{DeviceCheckpointTestOnly, DeviceComponentTestOnly,
     DeviceErrorTestOnly, DevicePowerLoss, DevicePrimaryTestOnly, DeviceUplinkTestOnly};
-use ratify_protocol::v2::{V2Context, V2ReceiptCheckpoint};
+use ratify_protocol::v2::{apply_revocation_list_to_journal_v2, configure_status_key_epoch_v2,
+    decode_revocation_list_v2, V2Context, V2ReceiptCheckpoint};
 
 use crate::error::FfiResult;
 use crate::guard::{call_on, call_with, Poison};
+use crate::keys::FfiPublicKey;
 use crate::reference_store::{FfiReferenceStore, FfiReferenceStoreFailure};
 use crate::release::FfiCheckpointAcknowledgement;
+use crate::status::FfiStatusPolicy;
 
 #[derive(Default, uniffi::Record)]
 pub struct FfiDeviceReply {
@@ -95,6 +98,24 @@ impl FfiOfflineDevice {
         call_on(&self.poison, || Ok(Arc::new(FfiReferenceStore {
             poison: Poison::default(), inner: Arc::clone(&self.primary.store),
         })))
+    }
+
+    pub fn stage_status_key(&self, issuer_id: String, epoch: u64, key: FfiPublicKey) -> FfiResult<()> {
+        call_on(&self.poison, || {
+            configure_status_key_epoch_v2(&V2Context::background(), &self.primary.journal,
+                &issuer_id, epoch, &key.into())?;
+            Ok(())
+        })
+    }
+
+    pub fn stage_revocation_list(&self, wire: Vec<u8>, issuer_id: String, epoch: u64,
+                                 key: FfiPublicKey, policy: FfiStatusPolicy, now: i64) -> FfiResult<()> {
+        call_on(&self.poison, || {
+            let list = decode_revocation_list_v2(&wire)?;
+            apply_revocation_list_to_journal_v2(&V2Context::background(), &self.primary.journal,
+                &list, &issuer_id, epoch, &key.into(), &policy.into(), now)?;
+            Ok(())
+        })
     }
 
     pub fn startup(&self) -> FfiResult<FfiDeviceReply> {

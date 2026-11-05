@@ -34,6 +34,14 @@ public final class OfflineDevice: ReceiptCheckpoint {
         try OfflineDevice(bridge.restore(snapshot.bridge))
     }
     public func primaryStore() throws(RatifyError) -> Store { try Store(bridge.primaryStore()) }
+    public func stageStatusKey(issuerId: String, epoch: UInt64, key: HybridPublicKey) throws(RatifyError) {
+        try bridge.stageStatusKey(issuerId: issuerId, epoch: epoch, key: key)
+    }
+    public func stageRevocationList(wire: Data, issuerId: String, epoch: UInt64,
+                                    key: HybridPublicKey, policy: RevocationStatusPolicy, now: Int64) throws(RatifyError) {
+        try bridge.stageRevocationList(wire: wire, issuerId: issuerId, epoch: epoch,
+            key: key, policy: policy, now: now)
+    }
     public func setPowerLoss(_ mode: String) throws(RatifyError) { try bridge.setPowerLoss(mode) }
     public func submitPending() throws(RatifyError) -> DeviceReply { try DeviceReply(bridge.submitPending()) }
     public func resubmit(_ sequence: Int64) throws(RatifyError) -> DeviceReply { try DeviceReply(bridge.resubmit(sequence)) }

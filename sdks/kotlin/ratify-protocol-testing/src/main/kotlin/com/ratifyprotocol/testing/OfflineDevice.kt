@@ -5,6 +5,8 @@ import com.ratifyprotocol.OfflineDeviceBridge
 import com.ratifyprotocol.OfflineDeviceReplyBridge
 import com.ratifyprotocol.OfflineDeviceSnapshotBridge
 import com.ratifyprotocol.ReceiptCheckpoint
+import com.ratifyprotocol.HybridPublicKey
+import com.ratifyprotocol.RevocationStatusPolicy
 
 public class DeviceReply internal constructor(value: OfflineDeviceReplyBridge) {
     public val acknowledged: List<Long> = value.acknowledged
@@ -24,6 +26,11 @@ public class OfflineDevice internal constructor(private val bridge: OfflineDevic
     public fun snapshot(): OfflineDeviceSnapshot = OfflineDeviceSnapshot(bridge.snapshot())
     public fun restore(snapshot: OfflineDeviceSnapshot): OfflineDevice = OfflineDevice(bridge.restore(snapshot.bridge))
     public fun primaryStore(): Store = Store(bridge.primaryStore())
+    public fun stageStatusKey(issuerId: String, epoch: ULong, key: HybridPublicKey): Unit =
+        bridge.stageStatusKey(issuerId, epoch, key)
+    public fun stageRevocationList(wire: ByteArray, issuerId: String, epoch: ULong,
+        key: HybridPublicKey, policy: RevocationStatusPolicy, now: Long): Unit =
+        bridge.stageRevocationList(wire, issuerId, epoch, key, policy, now)
     public fun setPowerLoss(mode: String): Unit = bridge.setPowerLoss(mode)
     public fun submitPending(): DeviceReply = DeviceReply(bridge.submitPending())
     public fun resubmit(sequence: Long): DeviceReply = DeviceReply(bridge.resubmit(sequence))

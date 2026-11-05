@@ -409,6 +409,8 @@ OfflineDeviceBridge.restore(_:) [Func] -> RatifyProtocol.OfflineDeviceBridge, Ra
 OfflineDeviceBridge.resubmit(_:) [Func] -> RatifyProtocol.OfflineDeviceReplyBridge, Swift.Int64
 OfflineDeviceBridge.setPowerLoss(_:) [Func] -> (), Swift.String
 OfflineDeviceBridge.snapshot() [Func] -> RatifyProtocol.OfflineDeviceSnapshotBridge
+OfflineDeviceBridge.stageRevocationList(wire:issuerId:epoch:key:policy:now:) [Func] -> (), Foundation.Data, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64
+OfflineDeviceBridge.stageStatusKey(issuerId:epoch:key:) [Func] -> (), Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey
 OfflineDeviceBridge.startup() [Func] -> RatifyProtocol.OfflineDeviceReplyBridge
 OfflineDeviceBridge.submitPending() [Func] -> RatifyProtocol.OfflineDeviceReplyBridge
 OfflineDeviceBridge.upload() [Func] -> RatifyProtocol.OfflineDeviceReplyBridge

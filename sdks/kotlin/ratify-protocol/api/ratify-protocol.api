@@ -639,6 +639,8 @@ public final class com/ratifyprotocol/OfflineDeviceBridge {
 	public final fun resubmit (J)Lcom/ratifyprotocol/OfflineDeviceReplyBridge;
 	public final fun setPowerLoss (Ljava/lang/String;)V
 	public final fun snapshot ()Lcom/ratifyprotocol/OfflineDeviceSnapshotBridge;
+	public final fun stageRevocationList-7hoFjp4 ([BLjava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/RevocationStatusPolicy;J)V
+	public final fun stageStatusKey-z13BHRw (Ljava/lang/String;JLcom/ratifyprotocol/HybridPublicKey;)V
 	public final fun startup ()Lcom/ratifyprotocol/OfflineDeviceReplyBridge;
 	public final fun submitPending ()Lcom/ratifyprotocol/OfflineDeviceReplyBridge;
 	public final fun upload ()Lcom/ratifyprotocol/OfflineDeviceReplyBridge;

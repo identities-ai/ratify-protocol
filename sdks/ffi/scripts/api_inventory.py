@@ -243,6 +243,8 @@ EXTRA_MEMBERS = {
     "OfflineDeviceBridge.snapshot": "test-only device primary snapshot",
     "OfflineDeviceBridge.restore": "test-only device primary restore",
     "OfflineDeviceBridge.primaryStore": "test-only restored primary store",
+    "OfflineDeviceBridge.stageStatusKey": "test-only anchored device status key",
+    "OfflineDeviceBridge.stageRevocationList": "test-only anchored device status list",
     "OfflineDeviceBridge.submitPending": "test-only pending checkpoint submission",
     "OfflineDeviceBridge.upload": "test-only offline outbox upload",
     "OfflineDeviceReplyBridge.ackTime": "test-only component acknowledgement time",

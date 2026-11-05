@@ -3611,6 +3611,10 @@ protocol FfiOfflineDeviceProtocol: AnyObject, Sendable {
 
     func snapshot() throws  -> FfiDeviceSnapshot
 
+    func stageRevocationList(wire: Data, issuerId: String, epoch: UInt64, key: FfiPublicKey, policy: FfiStatusPolicy, now: Int64) throws
+
+    func stageStatusKey(issuerId: String, epoch: UInt64, key: FfiPublicKey) throws
+
     func startup() throws  -> FfiDeviceReply
 
     func submitPending() throws  -> FfiDeviceReply
@@ -3752,6 +3756,31 @@ func snapshot()throws  -> FfiDeviceSnapshot  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+
+func stageRevocationList(wire: Data, issuerId: String, epoch: UInt64, key: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_stage_revocation_list(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(wire),
+        FfiConverterString.lower(issuerId),
+        FfiConverterUInt64.lower(epoch),
+        FfiConverterTypeFfiPublicKey_lower(key),
+        FfiConverterTypeFfiStatusPolicy_lower(policy),
+        FfiConverterInt64.lower(now),uniffiCallStatus
+    )
+}
+}
+
+func stageStatusKey(issuerId: String, epoch: UInt64, key: FfiPublicKey)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_stage_status_key(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(issuerId),
+        FfiConverterUInt64.lower(epoch),
+        FfiConverterTypeFfiPublicKey_lower(key),uniffiCallStatus
+    )
+}
 }
 
 func startup()throws  -> FfiDeviceReply  {
@@ -17142,6 +17171,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_snapshot() != 41178) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_stage_revocation_list() != 13801) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_stage_status_key() != 33111) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_startup() != 28128) {

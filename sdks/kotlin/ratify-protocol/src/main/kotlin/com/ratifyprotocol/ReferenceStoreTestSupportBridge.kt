@@ -3,6 +3,22 @@ package com.ratifyprotocol
 import androidx.annotation.RestrictTo
 import com.ratifyprotocol.internal.ffi.FfiReferenceStore
 import com.ratifyprotocol.internal.ffi.FfiReferenceStoreReply
+import com.ratifyprotocol.internal.ffi.FfiReferenceStoreFailure
+
+internal fun referenceStoreError(failure: FfiReferenceStoreFailure): Throwable = when (failure.kind) {
+    "classified" -> StoreError.Classified(
+        ErrorClass.fromSpelling(failure.`class`)
+            ?: throw RatifyException.Internal(InternalErrorKind.PANIC, "unknown reference store error class"),
+        failure.detail)
+    "unavailable" -> StoreError.Unavailable(failure.detail)
+    "claim_proof_conflict" -> StoreError.ClaimProofConflict()
+    "rate_limit_exceeded" -> StoreError.RateLimitExceeded()
+    "release_state_mismatch" -> StoreError.ReleaseStateMismatch()
+    "acknowledgement_not_found" -> StoreError.AcknowledgementNotFound()
+    "challenge_issuance_conflict" -> StoreError.ChallengeIssuanceConflict()
+    "challenge_issuance_not_found" -> StoreError.ChallengeIssuanceNotFound()
+    else -> RatifyException.Internal(InternalErrorKind.PANIC, "unknown reference store failure kind")
+}
 
 /** Bridge for the separate testing artifact. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -22,20 +38,7 @@ public class ReferenceStoreBridge private constructor(internal val handle: FfiRe
 
     private fun check(reply: FfiReferenceStoreReply) {
         val failure = reply.failure ?: return
-        throw when (failure.kind) {
-            "classified" -> StoreError.Classified(
-                ErrorClass.fromSpelling(failure.`class`)
-                    ?: throw RatifyException.Internal(InternalErrorKind.PANIC, "unknown reference store error class"),
-                failure.detail)
-            "unavailable" -> StoreError.Unavailable(failure.detail)
-            "claim_proof_conflict" -> StoreError.ClaimProofConflict()
-            "rate_limit_exceeded" -> StoreError.RateLimitExceeded()
-            "release_state_mismatch" -> StoreError.ReleaseStateMismatch()
-            "acknowledgement_not_found" -> StoreError.AcknowledgementNotFound()
-            "challenge_issuance_conflict" -> StoreError.ChallengeIssuanceConflict()
-            "challenge_issuance_not_found" -> StoreError.ChallengeIssuanceNotFound()
-            else -> RatifyException.Internal(InternalErrorKind.PANIC, "unknown reference store failure kind")
-        }
+        throw referenceStoreError(failure)
     }
 
     private fun <T : Any> value(reply: FfiReferenceStoreReply, field: (FfiReferenceStoreReply) -> T?): T {

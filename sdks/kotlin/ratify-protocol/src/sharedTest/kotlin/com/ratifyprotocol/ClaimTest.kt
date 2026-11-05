@@ -2,6 +2,7 @@ package com.ratifyprotocol
 
 import com.ratifyprotocol.testing.Store as ReferenceStore
 import com.ratifyprotocol.testing.ApprovalLedger as ReferenceApprovalLedger
+import com.ratifyprotocol.testing.OfflineDevice as ReferenceOfflineDevice
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -231,6 +232,94 @@ class ClaimTest {
                 else -> error("$at: unsupported operation")
             }
         }
+        }
+    }
+    @Test fun singleDeviceReleaseRequiresComponentAck() = runBlocking {
+        val corpus = Corpus.load("lifecycle-scenarios.json")
+        val scenario = corpus.arr("profile_scenarios").single {
+            it.getString("name") == "device_release_requires_component_ack"
+        }
+        assertEquals(6, scenario.arr("steps").size)
+        val keys = Corpus.load("keys.json").getJSONArray("keys")
+        val keyItem = (0 until keys.length()).asSequence().map(keys::getJSONObject)
+            .first { it.getString("name") == corpus.getString("verifier_key") }
+        val verifier = SoftwarePrivateKey.fromSeeds(keyItem.hex("ed25519_seed_hex"), keyItem.hex("ml_dsa_65_seed_hex"))
+        val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"),
+            corpus.getString("log_id"), verifier)
+        val setup = scenario.getJSONObject("device")
+        val device = ReferenceOfflineDevice(store, setup.getLong("replay_epoch"),
+            setup.b64("component_seed_b64"), setup.getInt("capacity").toUInt())
+        val committed = mutableMapOf<String, CommittedOutcome>()
+        val receipts = mutableMapOf<String, ByteArray>()
+        for ((index, step) in scenario.arr("steps").withIndex()) {
+            val op = step.getString("op")
+            val name = step.optString("request")
+            val want = step.getJSONObject("expect")
+            val at = "${scenario.getString("name")} step $index $op"
+            when (op) {
+                "verify" -> {
+                    assertEquals(at, setOf("op", "request", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, setOf("stage", "decision", "decision_reason", "allow_horizon"),
+                        want.keys().asSequence().toSet())
+                    val req = request(name, corpusName = "lifecycle-scenarios.json")
+                    assertEquals(at, req.now, store.now())
+                    val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(name), req)
+                    val result = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+                    assertEquals(at, want.getString("stage"), result.stage.spelling)
+                    val value = checkNotNull(result.committed) { at }
+                    val body = JSONObject(String(value.receiptBody))
+                    assertEquals(at, want.getString("decision"), body.getString("decision"))
+                    assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
+                    assertEquals(at, want.getLong("allow_horizon"), value.allowHorizon)
+                    committed[name] = value
+                }
+                "publish" -> {
+                    assertEquals(at, setOf("op", "request", "mode", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, setOf("receipt_sequence"), want.keys().asSequence().toSet())
+                    assertEquals(at, "ok", step.getString("mode"))
+                    val value = checkNotNull(committed[name]) { at }
+                    val wire = store.publish(value.claimId, value.receiptBody)
+                    assertEquals(at, want.getLong("receipt_sequence"), decodeVerificationReceipt(wire).sequence)
+                    receipts[name] = wire
+                }
+                "release" -> {
+                    assertEquals(at, setOf("op", "request", "checkpoint", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, if (want.has("decision"))
+                        setOf("decision", "release_status", "release_time", "receipt_sequence")
+                        else setOf("release_status", "release_reason"), want.keys().asSequence().toSet())
+                    assertEquals(at, "device", step.getString("checkpoint"))
+                    val result = releaseDecision(checkNotNull(committed[name]) { at }, receipts[name],
+                        verifier.publicKey, corpus.getString("log_id"), store, device)
+                    assertEquals(at, want.getString("release_status"), result.status.spelling)
+                    if (want.has("decision")) {
+                        val decision = checkNotNull(result.decision) { at }
+                        assertEquals(at, "", result.reason)
+                        assertEquals(at, want.getString("decision"), decision.decision)
+                        org.junit.Assert.assertArrayEquals(at, checkNotNull(receipts[name]) { at }, decision.receiptWire)
+                        assertEquals(at, want.getLong("release_time"), decision.releaseTime)
+                        assertEquals(at, want.getLong("receipt_sequence"),
+                            decodeVerificationReceipt(decision.receiptWire).sequence)
+                    } else {
+                        assertEquals(at, want.getString("release_reason"), result.reason)
+                        assertEquals(at, null, result.decision)
+                    }
+                }
+                "device_submit" -> {
+                    assertEquals(at, setOf("op", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, setOf("acknowledged"), want.keys().asSequence().toSet())
+                    val reply = device.submitPending()
+                    assertEquals(at, null, reply.failure)
+                    val expected = want.getJSONArray("acknowledged")
+                    assertEquals(at, (0 until expected.length()).map(expected::getLong), reply.acknowledged)
+                }
+                "upload" -> {
+                    assertEquals(at, setOf("op", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, setOf("uploaded"), want.keys().asSequence().toSet())
+                    val expected = want.getJSONArray("uploaded")
+                    assertEquals(at, (0 until expected.length()).map(expected::getLong), device.upload())
+                }
+                else -> error("$at: unsupported operation")
+            }
         }
     }
     private interface CallbackPanicHooks : Library {

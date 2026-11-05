@@ -1057,7 +1057,8 @@ final class ClaimTests: XCTestCase {
             "dual_root_mismatched_action", "dual_root_committed_unreleased",
             "dual_root_expired_before_execution", "dual_root_cross_set_reuse",
             "dual_root_same_set_different_action", "dual_root_swapped_verifier",
-            "dual_root_set_names_other_verifier", "dual_root_concurrent_completion"]
+            "dual_root_set_names_other_verifier", "dual_root_concurrent_completion",
+            "device_release_requires_component_ack"]
         let scenarios = (corpus.arr("scenarios") + corpus.arr("profile_scenarios"))
             .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
@@ -1124,7 +1125,7 @@ final class ClaimTests: XCTestCase {
             "dual_root_committed_unreleased": 16, "dual_root_expired_before_execution": 11,
             "dual_root_cross_set_reuse": 14, "dual_root_same_set_different_action": 10,
             "dual_root_swapped_verifier": 10, "dual_root_set_names_other_verifier": 10,
-            "dual_root_concurrent_completion": 9]
+            "dual_root_concurrent_completion": 9, "device_release_requires_component_ack": 6]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1140,7 +1141,8 @@ final class ClaimTests: XCTestCase {
             "ledger_record": ["op", "request", "slot", "expect"],
             "ledger_execute": ["op", "expect"],
             "ledger_record_concurrent": ["op", "requests", "expect"],
-            "ledger_execute_concurrent": ["op", "count", "expect"]]
+            "ledger_execute_concurrent": ["op", "count", "expect"],
+            "device_submit": ["op", "expect"], "upload": ["op", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -1158,6 +1160,10 @@ final class ClaimTests: XCTestCase {
             var publishedWires: [String: Data] = [:]
             var released: [String: ReleasedDecision] = [:]
             let approvalLedger = name.hasPrefix("dual_root_") ? try ApprovalLedger() : nil
+            let device = name.hasPrefix("device_") ? try OfflineDevice(store: store,
+                replayEpoch: Int64(scenario.obj("device").int("replay_epoch")),
+                seed: scenario.obj("device").b64("component_seed_b64"),
+                capacity: UInt32(scenario.obj("device").int("capacity"))) : nil
             var approvalSetId: String?
             for (index, step) in scenario.arr("steps").enumerated() {
                 let op = step.s("op")
@@ -1257,6 +1263,15 @@ final class ClaimTests: XCTestCase {
                     XCTAssertTrue(replies.filter { $0.failure != nil }
                         .allSatisfy { $0.failure == "already_executed" }, at)
                     XCTAssertTrue(replies.allSatisfy { $0.complete == nil }, at)
+                case "device_submit":
+                    XCTAssertEqual(Set(want.keys), ["acknowledged"], at)
+                    let reply = try XCTUnwrap(device, at).submitPending()
+                    XCTAssertNil(reply.failure, at)
+                    XCTAssertEqual(reply.acknowledged, (want["acknowledged"] as! [NSNumber]).map(\.int64Value), at)
+                case "upload":
+                    XCTAssertEqual(Set(want.keys), ["uploaded"], at)
+                    XCTAssertEqual(try XCTUnwrap(device, at).upload(),
+                        (want["uploaded"] as! [NSNumber]).map(\.int64Value), at)
                 case "set_time":
                     try store.setTime(Int64(step.int("time")))
                     rateTime = Int64(step.int("time"))
@@ -1635,13 +1650,14 @@ final class ClaimTests: XCTestCase {
                     let releaseMode = step["mode"] as? String ?? ""
                     XCTAssertTrue(["", "no_receipt", "record_release_unavailable",
                         "record_release_state_mismatch"].contains(releaseMode), at)
-                    XCTAssertTrue(checkpointMode == "reference" || checkpointMode == "wrong_entry", at)
+                    XCTAssertTrue(["reference", "wrong_entry", "device"].contains(checkpointMode), at)
                     XCTAssertEqual(Set(want.keys), want["decision"] == nil
                         ? ["release_status", "release_reason"]
                         : ["release_status", "decision", "release_time", "receipt_sequence"], at)
                     let value = try XCTUnwrap(committed[requestName], at)
                     let checkpoint: any ReceiptCheckpoint = checkpointMode == "wrong_entry"
-                        ? WrongEntryCheckpoint(store: store) : store
+                        ? WrongEntryCheckpoint(store: store) : checkpointMode == "device"
+                        ? try XCTUnwrap(device, at) : store
                     let receiptName = step.keys.contains("receipt_of") ? step.s("receipt_of") : requestName
                     if step.keys.contains("receipt_of") {
                         XCTAssertNotEqual(receiptName, requestName, at)

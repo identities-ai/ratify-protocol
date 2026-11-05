@@ -3489,6 +3489,208 @@ func FfiConverterTypeFfiJournalStore_lower(_ value: FfiJournalStore) -> UInt64 {
 
 
 
+protocol FfiOfflineDeviceProtocol: AnyObject, Sendable {
+
+    func acknowledgeReceipt(logId: String, sequence: Int64, previousEntryHash: Data, entryHash: Data) throws  -> FfiDeviceReply
+
+    func getAcknowledgement(logId: String, sequence: Int64) throws  -> FfiDeviceReply
+
+    func resubmit(sequence: Int64) throws  -> FfiDeviceReply
+
+    func setPowerLoss(mode: String) throws
+
+    func startup() throws  -> FfiDeviceReply
+
+    func submitPending() throws  -> FfiDeviceReply
+
+    func upload() throws  -> FfiDeviceReply
+
+}
+class FfiOfflineDevice: FfiOfflineDeviceProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffiofflinedevice(self.handle, $0) }
+    }
+convenience init(store: FfiReferenceStore, replayEpoch: Int64, seed: Data, capacity: UInt32)throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_constructor_ffiofflinedevice_new(
+        FfiConverterTypeFfiReferenceStore_lower(store),
+        FfiConverterInt64.lower(replayEpoch),
+        FfiConverterData.lower(seed),
+        FfiConverterUInt32.lower(capacity),uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffiofflinedevice(handle, $0) }
+    }
+
+
+
+
+func acknowledgeReceipt(logId: String, sequence: Int64, previousEntryHash: Data, entryHash: Data)throws  -> FfiDeviceReply  {
+    return try  FfiConverterTypeFfiDeviceReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_acknowledge_receipt(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(logId),
+        FfiConverterInt64.lower(sequence),
+        FfiConverterData.lower(previousEntryHash),
+        FfiConverterData.lower(entryHash),uniffiCallStatus
+    )
+})
+}
+
+func getAcknowledgement(logId: String, sequence: Int64)throws  -> FfiDeviceReply  {
+    return try  FfiConverterTypeFfiDeviceReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_get_acknowledgement(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(logId),
+        FfiConverterInt64.lower(sequence),uniffiCallStatus
+    )
+})
+}
+
+func resubmit(sequence: Int64)throws  -> FfiDeviceReply  {
+    return try  FfiConverterTypeFfiDeviceReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_resubmit(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(sequence),uniffiCallStatus
+    )
+})
+}
+
+func setPowerLoss(mode: String)throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_set_power_loss(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(mode),uniffiCallStatus
+    )
+}
+}
+
+func startup()throws  -> FfiDeviceReply  {
+    return try  FfiConverterTypeFfiDeviceReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_startup(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+func submitPending()throws  -> FfiDeviceReply  {
+    return try  FfiConverterTypeFfiDeviceReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_submit_pending(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+func upload()throws  -> FfiDeviceReply  {
+    return try  FfiConverterTypeFfiDeviceReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_upload(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiOfflineDevice: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiOfflineDevice
+
+    static func lift(_ handle: UInt64) throws -> FfiOfflineDevice {
+        return FfiOfflineDevice(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiOfflineDevice) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiOfflineDevice {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiOfflineDevice, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiOfflineDevice_lift(_ handle: UInt64) throws -> FfiOfflineDevice {
+    return try FfiConverterTypeFfiOfflineDevice.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiOfflineDevice_lower(_ value: FfiOfflineDevice) -> UInt64 {
+    return FfiConverterTypeFfiOfflineDevice.lower(value)
+}
+
+
+
+
+
+
 protocol FfiRandomSource: AnyObject, Sendable {
     
     func fill(count: UInt32, context: FfiStoreContext) throws  -> Data
@@ -8441,6 +8643,80 @@ func FfiConverterTypeFfiDelegationCert_lower(_ value: FfiDelegationCert) -> Rust
 }
 
 
+struct FfiDeviceReply: Equatable, Hashable {
+    var acknowledged: [Int64]
+    var uploaded: [Int64]
+    var ackTime: Int64?
+    var acknowledgement: FfiCheckpointAcknowledgement?
+    var status: String?
+    var failure: String?
+    var storeFailure: FfiReferenceStoreFailure?
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(acknowledged: [Int64], uploaded: [Int64], ackTime: Int64?, acknowledgement: FfiCheckpointAcknowledgement?, status: String?, failure: String?, storeFailure: FfiReferenceStoreFailure?) {
+        self.acknowledged = acknowledged
+        self.uploaded = uploaded
+        self.ackTime = ackTime
+        self.acknowledgement = acknowledgement
+        self.status = status
+        self.failure = failure
+        self.storeFailure = storeFailure
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiDeviceReply: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiDeviceReply: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiDeviceReply {
+        return
+            try FfiDeviceReply(
+                acknowledged: FfiConverterSequenceInt64.read(from: &buf),
+                uploaded: FfiConverterSequenceInt64.read(from: &buf),
+                ackTime: FfiConverterOptionInt64.read(from: &buf),
+                acknowledgement: FfiConverterOptionTypeFfiCheckpointAcknowledgement.read(from: &buf),
+                status: FfiConverterOptionString.read(from: &buf),
+                failure: FfiConverterOptionString.read(from: &buf),
+                storeFailure: FfiConverterOptionTypeFfiReferenceStoreFailure.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiDeviceReply, into buf: inout [UInt8]) {
+        FfiConverterSequenceInt64.write(value.acknowledged, into: &buf)
+        FfiConverterSequenceInt64.write(value.uploaded, into: &buf)
+        FfiConverterOptionInt64.write(value.ackTime, into: &buf)
+        FfiConverterOptionTypeFfiCheckpointAcknowledgement.write(value.acknowledgement, into: &buf)
+        FfiConverterOptionString.write(value.status, into: &buf)
+        FfiConverterOptionString.write(value.failure, into: &buf)
+        FfiConverterOptionTypeFfiReferenceStoreFailure.write(value.storeFailure, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiDeviceReply_lift(_ buf: RustBuffer) throws -> FfiDeviceReply {
+    return try FfiConverterTypeFfiDeviceReply.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiDeviceReply_lower(_ value: FfiDeviceReply) -> RustBuffer {
+    return FfiConverterTypeFfiDeviceReply.lower(value)
+}
+
+
 struct FfiDeviceStateProjectionTestOnly: Equatable, Hashable {
     var claims: Data
     var streams: Data
@@ -13249,7 +13525,7 @@ struct FfiConverterTypeFfiStoreError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(10))
             FfiConverterString.write(kind, into: &buf)
             FfiConverterString.write(detail, into: &buf)
-        
+
         }
     }
 }
@@ -14154,6 +14430,31 @@ fileprivate struct FfiConverterOptionDictionaryStringTypeFfiParamsValue: FfiConv
         case 1: return try FfiConverterDictionaryStringTypeFfiParamsValue.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceInt64: FfiConverterRustBuffer {
+    typealias SwiftType = [Int64]
+
+    static func write(_ value: [Int64], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterInt64.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Int64] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Int64]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterInt64.read(from: &buf))
+        }
+        return seq
     }
 }
 
@@ -16671,6 +16972,27 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_ffitrustprovider_resolve() != 48324) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_acknowledge_receipt() != 1788) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_get_acknowledgement() != 33464) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_resubmit() != 7916) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_set_power_loss() != 33392) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_startup() != 28128) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_submit_pending() != 27437) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_upload() != 4298) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_abandon_pending_receipts() != 63650) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16849,6 +17171,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_ffisoftwarekey_from_storage_record() != 64922) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_constructor_ffiofflinedevice_new() != 9238) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_ffireferencestore_new() != 6616) {

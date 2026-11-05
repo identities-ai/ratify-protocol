@@ -28,23 +28,26 @@ import Foundation
     }
     public func abandonPendingReceipts() throws(RatifyError) -> [String] { try ffi { try handle.abandonPendingReceipts() } }
 
-    private func check(_ reply: FfiReferenceStoreReply) throws {
-        guard let failure = reply.failure else { return }
+    static func error(_ failure: FfiReferenceStoreFailure) -> Error {
         switch failure.kind {
         case "classified":
             guard let cls = ErrorClass(rawValue: failure.`class`) else {
-                throw RatifyError.internal(.panic, message: "unknown reference store error class")
+                return RatifyError.internal(.panic, message: "unknown reference store error class")
             }
-            throw StoreError.classified(cls, detail: failure.detail)
-        case "unavailable": throw StoreError.unavailable(failure.detail)
-        case "claim_proof_conflict": throw StoreError.claimProofConflict
-        case "rate_limit_exceeded": throw StoreError.rateLimitExceeded
-        case "release_state_mismatch": throw StoreError.releaseStateMismatch
-        case "acknowledgement_not_found": throw StoreError.acknowledgementNotFound
-        case "challenge_issuance_conflict": throw StoreError.challengeIssuanceConflict
-        case "challenge_issuance_not_found": throw StoreError.challengeIssuanceNotFound
-        default: throw RatifyError.internal(.panic, message: "unknown reference store failure kind")
+            return StoreError.classified(cls, detail: failure.detail)
+        case "unavailable": return StoreError.unavailable(failure.detail)
+        case "claim_proof_conflict": return StoreError.claimProofConflict
+        case "rate_limit_exceeded": return StoreError.rateLimitExceeded
+        case "release_state_mismatch": return StoreError.releaseStateMismatch
+        case "acknowledgement_not_found": return StoreError.acknowledgementNotFound
+        case "challenge_issuance_conflict": return StoreError.challengeIssuanceConflict
+        case "challenge_issuance_not_found": return StoreError.challengeIssuanceNotFound
+        default: return RatifyError.internal(.panic, message: "unknown reference store failure kind")
         }
+    }
+
+    private func check(_ reply: FfiReferenceStoreReply) throws {
+        if let failure = reply.failure { throw Self.error(failure) }
     }
 
     private func value<T>(_ reply: FfiReferenceStoreReply, _ field: KeyPath<FfiReferenceStoreReply, T?>) throws -> T {

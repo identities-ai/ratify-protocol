@@ -630,6 +630,26 @@ public final class com/ratifyprotocol/ObjectType$Companion {
 	public final fun fromCode-xj2QHRw (S)Lcom/ratifyprotocol/ObjectType;
 }
 
+public final class com/ratifyprotocol/OfflineDeviceBridge {
+	public synthetic fun <init> (Lcom/ratifyprotocol/ReferenceStoreBridge;J[BILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun acknowledge (Ljava/lang/String;J[B[B)Lcom/ratifyprotocol/OfflineDeviceReplyBridge;
+	public final fun get (Ljava/lang/String;J)Lcom/ratifyprotocol/OfflineDeviceReplyBridge;
+	public final fun resubmit (J)Lcom/ratifyprotocol/OfflineDeviceReplyBridge;
+	public final fun setPowerLoss (Ljava/lang/String;)V
+	public final fun startup ()Lcom/ratifyprotocol/OfflineDeviceReplyBridge;
+	public final fun submitPending ()Lcom/ratifyprotocol/OfflineDeviceReplyBridge;
+	public final fun upload ()Lcom/ratifyprotocol/OfflineDeviceReplyBridge;
+}
+
+public final class com/ratifyprotocol/OfflineDeviceReplyBridge {
+	public final fun getAckTime ()Ljava/lang/Long;
+	public final fun getAcknowledged ()Ljava/util/List;
+	public final fun getFailure ()Ljava/lang/String;
+	public final fun getStatus ()Ljava/lang/String;
+	public final fun getUploaded ()Ljava/util/List;
+	public final fun requiredAcknowledgement ()Lcom/ratifyprotocol/CheckpointAcknowledgement;
+}
+
 public final class com/ratifyprotocol/OperationContext {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[B)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BILkotlin/jvm/internal/DefaultConstructorMarker;)V

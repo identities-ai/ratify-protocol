@@ -1727,6 +1727,87 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    func testConcurrentResumeDuringLeaseExpiryRecovery() async throws {
+        let corpus = Corpus.load("concurrency-scenarios.json")
+        let scenario = try XCTUnwrap(corpus.arr("scenarios").first {
+            $0.s("name") == "resume_races_lease_expiry_recovery"
+        })
+        let participants = scenario.arr("participants")
+        XCTAssertEqual(participants.map { $0.s("op") }, ["resume", "recover", "set_time"])
+        let inputs = Corpus.load("lifecycle-scenarios.json")
+        let req = try request("A", corpusName: "lifecycle-scenarios.json")
+        let expected = try XCTUnwrap(req.expected)
+        let bundle = try Ratify.decodeProofBundle(req.bundle)
+        let hash = try Ratify.bundleHash(bundle)
+        let claim = ChallengeClaim(claimId: try Ratify.protocolClaimId(namespace: expected.verifierNamespace,
+            replayEpoch: expected.replayEpoch, challenge: expected.value), namespace: expected.verifierNamespace,
+            replayEpoch: expected.replayEpoch, challengeDigest: "sha384:" +
+                (try Ratify.challengeClaimDigest(expected.value)).hex,
+            proofDigest: hash, bundleHash: hash, issuerIds: Array(Set(bundle.delegations.map(\.issuerId))).sorted(),
+            requiredScope: req.requiredScope, contextPolicyDigest: req.contextPolicy?.digest ?? "",
+            verifierId: expected.verifierId, agentId: bundle.agentId, requiresRate: false, rateBatch: [],
+            issuedAt: expected.issuedAt, expiresAt: expected.expiresAt,
+            maxAgeSeconds: req.maxChallengeAgeSeconds, clockSkewSeconds: req.futureSkewSeconds,
+            streamId: bundle.streamId, streamSeq: bundle.streamSeq, constraintEvaluators: [])
+        let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        let expiryTime = Int64(participants[2].int("time"))
+        let (trust, status, journal) = try await vectorProviders(inputs.obj("requests").obj("A"), request: req)
+        for iteration in 0..<corpus.int("default_iterations") {
+            let store = try Store(now: Int64(scenario.int("start_time")),
+                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: inputs.s("log_id"), verifierKey: key)
+            let claimed = try await store.claim(claim)
+            XCTAssertEqual(claimed.disposition, .created, "iteration \(iteration)")
+            let results = await withTaskGroup(of: String.self) { group in
+                for _ in 0..<participants[0].int("count") {
+                    group.addTask {
+                        do {
+                            let value = try await Ratify.resumeCommittedClaim(store: store, claimId: claim.claimId)
+                            let receipt = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
+                            return "resume/committed/\(receipt["decision"] ?? "")/\(receipt["decision_reason"] ?? "")"
+                        } catch {
+                            return "resume/error/" + ((error as? RatifyError)?.errorClass?.rawValue ?? "unclassified")
+                        }
+                    }
+                }
+                for _ in 0..<participants[1].int("count") {
+                    group.addTask {
+                        do {
+                            let value = try await Ratify.recoverInterruptedClaim(store: store, claimId: claim.claimId)
+                            let receipt = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
+                            return "recover/committed/\(receipt["decision"] ?? "")/\(receipt["decision_reason"] ?? "")"
+                        } catch {
+                            return "recover/error/" + ((error as? RatifyError)?.errorClass?.rawValue ?? "unclassified")
+                        }
+                    }
+                }
+                group.addTask {
+                    do { try store.setTime(expiryTime); return "clock/set" }
+                    catch { return "clock/error" }
+                }
+                var values: [String] = []
+                for await value in group { values.append(value) }
+                return values
+            }
+            XCTAssertEqual(results.count, 10, "iteration \(iteration)")
+            XCTAssertEqual(results.filter { $0 == "clock/set" }.count, 1, "iteration \(iteration)")
+            XCTAssertTrue(results.filter { $0.hasPrefix("resume/") }.allSatisfy {
+                ["resume/error/claim_lease_live", "resume/error/claim_lease_lost",
+                 "resume/committed/indeterminate/evaluation_interrupted"].contains($0)
+            }, "iteration \(iteration): \(results)")
+            XCTAssertTrue(results.filter { $0.hasPrefix("recover/") }.allSatisfy {
+                ["recover/error/claim_lease_live", "recover/committed/indeterminate/evaluation_interrupted"].contains($0)
+            }, "iteration \(iteration): \(results)")
+            let recovered = try await Ratify.recoverInterruptedClaim(store: store, claimId: claim.claimId)
+            let resumed = try await Ratify.resumeCommittedClaim(store: store, claimId: claim.claimId)
+            XCTAssertEqual(resumed.receiptBody, recovered.receiptBody, "iteration \(iteration)")
+            let wire = try await store.publish(claimId: claim.claimId, receiptBody: recovered.receiptBody)
+            XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence, 1, "iteration \(iteration)")
+            let replay = try await Ratify.verifyProofBundle(req, claimStore: store,
+                trust: trust, statusEvidence: status, statusJournal: journal)
+            XCTAssertEqual(replay.disposition, .terminalReplay, "iteration \(iteration)")
+        }
+    }
+
     func testConcurrentResumeAndReleaseDuringOwnerAllowFinalize() async throws {
         let corpus = Corpus.load("concurrency-scenarios.json")
         let scenario = try XCTUnwrap(corpus.arr("scenarios").first {

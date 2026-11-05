@@ -19,6 +19,8 @@ class DeviceVectorsTest {
     }
 
     @Test fun corpus() = CorpusRunners.runAll()
+    @Test fun crossSdkObjects() = CrossSdkObjectVectors.run()
+    @Test fun crossSdkScenarios() = CrossSdkObjectVectors.scenarios()
     @Test fun generate() = KeysVectors.generate()
     @Test fun badSeed() = KeysVectors.badSeed()
     @Test fun errorClassesPinned() = KeysVectors.errorClassesPinned()

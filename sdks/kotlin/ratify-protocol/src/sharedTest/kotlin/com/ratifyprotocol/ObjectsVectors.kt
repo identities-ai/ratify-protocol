@@ -17,7 +17,7 @@ object ObjectsVectors {
     private fun lengthPrefixed(b: ByteArray): ByteArray = ByteBuffer.allocate(8).putLong(b.size.toLong()).array() + b
 
     /** One fixture digest recomputed through the public API; null for non-digest inputs. */
-    private fun objectDigest(name: String, kind: String, wire: ByteArray, digests: JSONObject): String? = when (name) {
+    internal fun objectDigest(name: String, kind: String, wire: ByteArray, digests: JSONObject): String? = when (name) {
         "issuer_key_id_v2" -> independentKeyId(decodeDelegationCert(wire).issuerPubKey)
         "subject_key_id_v2" -> independentKeyId(decodeDelegationCert(wire).subjectPubKey)
         "delegation_digest_hex" -> decodeProofBundle(wire).delegationDigest.hex()

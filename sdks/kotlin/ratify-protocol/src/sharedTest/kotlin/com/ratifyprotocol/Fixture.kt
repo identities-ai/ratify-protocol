@@ -38,28 +38,29 @@ fun receiptHead(h: JSONObject): ReceiptHead {
     return ReceiptHead(w.logId, h.getString("verifier_id"), w.sequence, w.headHash, w.acceptedDigests, w.frozen)
 }
 
-fun rotationState(v: JSONObject): RotationState = RotationState(
+fun rotationState(v: JSONObject, key: (String) -> HybridPublicKey = Fixture::key): RotationState = RotationState(
     v.getString("authority_id"), v.getLong("recovery_epoch"), v.getString("role"), v.getLong("sequence"),
-    v.b64("head_hash_b64"), Fixture.key(v.getString("current_key")), v.strings("used_key_ids"),
+    v.b64("head_hash_b64"), key(v.getString("current_key")), v.strings("used_key_ids"),
 )
 
 /** The per-kind decode and verify procedure of the object corpora (Rust v2_common verify_object). */
-fun verifyObject(kind: String, wire: ByteArray, bundle: ByteArray, vc: JSONObject) {
+fun verifyObject(kind: String, wire: ByteArray, bundle: ByteArray, vc: JSONObject,
+                 key: (String) -> HybridPublicKey = Fixture::key) {
     when (kind) {
         "delegation_certificate" -> verifyDelegationCertSignature(decodeDelegationCert(wire))
         "proof_bundle" -> verifyProofBundleSignatures(decodeProofBundle(wire))
         "revocation_list" ->
-            verifyRevocationListSignature(decodeRevocationList(wire), vc.getString("bound_issuer_id"), Fixture.key(vc.getString("status_key")))
+            verifyRevocationListSignature(decodeRevocationList(wire), vc.getString("bound_issuer_id"), key(vc.getString("status_key")))
         "revocation_push" ->
-            verifyRevocationPushSignature(decodeRevocationPush(wire), vc.getString("bound_issuer_id"), Fixture.key(vc.getString("status_key")))
+            verifyRevocationPushSignature(decodeRevocationPush(wire), vc.getString("bound_issuer_id"), key(vc.getString("status_key")))
         "key_rotation_statement" -> verifyKeyRotationStatement(
-            decodeKeyRotationStatement(wire), rotationState(vc.getJSONObject("rotation_state")),
+            decodeKeyRotationStatement(wire), rotationState(vc.getJSONObject("rotation_state"), key),
             vc.getLong("now"), vc.getLong("future_skew_seconds"),
         )
-        "witness_entry" -> verifyWitnessEntry(decodeWitnessEntry(wire), witnessHead(vc.getJSONObject("head")), Fixture.key(vc.getString("witness_key")))
+        "witness_entry" -> verifyWitnessEntry(decodeWitnessEntry(wire), witnessHead(vc.getJSONObject("head")), key(vc.getString("witness_key")))
         "transaction_receipt" -> verifyTransactionReceiptSignatures(decodeTransactionReceipt(wire))
         "verification_receipt" -> verifyVerificationReceipt(
-            decodeVerificationReceipt(wire), Fixture.key(vc.getString("verifier_key")), receiptHead(vc.getJSONObject("head")),
+            decodeVerificationReceipt(wire), key(vc.getString("verifier_key")), receiptHead(vc.getJSONObject("head")),
         )
         "receipt_bundle_binding" -> checkVerificationReceiptBundleBinding(decodeVerificationReceipt(wire), decodeProofBundle(bundle))
         else -> error("unknown kind $kind")

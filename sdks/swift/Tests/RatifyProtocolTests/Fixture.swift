@@ -49,34 +49,34 @@ func receiptHead(_ h: [String: Any]) -> ReceiptHead {
                        acceptedDigests: w.acceptedDigests, frozen: w.frozen)
 }
 
-func rotationState(_ v: [String: Any]) -> RotationState {
+func rotationState(_ v: [String: Any], key: (String) -> HybridPublicKey = { Fixture.shared.key($0) }) -> RotationState {
     RotationState(authorityId: v.s("authority_id"), recoveryEpoch: Int64(v.int("recovery_epoch")), role: v.s("role"),
                   sequence: Int64(v.int("sequence")), headHash: v.b64("head_hash_b64"),
-                  currentKey: Fixture.shared.key(v.s("current_key")), usedKeyIds: v.strings("used_key_ids"))
+                  currentKey: key(v.s("current_key")), usedKeyIds: v.strings("used_key_ids"))
 }
 
 /// The per-kind decode and verify procedure of the object corpora
 /// (sdks/rust/tests/v2_common verify_object).
-func verifyObject(_ kind: String, _ wire: Data, bundle: Data = Data(), _ vc: [String: Any]) throws {
-    let fx = Fixture.shared
+func verifyObject(_ kind: String, _ wire: Data, bundle: Data = Data(), _ vc: [String: Any],
+                  key: (String) -> HybridPublicKey = { Fixture.shared.key($0) }) throws {
     switch kind {
     case "delegation_certificate": try Ratify.verifyDelegationCertSignature(Ratify.decodeDelegationCert(wire))
     case "proof_bundle": try Ratify.verifyProofBundleSignatures(Ratify.decodeProofBundle(wire))
     case "revocation_list":
         try Ratify.verifyRevocationListSignature(Ratify.decodeRevocationList(wire), trustedIssuerId: vc.s("bound_issuer_id"),
-                                                 statusKey: fx.key(vc.s("status_key")))
+                                                 statusKey: key(vc.s("status_key")))
     case "revocation_push":
         try Ratify.verifyRevocationPushSignature(Ratify.decodeRevocationPush(wire), trustedIssuerId: vc.s("bound_issuer_id"),
-                                                 statusKey: fx.key(vc.s("status_key")))
+                                                 statusKey: key(vc.s("status_key")))
     case "key_rotation_statement":
-        try Ratify.verifyKeyRotationStatement(Ratify.decodeKeyRotationStatement(wire), state: rotationState(vc.obj("rotation_state")),
+        try Ratify.verifyKeyRotationStatement(Ratify.decodeKeyRotationStatement(wire), state: rotationState(vc.obj("rotation_state"), key: key),
                                               now: Int64(vc.int("now")), futureSkew: Int64(vc.int("future_skew_seconds")))
     case "witness_entry":
         _ = try Ratify.verifyWitnessEntry(Ratify.decodeWitnessEntry(wire), head: witnessHead(vc.obj("head")),
-                                          witnessKey: fx.key(vc.s("witness_key")))
+                                          witnessKey: key(vc.s("witness_key")))
     case "transaction_receipt": try Ratify.verifyTransactionReceiptSignatures(Ratify.decodeTransactionReceipt(wire))
     case "verification_receipt":
-        _ = try Ratify.verifyVerificationReceipt(Ratify.decodeVerificationReceipt(wire), verifierKey: fx.key(vc.s("verifier_key")),
+        _ = try Ratify.verifyVerificationReceipt(Ratify.decodeVerificationReceipt(wire), verifierKey: key(vc.s("verifier_key")),
                                                  head: receiptHead(vc.obj("head")))
     case "receipt_bundle_binding":
         try Ratify.checkVerificationReceiptBundleBinding(Ratify.decodeVerificationReceipt(wire), bundle: Ratify.decodeProofBundle(bundle))

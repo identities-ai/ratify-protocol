@@ -17,6 +17,8 @@ class HostVectorsTest {
     }
 
     @Test fun corpus() = CorpusRunners.runAll()
+    @Test fun crossSdkObjects() = CrossSdkObjectVectors.run()
+    @Test fun crossSdkScenarios() = CrossSdkObjectVectors.scenarios()
     @Test fun decoderFuzz() = DecoderFuzz.run()
     @Test fun generate() = KeysVectors.generate()
     @Test fun badSeed() = KeysVectors.badSeed()

@@ -3,7 +3,7 @@ import Foundation
 
 /// Rust Part B reference store for conformance tests.
 public final class Store: ClaimStore, CommittedClaimStore, ReleaseClaimStore, ReceiptPublisher, ReceiptCheckpoint {
-    private let bridge: ReferenceStoreBridge
+    let bridge: ReferenceStoreBridge
 
     public init(now: Int64, leaseSeconds: Int64, logId: String, verifierKey: SoftwarePrivateKey) throws(RatifyError) {
         bridge = try ReferenceStoreBridge(now: now, leaseSeconds: leaseSeconds, logId: logId, verifierKey: verifierKey)

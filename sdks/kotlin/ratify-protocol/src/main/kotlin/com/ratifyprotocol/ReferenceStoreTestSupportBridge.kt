@@ -6,7 +6,7 @@ import com.ratifyprotocol.internal.ffi.FfiReferenceStoreReply
 
 /** Bridge for the separate testing artifact. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-public class ReferenceStoreBridge private constructor(private val handle: FfiReferenceStore) {
+public class ReferenceStoreBridge private constructor(internal val handle: FfiReferenceStore) {
     public constructor(now: Long, leaseSeconds: Long, logId: String, verifierKey: SoftwarePrivateKey) :
         this(ffi { FfiReferenceStore(now, leaseSeconds, logId, verifierKey.handle) })
 

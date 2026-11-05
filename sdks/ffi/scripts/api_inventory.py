@@ -143,6 +143,8 @@ def cmd_check():
 # Everything else public must be named by a mapped inventory entry.
 EXTRA_SWIFT = {
     "ReferenceStoreBridge": "internal SPI carrier for the separate TestSupport reference store",
+    "ApprovalLedgerBridge": "internal SPI carrier for the separate TestSupport dual-root ledger",
+    "ApprovalReplyBridge": "internal SPI carrier for the dual-root ledger result",
     "DeviceStateProjectionBridge": "internal SPI carrier for the separate TestSupport product; the reference primary remains pending",
     "Ratify.deviceStateProjectionTestOnly": "internal SPI entry point for the device-state vector corpus",
     "Ratify.verifyProofBundleWithoutClaimStore": "fail-closed verifier configuration without a claim capability",
@@ -162,6 +164,8 @@ EXTRA_SWIFT = {
 }
 EXTRA_KOTLIN = {
     "ReferenceStoreBridge": "internal-use carrier for the separate testing artifact",
+    "ApprovalLedgerBridge": "internal-use carrier for the separate testing artifact",
+    "ApprovalReplyBridge": "internal-use carrier for the dual-root ledger result",
     "DeviceStateProjectionBridge": "internal-use carrier for the separate testing artifact; the reference primary remains pending",
     "verifyProofBundleWithoutClaimStore": "fail-closed verifier configuration without a claim capability",
     "publishReceipt": "SDK helper invoking the mapped V2ReceiptPublisher callback",
@@ -219,6 +223,11 @@ EXTRA_MEMBERS = {
     "ReferenceStoreBridge.publish": "reference receipt publication for tests",
     "ReferenceStoreBridge.acknowledge": "reference checkpoint acknowledgement for tests",
     "ReferenceStoreBridge.get": "reference checkpoint lookup for tests",
+    "ApprovalLedgerBridge.open": "test-only approval set opening",
+    "ApprovalLedgerBridge.record": "test-only released approval recording",
+    "ApprovalLedgerBridge.execute": "test-only atomic action execution",
+    "ApprovalReplyBridge.complete": "test-only approval set completion result",
+    "ApprovalReplyBridge.failure": "test-only approval ledger refusal",
     "DeviceStateProjectionBridge.claims": "test-only projection member",
     "DeviceStateProjectionBridge.streams": "test-only projection member",
     "DeviceStateProjectionBridge.rateCounters": "test-only projection member",

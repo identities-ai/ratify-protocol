@@ -37,4 +37,5 @@ class DeviceVectorsTest {
     @Test fun referenceStoreCommittedReceiptCheckpointAndRelease() =
         ClaimTest().referenceStoreCommittedReceiptCheckpointAndRelease()
     @Test fun lifecycleBasicReleaseScenarios() = ClaimTest().lifecycleBasicReleaseScenarios()
+    @Test fun dualRootBothReleasedExecutesOnce() = ClaimTest().dualRootBothReleasedExecutesOnce()
 }

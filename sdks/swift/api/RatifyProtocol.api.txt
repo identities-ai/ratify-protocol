@@ -1,3 +1,11 @@
+ApprovalLedgerBridge [Class]
+ApprovalLedgerBridge.execute(id:clock:) [Func] -> RatifyProtocol.ApprovalReplyBridge, Swift.String, RatifyProtocol.ReferenceStoreBridge
+ApprovalLedgerBridge.init() [Constructor] -> RatifyProtocol.ApprovalLedgerBridge
+ApprovalLedgerBridge.open(id:verifierId:workspaceId:sessionId:agentKey:requiredScope:requestHash:rootA:rootB:) [Func] -> RatifyProtocol.ApprovalReplyBridge, Swift.String, Swift.String, Swift.String, Swift.String, RatifyProtocol.HybridPublicKey, Swift.String, Foundation.Data, RatifyProtocol.HybridPublicKey, RatifyProtocol.HybridPublicKey
+ApprovalLedgerBridge.record(id:slot:decision:bundle:) [Func] -> RatifyProtocol.ApprovalReplyBridge, Swift.String, Swift.UInt32, RatifyProtocol.ReleasedDecision?, Foundation.Data
+ApprovalReplyBridge [Struct]
+ApprovalReplyBridge.complete [Var] -> Swift.Bool?
+ApprovalReplyBridge.failure [Var] -> Swift.String?
 ArchivalProofBundleResult [Struct]
 ArchivalProofBundleResult.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ArchivalProofBundleResult, RatifyProtocol.ArchivalProofBundleResult
 ArchivalProofBundleResult.actionable [Var] -> Swift.Bool

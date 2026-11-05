@@ -104,7 +104,7 @@ internal class PublisherBridge(private val publisher: ReceiptPublisher) : FfiRec
 }
 
 /** Created only by the core release gate. Check [isAllowed] immediately before a side effect. */
-public class ReleasedDecision private constructor(private val handle: FfiReleasedDecision) {
+public class ReleasedDecision private constructor(internal val handle: FfiReleasedDecision) {
     public val claimId: String = ffi { handle.claimId() }
     /** Receipt decision only; use [isAllowed] immediately before a side effect. */
     public val decision: String = ffi { handle.decision() }

@@ -55,8 +55,8 @@ pub struct FfiReferenceStoreReply {
 
 #[derive(uniffi::Object)]
 pub struct FfiReferenceStore {
-    poison: Poison,
-    inner: Arc<Store>,
+    pub(crate) poison: Poison,
+    pub(crate) inner: Arc<Store>,
 }
 
 impl FfiReferenceStore {

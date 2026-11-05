@@ -8,6 +8,18 @@ public final class com/ratifyprotocol/AndroidKeyStore {
 	public final fun save (Lcom/ratifyprotocol/SoftwarePrivateKey;)V
 }
 
+public final class com/ratifyprotocol/ApprovalLedgerBridge {
+	public fun <init> ()V
+	public final fun execute (Ljava/lang/String;Lcom/ratifyprotocol/ReferenceStoreBridge;)Lcom/ratifyprotocol/ApprovalReplyBridge;
+	public final fun open (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/ratifyprotocol/HybridPublicKey;Ljava/lang/String;[BLcom/ratifyprotocol/HybridPublicKey;Lcom/ratifyprotocol/HybridPublicKey;)Lcom/ratifyprotocol/ApprovalReplyBridge;
+	public final fun record-Yuhug_o (Ljava/lang/String;ILcom/ratifyprotocol/ReleasedDecision;[B)Lcom/ratifyprotocol/ApprovalReplyBridge;
+}
+
+public final class com/ratifyprotocol/ApprovalReplyBridge {
+	public final fun getComplete ()Ljava/lang/Boolean;
+	public final fun getFailure ()Ljava/lang/String;
+}
+
 public final class com/ratifyprotocol/ArchivalKt {
 	public static final fun statementBodyDigest-vckuEUM (S[B)[B
 	public static final fun statusEvidenceDigest-vckuEUM (SLcom/ratifyprotocol/StatusObject;)[B

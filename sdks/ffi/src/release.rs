@@ -155,9 +155,11 @@ impl V2ReceiptCheckpoint for ForeignCheckpoint {
 }
 
 #[derive(uniffi::Object)]
-pub struct FfiReleasedDecision { poison: Poison, inner: core::V2ReleasedDecision }
+pub struct FfiReleasedDecision { pub(crate) poison: Poison, pub(crate) inner: Arc<core::V2ReleasedDecision> }
 impl FfiReleasedDecision {
-    fn new(inner: core::V2ReleasedDecision) -> Arc<Self> { Arc::new(Self { poison: Poison::default(), inner }) }
+    fn new(inner: core::V2ReleasedDecision) -> Arc<Self> {
+        Arc::new(Self { poison: Poison::default(), inner: Arc::new(inner) })
+    }
 }
 
 #[uniffi::export]

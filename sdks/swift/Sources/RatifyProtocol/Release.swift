@@ -123,7 +123,7 @@ final class PublisherBridge: FfiReceiptPublisher, @unchecked Sendable {
 
 /// Created only by the core release gate. Read `isAllowed` immediately before a side effect.
 public final class ReleasedDecision: @unchecked Sendable {
-    private let handle: FfiReleasedDecision
+    let handle: FfiReleasedDecision
     public let claimId: String
     /// Receipt decision only; use `isAllowed` immediately before a side effect.
     public let decision: String

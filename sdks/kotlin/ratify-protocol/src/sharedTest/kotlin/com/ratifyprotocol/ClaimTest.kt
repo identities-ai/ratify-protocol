@@ -1,6 +1,7 @@
 package com.ratifyprotocol
 
 import com.ratifyprotocol.testing.Store as ReferenceStore
+import com.ratifyprotocol.testing.ApprovalLedger as ReferenceApprovalLedger
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -26,6 +27,149 @@ import com.sun.jna.Native
 class ClaimTest {
     companion object {
         @BeforeClass @JvmStatic fun setUpCorpus() = CorpusSetup.configure()
+    }
+
+    @Test fun dualRootLedgerStartsIncomplete() {
+        val corpus = Corpus.load("lifecycle-scenarios.json")
+        val scenario = corpus.arr("profile_scenarios").first {
+            it.getString("name") == "dual_root_both_released_executes_once"
+        }
+        val first = scenario.arr("steps").first()
+        assertEquals("ledger_open", first.getString("op"))
+        val set = first.getJSONObject("approval_set")
+        val roots = set.getJSONArray("root_keys").strings()
+        assertEquals(2, roots.size)
+        val keys = Corpus.load("keys.json").getJSONArray("keys")
+        fun key(name: String): SoftwarePrivateKey {
+            val item = (0 until keys.length()).asSequence().map(keys::getJSONObject)
+                .first { it.getString("name") == name }
+            return SoftwarePrivateKey.fromSeeds(item.hex("ed25519_seed_hex"), item.hex("ml_dsa_65_seed_hex"))
+        }
+        val ledger = ReferenceApprovalLedger()
+        val opened = ledger.open(set.getString("id"), set.getString("verifier_id"),
+            set.getString("workspace_id"), set.getString("session_id"),
+            key(set.getString("agent_key")).publicKey, set.getString("required_scope"),
+            set.b64("request_hash_b64"), key(roots[0]).publicKey, key(roots[1]).publicKey)
+        assertEquals(null, opened.failure)
+        assertEquals(null, opened.complete)
+        val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"),
+            corpus.getString("log_id"), key(corpus.getString("verifier_key")))
+        val refused = ledger.execute(set.getString("id"), store)
+        assertEquals("incomplete", refused.failure)
+        assertEquals(null, refused.complete)
+        val unreleased = ledger.record(set.getString("id"), 0u, null, byteArrayOf())
+        assertEquals("not_released", unreleased.failure)
+        assertEquals(null, unreleased.complete)
+    }
+
+    @Test fun dualRootBothReleasedExecutesOnce() = runBlocking {
+        val corpus = Corpus.load("lifecycle-scenarios.json")
+        val scenario = corpus.arr("profile_scenarios").single {
+            it.getString("name") == "dual_root_both_released_executes_once"
+        }
+        assertEquals(12, scenario.arr("steps").size)
+        val keys = Corpus.load("keys.json").getJSONArray("keys")
+        fun key(name: String): SoftwarePrivateKey {
+            val item = (0 until keys.length()).asSequence().map(keys::getJSONObject)
+                .first { it.getString("name") == name }
+            return SoftwarePrivateKey.fromSeeds(item.hex("ed25519_seed_hex"), item.hex("ml_dsa_65_seed_hex"))
+        }
+        val verifier = key(corpus.getString("verifier_key"))
+        val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"),
+            corpus.getString("log_id"), verifier)
+        val ledger = ReferenceApprovalLedger()
+        val committed = mutableMapOf<String, CommittedOutcome>()
+        val receipts = mutableMapOf<String, ByteArray>()
+        val released = mutableMapOf<String, ReleasedDecision>()
+        var approvalSetId: String? = null
+        for ((index, step) in scenario.arr("steps").withIndex()) {
+            val op = step.getString("op")
+            val name = step.optString("request")
+            val want = step.getJSONObject("expect")
+            val at = "dual_root_both_released_executes_once step $index $op"
+            when (op) {
+                "ledger_open" -> {
+                    assertEquals(at, setOf("op", "approval_set", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, 0, want.length())
+                    val set = step.getJSONObject("approval_set")
+                    val roots = set.getJSONArray("root_keys").strings()
+                    assertEquals(at, 2, roots.size)
+                    val agent = key(set.getString("agent_key"))
+                    val context = buildSessionContext(SessionContextInputs(set.getString("verifier_id"),
+                        set.getString("workspace_id"), agent.keyId, set.getString("session_id"),
+                        set.getString("id"), set.b64("request_hash_b64")))
+                    org.junit.Assert.assertArrayEquals(at, set.b64("session_context_b64"), context)
+                    val reply = ledger.open(set.getString("id"), set.getString("verifier_id"),
+                        set.getString("workspace_id"), set.getString("session_id"), agent.publicKey,
+                        set.getString("required_scope"), set.b64("request_hash_b64"),
+                        key(roots[0]).publicKey, key(roots[1]).publicKey)
+                    assertEquals(at, null, reply.failure)
+                    assertEquals(at, null, reply.complete)
+                    approvalSetId = set.getString("id")
+                }
+                "verify" -> {
+                    assertEquals(at, setOf("op", "request", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, setOf("stage", "decision", "decision_reason", "allow_horizon"),
+                        want.keys().asSequence().toSet())
+                    val req = request(name, corpusName = "lifecycle-scenarios.json")
+                    assertEquals(at, req.now, store.now())
+                    val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(name), req)
+                    val result = verifyProofBundle(req, store, trust = trust,
+                        statusEvidence = status, statusJournal = journal)
+                    assertEquals(at, want.getString("stage"), result.stage.spelling)
+                    val value = checkNotNull(result.committed) { at }
+                    val body = JSONObject(String(value.receiptBody))
+                    assertEquals(at, want.getString("decision"), body.getString("decision"))
+                    assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
+                    assertEquals(at, want.getLong("allow_horizon"), value.allowHorizon)
+                    committed[name] = value
+                }
+                "publish" -> {
+                    assertEquals(at, setOf("op", "request", "mode", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, "ok", step.getString("mode"))
+                    assertEquals(at, setOf("receipt_sequence"), want.keys().asSequence().toSet())
+                    val value = checkNotNull(committed[name]) { at }
+                    val wire = store.publish(value.claimId, value.receiptBody)
+                    assertEquals(at, want.getLong("receipt_sequence"), decodeVerificationReceipt(wire).sequence)
+                    receipts[name] = wire
+                }
+                "release" -> {
+                    assertEquals(at, setOf("op", "request", "checkpoint", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, "reference", step.getString("checkpoint"))
+                    assertEquals(at, setOf("decision", "release_status", "release_time", "receipt_sequence"),
+                        want.keys().asSequence().toSet())
+                    val value = checkNotNull(committed[name]) { at }
+                    val wire = checkNotNull(receipts[name]) { at }
+                    val result = releaseDecision(value, wire, verifier.publicKey, corpus.getString("log_id"), store, store)
+                    assertEquals(at, want.getString("release_status"), result.status.spelling)
+                    val decision = checkNotNull(result.decision) { at }
+                    assertEquals(at, want.getString("decision"), decision.decision)
+                    assertEquals(at, want.getLong("release_time"), decision.releaseTime)
+                    assertEquals(at, want.getLong("receipt_sequence"), decodeVerificationReceipt(decision.receiptWire).sequence)
+                    released[name] = decision
+                }
+                "ledger_record" -> {
+                    assertEquals(at, setOf("op", "request", "slot", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, if (want.has("ledger_complete")) setOf("ledger_complete") else emptySet(),
+                        want.keys().asSequence().toSet())
+                    val reply = ledger.record(checkNotNull(approvalSetId) { at }, step.getInt("slot").toUInt(),
+                        checkNotNull(released[name]) { at }, request(name, corpusName = "lifecycle-scenarios.json").bundle)
+                    assertEquals(at, null, reply.failure)
+                    assertEquals(at, if (want.has("ledger_complete")) want.getBoolean("ledger_complete") else false,
+                        reply.complete)
+                }
+                "ledger_execute" -> {
+                    assertEquals(at, setOf("op", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, if (want.has("ledger_error")) setOf("ledger_error") else emptySet(),
+                        want.keys().asSequence().toSet())
+                    val reply = ledger.execute(checkNotNull(approvalSetId) { at }, store)
+                    assertEquals(at, if (want.has("ledger_error")) want.getString("ledger_error") else null,
+                        reply.failure)
+                    assertEquals(at, null, reply.complete)
+                }
+                else -> error("$at: unsupported operation")
+            }
+        }
     }
     private interface CallbackPanicHooks : Library {
         fun ratify_ffi_test_arm_callback_panic(kind: Int)

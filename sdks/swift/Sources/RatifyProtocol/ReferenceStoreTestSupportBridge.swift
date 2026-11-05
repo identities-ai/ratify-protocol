@@ -2,7 +2,7 @@ import Foundation
 
 /// Internal bridge for the separately packaged reference store.
 @_spi(TestSupport) public final class ReferenceStoreBridge: Sendable {
-    private let handle: FfiReferenceStore
+    let handle: FfiReferenceStore
 
     public init(now: Int64, leaseSeconds: Int64, logId: String, verifierKey: SoftwarePrivateKey) throws(RatifyError) {
         handle = try ffi { try FfiReferenceStore(now: now, leaseSeconds: leaseSeconds, logId: logId, verifierKey: verifierKey.handle) }

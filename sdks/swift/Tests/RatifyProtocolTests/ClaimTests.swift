@@ -11,6 +11,35 @@ private func callbackPanicRemaining() -> UInt32
 final class ClaimTests: XCTestCase {
     @objc func corpusHarness() {}
 
+    func testDualRootLedgerStartsIncomplete() throws {
+        let corpus = Corpus.load("lifecycle-scenarios.json")
+        let scenario = try XCTUnwrap(corpus.arr("profile_scenarios").first {
+            $0.s("name") == "dual_root_both_released_executes_once"
+        })
+        let first = try XCTUnwrap(scenario.arr("steps").first)
+        XCTAssertEqual(first.s("op"), "ledger_open")
+        let set = first.obj("approval_set")
+        let roots = set.strings("root_keys")
+        XCTAssertEqual(roots.count, 2)
+        let ledger = try ApprovalLedger()
+        let opened = try ledger.open(id: set.s("id"), verifierId: set.s("verifier_id"),
+            workspaceId: set.s("workspace_id"), sessionId: set.s("session_id"),
+            agentKey: Fixture.shared.privateKey(set.s("agent_key")).publicKey,
+            requiredScope: set.s("required_scope"), requestHash: set.b64("request_hash_b64"),
+            rootA: Fixture.shared.privateKey(roots[0]).publicKey,
+            rootB: Fixture.shared.privateKey(roots[1]).publicKey)
+        XCTAssertNil(opened.failure)
+        XCTAssertNil(opened.complete)
+        let store = try Store(now: Int64(scenario.int("start_time")), leaseSeconds: Int64(corpus.int("lease_seconds")),
+            logId: corpus.s("log_id"), verifierKey: Fixture.shared.privateKey(corpus.s("verifier_key")))
+        let refused = try ledger.execute(id: set.s("id"), clock: store)
+        XCTAssertEqual(refused.failure, "incomplete")
+        XCTAssertNil(refused.complete)
+        let unreleased = try ledger.record(id: set.s("id"), slot: 0, decision: nil, bundle: Data())
+        XCTAssertEqual(unreleased.failure, "not_released")
+        XCTAssertNil(unreleased.complete)
+    }
+
     final class ReceiverProbe: ReceiverBindingHook, @unchecked Sendable {
         let reject: Bool
         private let lock = NSLock()
@@ -1022,8 +1051,10 @@ final class ClaimTests: XCTestCase {
             "cancel_before_claim_consumes_nothing", "cancel_after_claim_keeps_claim_recoverable",
             "late_worker_fenced_after_recovery", "rate_admission_at_finalization",
             "rate_admission_is_all_or_none", "rate_retry_and_changed_batch_count_once",
-            "rate_clock_rollback_keeps_admissions_blocking", "rate_counts_only_allow"]
-        let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
+            "rate_clock_rollback_keeps_admissions_blocking", "rate_counts_only_allow",
+            "dual_root_both_released_executes_once"]
+        let scenarios = (corpus.arr("scenarios") + corpus.arr("profile_scenarios"))
+            .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
             "release_without_acknowledgement_is_pending_then_late_ack_releases": 7,
@@ -1081,7 +1112,8 @@ final class ClaimTests: XCTestCase {
             "cancel_before_claim_consumes_nothing": 5, "cancel_after_claim_keeps_claim_recoverable": 7,
             "late_worker_fenced_after_recovery": 4, "rate_admission_at_finalization": 5,
             "rate_admission_is_all_or_none": 5, "rate_retry_and_changed_batch_count_once": 5,
-            "rate_clock_rollback_keeps_admissions_blocking": 9, "rate_counts_only_allow": 7]
+            "rate_clock_rollback_keeps_admissions_blocking": 9, "rate_counts_only_allow": 7,
+            "dual_root_both_released_executes_once": 12]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1092,7 +1124,10 @@ final class ClaimTests: XCTestCase {
             "recover_direct": ["op", "request", "terminal_b64", "body_b64", "expect"],
             "restore": ["op", "mode", "expect"], "plant_release": ["op", "request", "time", "expect"],
             "acknowledge": ["op", "request", "mode", "expect"],
-            "verify_concurrent": ["op", "requests", "expect"]]
+            "verify_concurrent": ["op", "requests", "expect"],
+            "ledger_open": ["op", "approval_set", "expect"],
+            "ledger_record": ["op", "request", "slot", "expect"],
+            "ledger_execute": ["op", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -1108,6 +1143,9 @@ final class ClaimTests: XCTestCase {
             var owners: [String: Data] = [:]
             var receipts: [String: Data] = [:]
             var publishedWires: [String: Data] = [:]
+            var released: [String: ReleasedDecision] = [:]
+            let approvalLedger = name.hasPrefix("dual_root_") ? try ApprovalLedger() : nil
+            var approvalSetId: String?
             for (index, step) in scenario.arr("steps").enumerated() {
                 let op = step.s("op")
                 let requestName = step["request"] as? String ?? ""
@@ -1128,6 +1166,46 @@ final class ClaimTests: XCTestCase {
                 }
                 XCTAssertEqual(Set(step.keys), expectedStepKeys, at)
                 switch op {
+                case "ledger_open":
+                    XCTAssertTrue(want.isEmpty, at)
+                    let set = step.obj("approval_set")
+                    XCTAssertEqual(Set(set.keys), ["id", "verifier_id", "workspace_id", "session_id",
+                        "agent_key", "required_scope", "request_hash_b64", "root_keys", "session_context_b64"], at)
+                    let roots = set.strings("root_keys")
+                    XCTAssertEqual(roots.count, 2, at)
+                    let ledger = try XCTUnwrap(approvalLedger, at)
+                    let agent = Fixture.shared.privateKey(set.s("agent_key"))
+                    let context = try Ratify.buildSessionContext(SessionContextInputs(
+                        verifierId: set.s("verifier_id"), workspaceId: set.s("workspace_id"),
+                        agentId: agent.keyId, sessionId: set.s("session_id"),
+                        invocationId: set.s("id"), requestHash: set.b64("request_hash_b64")))
+                    XCTAssertEqual(context, set.b64("session_context_b64"), at)
+                    let opened = try ledger.open(id: set.s("id"), verifierId: set.s("verifier_id"),
+                        workspaceId: set.s("workspace_id"), sessionId: set.s("session_id"),
+                        agentKey: agent.publicKey,
+                        requiredScope: set.s("required_scope"), requestHash: set.b64("request_hash_b64"),
+                        rootA: Fixture.shared.privateKey(roots[0]).publicKey,
+                        rootB: Fixture.shared.privateKey(roots[1]).publicKey)
+                    XCTAssertNil(opened.failure, at)
+                    XCTAssertNil(opened.complete, at)
+                    approvalSetId = set.s("id")
+                case "ledger_record":
+                    XCTAssertEqual(Set(want.keys), want["ledger_complete"] == nil ? [] : ["ledger_complete"], at)
+                    let ledger = try XCTUnwrap(approvalLedger, at)
+                    let id = try XCTUnwrap(approvalSetId, at)
+                    let decision = try XCTUnwrap(released[requestName], at)
+                    let bundle = try request(requestName, corpusName: "lifecycle-scenarios.json").bundle
+                    let reply = try ledger.record(id: id, slot: UInt32(step.int("slot")),
+                        decision: decision, bundle: bundle)
+                    XCTAssertNil(reply.failure, at)
+                    XCTAssertEqual(reply.complete, want["ledger_complete"] == nil ? false : want.bool("ledger_complete"), at)
+                case "ledger_execute":
+                    XCTAssertEqual(Set(want.keys), want["ledger_error"] == nil ? [] : ["ledger_error"], at)
+                    let ledger = try XCTUnwrap(approvalLedger, at)
+                    let id = try XCTUnwrap(approvalSetId, at)
+                    let reply = try ledger.execute(id: id, clock: store)
+                    XCTAssertEqual(reply.failure, want["ledger_error"] == nil ? nil : want.s("ledger_error"), at)
+                    XCTAssertNil(reply.complete, at)
                 case "set_time":
                     try store.setTime(Int64(step.int("time")))
                     rateTime = Int64(step.int("time"))
@@ -1532,6 +1610,7 @@ final class ClaimTests: XCTestCase {
                     } else { XCTAssertTrue(result.reason.isEmpty, at) }
                     if want.keys.contains("decision") {
                         let decision = try XCTUnwrap(result.decision, at)
+                        released[requestName] = decision
                         XCTAssertEqual(decision.decision, want.s("decision"), at)
                         XCTAssertEqual(decision.receiptWire, try XCTUnwrap(receipts[requestName], at), at)
                         XCTAssertEqual(decision.releaseTime, Int64(want.int("release_time")), at)

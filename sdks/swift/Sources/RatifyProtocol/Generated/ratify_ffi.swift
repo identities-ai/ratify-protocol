@@ -641,6 +641,160 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 
+protocol FfiApprovalLedgerProtocol: AnyObject, Sendable {
+
+    func execute(setId: String, clock: FfiReferenceStore) throws  -> FfiApprovalReply
+
+    func `open`(set: FfiApprovalSet) throws  -> FfiApprovalReply
+
+    func record(setId: String, slot: UInt32, decision: FfiReleasedDecision?, bundleWire: Data) throws  -> FfiApprovalReply
+
+}
+class FfiApprovalLedger: FfiApprovalLedgerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffiapprovalledger(self.handle, $0) }
+    }
+convenience init()throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_constructor_ffiapprovalledger_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffiapprovalledger(handle, $0) }
+    }
+
+
+
+
+func execute(setId: String, clock: FfiReferenceStore)throws  -> FfiApprovalReply  {
+    return try  FfiConverterTypeFfiApprovalReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiapprovalledger_execute(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(setId),
+        FfiConverterTypeFfiReferenceStore_lower(clock),uniffiCallStatus
+    )
+})
+}
+
+func `open`(set: FfiApprovalSet)throws  -> FfiApprovalReply  {
+    return try  FfiConverterTypeFfiApprovalReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiapprovalledger_open(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiApprovalSet_lower(set),uniffiCallStatus
+    )
+})
+}
+
+func record(setId: String, slot: UInt32, decision: FfiReleasedDecision?, bundleWire: Data)throws  -> FfiApprovalReply  {
+    return try  FfiConverterTypeFfiApprovalReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiapprovalledger_record(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(setId),
+        FfiConverterUInt32.lower(slot),
+        FfiConverterOptionTypeFfiReleasedDecision.lower(decision),
+        FfiConverterData.lower(bundleWire),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiApprovalLedger: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiApprovalLedger
+
+    static func lift(_ handle: UInt64) throws -> FfiApprovalLedger {
+        return FfiApprovalLedger(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiApprovalLedger) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiApprovalLedger {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiApprovalLedger, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiApprovalLedger_lift(_ handle: UInt64) throws -> FfiApprovalLedger {
+    return try FfiConverterTypeFfiApprovalLedger.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiApprovalLedger_lower(_ value: FfiApprovalLedger) -> UInt64 {
+    return FfiConverterTypeFfiApprovalLedger.lower(value)
+}
+
+
+
+
+
+
 protocol FfiAudienceProvider: AnyObject, Sendable {
     
     func memberships(deferred: [FfiDeferredConstraint], receiverId: String, context: FfiStoreContext) throws  -> [FfiAudienceMembership]
@@ -6899,6 +7053,142 @@ func FfiConverterTypeFfiTrustProvider_lower(_ value: FfiTrustProvider) -> UInt64
 }
 
 
+
+
+struct FfiApprovalReply: Equatable, Hashable {
+    var complete: Bool?
+    var failure: String?
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(complete: Bool?, failure: String?) {
+        self.complete = complete
+        self.failure = failure
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiApprovalReply: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiApprovalReply: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiApprovalReply {
+        return
+            try FfiApprovalReply(
+                complete: FfiConverterOptionBool.read(from: &buf),
+                failure: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiApprovalReply, into buf: inout [UInt8]) {
+        FfiConverterOptionBool.write(value.complete, into: &buf)
+        FfiConverterOptionString.write(value.failure, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiApprovalReply_lift(_ buf: RustBuffer) throws -> FfiApprovalReply {
+    return try FfiConverterTypeFfiApprovalReply.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiApprovalReply_lower(_ value: FfiApprovalReply) -> RustBuffer {
+    return FfiConverterTypeFfiApprovalReply.lower(value)
+}
+
+
+struct FfiApprovalSet: Equatable, Hashable {
+    var approvalSetId: String
+    var verifierId: String
+    var workspaceId: String
+    var sessionId: String
+    var agentPublicKey: FfiPublicKey
+    var requiredScope: String
+    var requestHash: Data
+    var rootA: FfiPublicKey
+    var rootB: FfiPublicKey
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(approvalSetId: String, verifierId: String, workspaceId: String, sessionId: String, agentPublicKey: FfiPublicKey, requiredScope: String, requestHash: Data, rootA: FfiPublicKey, rootB: FfiPublicKey) {
+        self.approvalSetId = approvalSetId
+        self.verifierId = verifierId
+        self.workspaceId = workspaceId
+        self.sessionId = sessionId
+        self.agentPublicKey = agentPublicKey
+        self.requiredScope = requiredScope
+        self.requestHash = requestHash
+        self.rootA = rootA
+        self.rootB = rootB
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiApprovalSet: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiApprovalSet: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiApprovalSet {
+        return
+            try FfiApprovalSet(
+                approvalSetId: FfiConverterString.read(from: &buf),
+                verifierId: FfiConverterString.read(from: &buf),
+                workspaceId: FfiConverterString.read(from: &buf),
+                sessionId: FfiConverterString.read(from: &buf),
+                agentPublicKey: FfiConverterTypeFfiPublicKey.read(from: &buf),
+                requiredScope: FfiConverterString.read(from: &buf),
+                requestHash: FfiConverterData.read(from: &buf),
+                rootA: FfiConverterTypeFfiPublicKey.read(from: &buf),
+                rootB: FfiConverterTypeFfiPublicKey.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiApprovalSet, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.approvalSetId, into: &buf)
+        FfiConverterString.write(value.verifierId, into: &buf)
+        FfiConverterString.write(value.workspaceId, into: &buf)
+        FfiConverterString.write(value.sessionId, into: &buf)
+        FfiConverterTypeFfiPublicKey.write(value.agentPublicKey, into: &buf)
+        FfiConverterString.write(value.requiredScope, into: &buf)
+        FfiConverterData.write(value.requestHash, into: &buf)
+        FfiConverterTypeFfiPublicKey.write(value.rootA, into: &buf)
+        FfiConverterTypeFfiPublicKey.write(value.rootB, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiApprovalSet_lift(_ buf: RustBuffer) throws -> FfiApprovalSet {
+    return try FfiConverterTypeFfiApprovalSet.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiApprovalSet_lower(_ value: FfiApprovalSet) -> RustBuffer {
+    return FfiConverterTypeFfiApprovalSet.lower(value)
+}
 
 
 /**
@@ -16240,6 +16530,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_witness_entry_signable_bytes() != 15522) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiapprovalledger_execute() != 19257) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiapprovalledger_open() != 30757) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiapprovalledger_record() != 39320) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffichallengeissuancestore_persist() != 13563) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16529,6 +16828,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffistorecontext_is_cancelled() != 53247) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_constructor_ffiapprovalledger_new() != 55270) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_constructor_fficanceltoken_new() != 4070) {

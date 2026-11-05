@@ -9,6 +9,7 @@
 uniffi::setup_scaffolding!("ratify_ffi");
 
 mod archival;
+mod approval_ledger;
 mod context;
 mod device_state;
 mod reference_store;
@@ -35,6 +36,7 @@ mod storage;
 mod verify;
 
 pub use archival::*;
+pub use approval_ledger::*;
 pub use context::*;
 pub use device_state::*;
 pub use reference_store::*;

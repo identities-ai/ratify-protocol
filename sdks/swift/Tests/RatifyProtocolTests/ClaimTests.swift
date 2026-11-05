@@ -1727,6 +1727,62 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    func testConcurrentCancellationAgainstFinalization() async throws {
+        let corpus = Corpus.load("concurrency-scenarios.json")
+        let scenario = try XCTUnwrap(corpus.arr("scenarios").first { $0.s("name") == "cancel_races_finalization" })
+        let participants = scenario.arr("participants")
+        XCTAssertEqual(participants.map { $0.s("op") }, ["verify", "cancel"])
+        XCTAssertEqual(participants[1].s("target"), participants[0].s("group"))
+        let inputs = Corpus.load("lifecycle-scenarios.json")
+        let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        let req = try request("A", corpusName: "lifecycle-scenarios.json")
+        let (trust, status, journal) = try await vectorProviders(inputs.obj("requests").obj("A"), request: req)
+        let probe = try Store(now: Int64(scenario.int("start_time")),
+            leaseSeconds: Int64(inputs.int("lease_seconds")), logId: inputs.s("log_id"), verifierKey: key)
+        let began = DispatchTime.now().uptimeNanoseconds
+        _ = try await Ratify.verifyProofBundle(req, claimStore: probe,
+            trust: trust, statusEvidence: status, statusJournal: journal)
+        let span = max(1, DispatchTime.now().uptimeNanoseconds - began)
+        for iteration in 0..<corpus.int("default_iterations") {
+            let store = try Store(now: Int64(scenario.int("start_time")),
+                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: inputs.s("log_id"), verifierKey: key)
+            let call = Task {
+                try await Ratify.verifyProofBundle(req, claimStore: store,
+                    trust: trust, statusEvidence: status, statusJournal: journal)
+            }
+            let delay = span * UInt64(iteration % 13) / 10
+            let canceller = Task {
+                try? await Task.sleep(nanoseconds: delay)
+                call.cancel()
+            }
+            let outcome = try await call.value
+            await canceller.value
+            let label: String
+            if outcome.stage == .committed {
+                let body = try JSONSerialization.jsonObject(with: XCTUnwrap(outcome.committed).receiptBody) as! [String: Any]
+                label = "committed/\(body["decision"] ?? "")/\(body["decision_reason"] ?? "")"
+            } else {
+                label = "\(outcome.stage.rawValue)/\(outcome.errorClass?.rawValue ?? "")"
+            }
+            XCTAssertTrue(["committed/allow/authorized", "preflight/evaluation_cancelled",
+                "evaluating/evaluation_cancelled"].contains(label), "iteration \(iteration): \(label)")
+            let retry = try await Ratify.verifyProofBundle(req, claimStore: store,
+                trust: trust, statusEvidence: status, statusJournal: journal)
+            switch label {
+            case "committed/allow/authorized":
+                XCTAssertEqual(retry.stage, .replay, "iteration \(iteration)")
+                XCTAssertEqual(retry.disposition, .terminalReplay, "iteration \(iteration)")
+            case "evaluating/evaluation_cancelled":
+                XCTAssertEqual(retry.stage, .replay, "iteration \(iteration)")
+                XCTAssertEqual(retry.disposition, .inProgress, "iteration \(iteration)")
+            default:
+                XCTAssertEqual(retry.stage, .committed, "iteration \(iteration)")
+                let body = try JSONSerialization.jsonObject(with: XCTUnwrap(retry.committed).receiptBody) as! [String: Any]
+                XCTAssertEqual(body["decision"] as? String, "allow", "iteration \(iteration)")
+            }
+        }
+    }
+
     func testConcurrentResumeDuringLeaseExpiryRecovery() async throws {
         let corpus = Corpus.load("concurrency-scenarios.json")
         let scenario = try XCTUnwrap(corpus.arr("scenarios").first {

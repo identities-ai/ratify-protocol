@@ -1983,6 +1983,66 @@ class ClaimTest {
         }
     }
 
+    @Test fun concurrentCancellationAgainstFinalization() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first { it.getString("name") == "cancel_races_finalization" }
+        val participants = scenario.arr("participants")
+        assertEquals(listOf("verify", "cancel"), participants.map { it.getString("op") })
+        assertEquals(participants[0].getString("group"), participants[1].getString("target"))
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("A"), req)
+        val probe = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+            inputs.getString("log_id"), key)
+        val began = System.nanoTime()
+        verifyProofBundle(req, probe, trust = trust, statusEvidence = status, statusJournal = journal)
+        val spanMillis = maxOf(1L, (System.nanoTime() - began) / 1_000_000)
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+                inputs.getString("log_id"), key)
+            val observed = CompletableDeferred<VerifyOutcome>()
+            val call = launch(Dispatchers.Default) {
+                try {
+                    observed.complete(verifyProofBundle(req, store,
+                        trust = trust, statusEvidence = status, statusJournal = journal))
+                } catch (e: Throwable) { observed.completeExceptionally(e) }
+            }
+            val canceller = launch(Dispatchers.Default) {
+                delay(spanMillis * (iteration % 13) / 10)
+                call.cancel()
+            }
+            val outcome = observed.await()
+            canceller.join()
+            call.join()
+            val label = if (outcome.stage == VerifyStage.COMMITTED) {
+                val body = JSONObject(String(checkNotNull(outcome.committed).receiptBody))
+                "committed/${body.getString("decision")}/${body.getString("decision_reason")}"
+            } else "${outcome.stage.spelling}/${outcome.errorClass?.spelling ?: ""}"
+            org.junit.Assert.assertTrue("iteration $iteration: $label", label in setOf(
+                "committed/allow/authorized", "preflight/evaluation_cancelled", "evaluating/evaluation_cancelled"))
+            val retry = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+            when (label) {
+                "committed/allow/authorized" -> {
+                    assertEquals("iteration $iteration", VerifyStage.REPLAY, retry.stage)
+                    assertEquals("iteration $iteration", ClaimDisposition.TERMINAL_REPLAY, retry.disposition)
+                }
+                "evaluating/evaluation_cancelled" -> {
+                    assertEquals("iteration $iteration", VerifyStage.REPLAY, retry.stage)
+                    assertEquals("iteration $iteration", ClaimDisposition.IN_PROGRESS, retry.disposition)
+                }
+                else -> {
+                    assertEquals("iteration $iteration", VerifyStage.COMMITTED, retry.stage)
+                    val body = JSONObject(String(checkNotNull(retry.committed).receiptBody))
+                    assertEquals("iteration $iteration", "allow", body.getString("decision"))
+                }
+            }
+        }
+    }
+
     @Test fun concurrentResumeDuringLeaseExpiryRecovery() = runBlocking {
         val corpus = Corpus.load("concurrency-scenarios.json")
         val scenario = corpus.arr("scenarios").first { it.getString("name") == "resume_races_lease_expiry_recovery" }

@@ -1058,7 +1058,8 @@ final class ClaimTests: XCTestCase {
             "dual_root_expired_before_execution", "dual_root_cross_set_reuse",
             "dual_root_same_set_different_action", "dual_root_swapped_verifier",
             "dual_root_set_names_other_verifier", "dual_root_concurrent_completion",
-            "device_release_requires_component_ack"]
+            "device_release_requires_component_ack", "device_power_loss_before_ack",
+            "device_power_loss_after_ack"]
         let scenarios = (corpus.arr("scenarios") + corpus.arr("profile_scenarios"))
             .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
@@ -1125,7 +1126,8 @@ final class ClaimTests: XCTestCase {
             "dual_root_committed_unreleased": 16, "dual_root_expired_before_execution": 11,
             "dual_root_cross_set_reuse": 14, "dual_root_same_set_different_action": 10,
             "dual_root_swapped_verifier": 10, "dual_root_set_names_other_verifier": 10,
-            "dual_root_concurrent_completion": 9, "device_release_requires_component_ack": 6]
+            "dual_root_concurrent_completion": 9, "device_release_requires_component_ack": 6,
+            "device_power_loss_before_ack": 9, "device_power_loss_after_ack": 8]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1142,7 +1144,10 @@ final class ClaimTests: XCTestCase {
             "ledger_execute": ["op", "expect"],
             "ledger_record_concurrent": ["op", "requests", "expect"],
             "ledger_execute_concurrent": ["op", "count", "expect"],
-            "device_submit": ["op", "expect"], "upload": ["op", "expect"]]
+            "device_submit": ["op", "expect"], "upload": ["op", "expect"],
+            "device_power_loss": ["op", "mode", "expect"],
+            "device_startup": ["op", "expect"],
+            "device_resubmit": ["op", "sequence", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -1264,10 +1269,22 @@ final class ClaimTests: XCTestCase {
                         .allSatisfy { $0.failure == "already_executed" }, at)
                     XCTAssertTrue(replies.allSatisfy { $0.complete == nil }, at)
                 case "device_submit":
-                    XCTAssertEqual(Set(want.keys), ["acknowledged"], at)
+                    XCTAssertEqual(Set(want.keys), want["device_error"] == nil ? ["acknowledged"] : ["device_error"], at)
                     let reply = try XCTUnwrap(device, at).submitPending()
+                    XCTAssertEqual(reply.failure, want["device_error"] == nil ? nil : want.s("device_error"), at)
+                    XCTAssertEqual(reply.acknowledged, want["acknowledged"] == nil ? []
+                        : (want["acknowledged"] as! [NSNumber]).map(\.int64Value), at)
+                case "device_power_loss":
+                    XCTAssertTrue(want.isEmpty, at)
+                    try XCTUnwrap(device, at).setPowerLoss(step.s("mode"))
+                case "device_startup":
+                    XCTAssertEqual(Set(want.keys), ["device_status"], at)
+                    XCTAssertEqual(try XCTUnwrap(device, at).startup(), want.s("device_status"), at)
+                case "device_resubmit":
+                    XCTAssertEqual(Set(want.keys), ["ack_time"], at)
+                    let reply = try XCTUnwrap(device, at).resubmit(Int64(step.int("sequence")))
                     XCTAssertNil(reply.failure, at)
-                    XCTAssertEqual(reply.acknowledged, (want["acknowledged"] as! [NSNumber]).map(\.int64Value), at)
+                    XCTAssertEqual(reply.ackTime, Int64(want.int("ack_time")), at)
                 case "upload":
                     XCTAssertEqual(Set(want.keys), ["uploaded"], at)
                     XCTAssertEqual(try XCTUnwrap(device, at).upload(),

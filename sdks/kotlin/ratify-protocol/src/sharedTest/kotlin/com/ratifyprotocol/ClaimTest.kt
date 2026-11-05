@@ -236,14 +236,16 @@ class ClaimTest {
     }
     @Test fun singleDeviceReleaseRequiresComponentAck() = runBlocking {
         val corpus = Corpus.load("lifecycle-scenarios.json")
-        val scenario = corpus.arr("profile_scenarios").single {
-            it.getString("name") == "device_release_requires_component_ack"
-        }
-        assertEquals(6, scenario.arr("steps").size)
+        val expectedCounts = mapOf("device_release_requires_component_ack" to 6,
+            "device_power_loss_before_ack" to 9, "device_power_loss_after_ack" to 8)
+        val scenarios = corpus.arr("profile_scenarios").filter { expectedCounts.containsKey(it.getString("name")) }
+        assertEquals(expectedCounts.size, scenarios.size)
         val keys = Corpus.load("keys.json").getJSONArray("keys")
         val keyItem = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == corpus.getString("verifier_key") }
         val verifier = SoftwarePrivateKey.fromSeeds(keyItem.hex("ed25519_seed_hex"), keyItem.hex("ml_dsa_65_seed_hex"))
+        for (scenario in scenarios) {
+        assertEquals(expectedCounts[scenario.getString("name")], scenario.arr("steps").size)
         val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"),
             corpus.getString("log_id"), verifier)
         val setup = scenario.getJSONObject("device")
@@ -306,11 +308,35 @@ class ClaimTest {
                 }
                 "device_submit" -> {
                     assertEquals(at, setOf("op", "expect"), step.keys().asSequence().toSet())
-                    assertEquals(at, setOf("acknowledged"), want.keys().asSequence().toSet())
+                    assertEquals(at, if (want.has("device_error")) setOf("device_error") else setOf("acknowledged"),
+                        want.keys().asSequence().toSet())
                     val reply = device.submitPending()
+                    assertEquals(at, want.optString("device_error").ifEmpty { null }, reply.failure)
+                    val expected = want.optJSONArray("acknowledged")
+                    assertEquals(at, expected?.let { (0 until it.length()).map(it::getLong) } ?: emptyList<Long>(),
+                        reply.acknowledged)
+                }
+                "device_power_loss" -> {
+                    assertEquals(at, setOf("op", "mode", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, 0, want.length())
+                    device.setPowerLoss(step.getString("mode"))
+                }
+                "set_time" -> {
+                    assertEquals(at, setOf("op", "time", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, 0, want.length())
+                    store.setTime(step.getLong("time"))
+                }
+                "device_startup" -> {
+                    assertEquals(at, setOf("op", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, setOf("device_status"), want.keys().asSequence().toSet())
+                    assertEquals(at, want.getString("device_status"), device.startup())
+                }
+                "device_resubmit" -> {
+                    assertEquals(at, setOf("op", "sequence", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, setOf("ack_time"), want.keys().asSequence().toSet())
+                    val reply = device.resubmit(step.getLong("sequence"))
                     assertEquals(at, null, reply.failure)
-                    val expected = want.getJSONArray("acknowledged")
-                    assertEquals(at, (0 until expected.length()).map(expected::getLong), reply.acknowledged)
+                    assertEquals(at, want.getLong("ack_time"), reply.ackTime)
                 }
                 "upload" -> {
                     assertEquals(at, setOf("op", "expect"), step.keys().asSequence().toSet())
@@ -320,6 +346,7 @@ class ClaimTest {
                 }
                 else -> error("$at: unsupported operation")
             }
+        }
         }
     }
     private interface CallbackPanicHooks : Library {

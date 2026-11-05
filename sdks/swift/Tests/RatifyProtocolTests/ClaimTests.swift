@@ -436,6 +436,35 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    actor GatedEvaluator: ConstraintEvaluator {
+        let started: XCTestExpectation
+        let deadlineSeen: XCTestExpectation?
+        let gate: FinalizationGate
+        private(set) var cancelledOnReturn = false
+        init(started: XCTestExpectation, gate: FinalizationGate, deadlineSeen: XCTestExpectation? = nil) {
+            self.started = started; self.gate = gate; self.deadlineSeen = deadlineSeen
+        }
+        func evaluate(_ input: ConstraintEvaluationInput) async -> ConstraintEvaluationResult {
+            started.fulfill()
+            if let deadlineSeen {
+                while !Task.isCancelled {
+                    if await gate.isOpen { break }
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                deadlineSeen.fulfill()
+            }
+            await gate.wait()
+            cancelledOnReturn = Task.isCancelled
+            return ConstraintEvaluationResult(outcome: .pass)
+        }
+    }
+
+    actor CompletionFlag {
+        private(set) var done = false
+        private(set) var gateOpenAtReturn = false
+        func markDone(gateOpen: Bool) { gateOpenAtReturn = gateOpen; done = true }
+    }
+
     actor CorpusEvaluator: ConstraintEvaluator {
         let implementation: String
         let validUntil: Int64
@@ -653,6 +682,59 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    func testEvaluatorDeadlineWaitsForBlockedCallback() async throws {
+        let vector = Corpus.load("verifier-ordering.json").arr("vectors").first {
+            $0.s("name") == "extension_evaluator_timeout"
+        }!
+        let registration = vector.arr("constraint_evaluators")[0]
+        let started = expectation(description: "evaluator entered")
+        let deadlineSeen = expectation(description: "evaluator observed deadline cancellation")
+        let gate = FinalizationGate()
+        let evaluator = GatedEvaluator(started: started, gate: gate, deadlineSeen: deadlineSeen)
+        let registry = try ConstraintEvaluatorRegistry(timeoutMilliseconds: 10,
+            registrations: [ConstraintEvaluatorRegistration(descriptor: ConstraintProfileDescriptor(
+                profile: registration.s("profile"), type: registration.s("type")), evaluator: evaluator)])
+        let req = try request(vector.s("name"), evaluators: registry)
+        let (trust, status, journal) = try await vectorProviders(vector, request: req)
+        let completed = CompletionFlag()
+        let call = Task {
+            let result = try await Ratify.verifyProofBundle(req, claimStore: CreatedClaimStore(), trust: trust,
+                audience: EmptyAudience(), statusEvidence: status, statusJournal: journal)
+            let gateOpen = await gate.isOpen
+            await completed.markDone(gateOpen: gateOpen)
+            return result
+        }
+        await fulfillment(of: [started, deadlineSeen], timeout: 10)
+        try await Task.sleep(for: .milliseconds(50))
+        let doneBeforeRelease = await completed.done
+        XCTAssertFalse(doneBeforeRelease, "calling-thread evaluator must still own the call")
+        await gate.open()
+        let outcome = try await call.value
+        let gateOpenAtReturn = await completed.gateOpenAtReturn
+        XCTAssertTrue(gateOpenAtReturn, "verification returned before its evaluator")
+        let cancelledOnReturn = await evaluator.cancelledOnReturn
+        XCTAssertTrue(cancelledOnReturn, "deadline did not cancel the evaluator task")
+        XCTAssertEqual(outcome.stage, .committed)
+        let body = try JSONSerialization.jsonObject(with: outcome.committed!.receiptBody) as! [String: Any]
+        XCTAssertEqual(body["decision_reason"] as? String, "constraint_unverifiable")
+
+        let fastGate = FinalizationGate()
+        await fastGate.open()
+        let fastStarted = expectation(description: "fast evaluator entered")
+        let fastEvaluator = GatedEvaluator(started: fastStarted, gate: fastGate)
+        let fastRegistry = try ConstraintEvaluatorRegistry(timeoutMilliseconds: 1000,
+            registrations: [ConstraintEvaluatorRegistration(descriptor: ConstraintProfileDescriptor(
+                profile: registration.s("profile"), type: registration.s("type")), evaluator: fastEvaluator)])
+        let fastRequest = try request(vector.s("name"), evaluators: fastRegistry)
+        let (fastTrust, fastStatus, fastJournal) = try await vectorProviders(vector, request: fastRequest)
+        let fastOutcome = try await Ratify.verifyProofBundle(fastRequest, claimStore: CreatedClaimStore(),
+            trust: fastTrust, audience: EmptyAudience(), statusEvidence: fastStatus, statusJournal: fastJournal)
+        await fulfillment(of: [fastStarted], timeout: 10)
+        XCTAssertEqual(fastOutcome.stage, .committed)
+        let fastBody = try JSONSerialization.jsonObject(with: fastOutcome.committed!.receiptBody) as! [String: Any]
+        XCTAssertEqual(fastBody["decision_reason"] as? String, "authorized")
+    }
+
     actor ExhaustedBarrierStore: RateAtFinalizationClaimStore {
         private var claim: ChallengeClaim?
         private var counters: [String: Int64] = [:]
@@ -736,6 +818,7 @@ final class ClaimTests: XCTestCase {
 
     actor FinalizationGate {
         private var openNow = false
+        var isOpen: Bool { openNow }
         private var waiter: CheckedContinuation<Void, Never>?
         func wait() async {
             if openNow { return }

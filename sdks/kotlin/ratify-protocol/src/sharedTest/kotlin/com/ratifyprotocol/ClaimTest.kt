@@ -18,9 +18,13 @@ import org.junit.Test
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.Job
 import org.json.JSONObject
 import kotlinx.coroutines.delay
 import com.sun.jna.Library
@@ -1013,6 +1017,78 @@ class ClaimTest {
             assertEquals(name, registration.getString("type"), evaluator.observedType)
             org.junit.Assert.assertNotNull(name, evaluator.observedParams)
         }
+    }
+
+    @Test fun evaluatorDeadlineWaitsForBlockedCallback() = runBlocking {
+        val vector = Corpus.load("verifier-ordering.json").arr("vectors").first {
+            it.getString("name") == "extension_evaluator_timeout"
+        }
+        val registration = vector.getJSONArray("constraint_evaluators").getJSONObject(0)
+        val entered = CompletableDeferred<Unit>()
+        val deadlineSeen = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val cancelledOnReturn = AtomicBoolean()
+        val calls = AtomicInteger()
+        val evaluator = object : ConstraintEvaluator {
+            override suspend fun evaluate(input: ConstraintEvaluationInput): ConstraintEvaluationResult {
+                calls.incrementAndGet()
+                entered.complete(Unit)
+                val job = currentCoroutineContext()[Job]!!
+                try {
+                    while (!job.isCancelled && !release.isCompleted) {
+                        withContext(NonCancellable) { delay(5) }
+                    }
+                    deadlineSeen.complete(Unit)
+                    withContext(NonCancellable) { release.await() }
+                } finally {
+                    cancelledOnReturn.set(job.isCancelled)
+                }
+                return ConstraintEvaluationResult(ConstraintOutcome.PASS)
+            }
+        }
+        val registry = ConstraintEvaluatorRegistry(10u,
+            listOf(ConstraintEvaluatorRegistration(ConstraintProfileDescriptor(
+                registration.getString("profile"), registration.getString("type")), evaluator)))
+        val req = request(vector.getString("name"), registry)
+        val (trust, status, journal) = vectorProviders(vector, req)
+        val completed = AtomicBoolean()
+        val releaseWasOpenAtReturn = AtomicBoolean()
+        val call = async(Dispatchers.Default) {
+            val result = verifyProofBundle(req, CreatedClaimStore(), trust = trust, audience = emptyAudience,
+                statusEvidence = status, statusJournal = journal)
+            releaseWasOpenAtReturn.set(release.isCompleted)
+            completed.set(true)
+            result
+        }
+        try {
+            withTimeout(10_000) { entered.await(); deadlineSeen.await() }
+            delay(50)
+            org.junit.Assert.assertFalse("calling-thread evaluator must still own the call", completed.get())
+        } finally {
+            release.complete(Unit)
+        }
+        val outcome = withTimeout(10_000) { call.await() }
+        org.junit.Assert.assertTrue("verification returned before its evaluator", releaseWasOpenAtReturn.get())
+        org.junit.Assert.assertTrue("deadline did not cancel the evaluator job", cancelledOnReturn.get())
+        assertEquals(1, calls.get())
+        assertEquals(VerifyStage.COMMITTED, outcome.stage)
+        assertEquals("constraint_unverifiable",
+            JSONObject(String(outcome.committed!!.receiptBody)).getString("decision_reason"))
+
+        val fastEvaluator = object : ConstraintEvaluator {
+            override suspend fun evaluate(input: ConstraintEvaluationInput) =
+                ConstraintEvaluationResult(ConstraintOutcome.PASS)
+        }
+        val fastRegistry = ConstraintEvaluatorRegistry(1000u,
+            listOf(ConstraintEvaluatorRegistration(ConstraintProfileDescriptor(
+                registration.getString("profile"), registration.getString("type")), fastEvaluator)))
+        val fastRequest = request(vector.getString("name"), fastRegistry)
+        val (fastTrust, fastStatus, fastJournal) = vectorProviders(vector, fastRequest)
+        val fastOutcome = verifyProofBundle(fastRequest, CreatedClaimStore(), trust = fastTrust,
+            audience = emptyAudience, statusEvidence = fastStatus, statusJournal = fastJournal)
+        assertEquals(VerifyStage.COMMITTED, fastOutcome.stage)
+        assertEquals("authorized",
+            JSONObject(String(fastOutcome.committed!!.receiptBody)).getString("decision_reason"))
     }
 
     private class ExhaustedBarrierStore : RateAtFinalizationClaimStore {

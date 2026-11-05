@@ -31,6 +31,7 @@ class DeviceVectorsTest {
     @Test fun storageRecordRoundTrip() = KeyStorageVectors.roundTripAndLayout()
     @Test fun storageRecordRefusals() = KeyStorageVectors.refusals()
     @Test fun valuesAreImmutable() = PanicVectors.valuesAreImmutable()
+    @Test fun evaluatorDeadlineWaitsForBlockedCallback() = ClaimTest().evaluatorDeadlineWaitsForBlockedCallback()
     @Test fun referenceStoreClockAndClone() = ReferenceStoreVectors.clockAndClone()
     @Test fun referenceStoreClaimError() = ReferenceStoreVectors.invalidClaimId()
     @Test fun referenceStoreClaimReplayAndLease() = ReferenceStoreVectors.claimReplayAndLease()

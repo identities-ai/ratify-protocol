@@ -19,8 +19,8 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [.package(path: "../sdk")],
     targets: [.executableTarget(name: "Smoke", dependencies: [
-        .product(name: "RatifyProtocol", package: "RatifyProtocol"),
-        .product(name: "RatifyProtocolTestSupport", package: "RatifyProtocol"),
+        .product(name: "RatifyProtocol", package: "sdk"),
+        .product(name: "RatifyProtocolTestSupport", package: "sdk"),
     ])]
 )
 EOF

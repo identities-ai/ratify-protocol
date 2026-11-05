@@ -15,6 +15,9 @@ import org.junit.Test
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import kotlinx.coroutines.delay
 import com.sun.jna.Library
@@ -363,6 +366,24 @@ class ClaimTest {
             if (firstRequest.compareAndSet(false, true)) onFirstRequest?.invoke()
             if (request.issuerId in failures) error("scripted status failure")
             return evidence[request.issuerId] ?: emptyList()
+        }
+    }
+
+    private class GatedReceiver : ReceiverBindingHook {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        override fun validate(bundle: ProofBundle, expected: ExpectedChallenge) {
+            started.countDown()
+            release.await()
+        }
+    }
+
+    private class GatedStatus(private val inner: VectorStatus, private val started: CompletableDeferred<Unit>,
+        private val release: CompletableDeferred<Unit>) : StatusEvidenceProvider {
+        override suspend fun provide(request: StatusEvidenceRequest): List<StatusEvidenceObject> {
+            started.complete(Unit)
+            release.await()
+            return inner.provide(request)
         }
     }
 
@@ -925,7 +946,8 @@ class ClaimTest {
             "release_of_claim_the_store_does_not_hold", "planted_release_record_does_not_replace_acknowledgement",
             "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
             "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
-            "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances")
+            "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances",
+            "cancel_before_claim_consumes_nothing", "cancel_after_claim_keeps_claim_recoverable")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -979,7 +1001,8 @@ class ClaimTest {
             "planted_release_record_does_not_replace_acknowledgement" to 8,
             "recorded_withheld_answers_before_receipt_checks" to 7, "withheld_when_recording_fails" to 7,
             "withheld_record_conflict_is_rejected" to 7, "checkpoint_fork_freezes_log" to 11,
-            "checkpoint_refusal_without_fork_does_not_freeze" to 11, "concurrent_stream_advances" to 4)
+            "checkpoint_refusal_without_fork_does_not_freeze" to 11, "concurrent_stream_advances" to 4,
+            "cancel_before_claim_consumes_nothing" to 5, "cancel_after_claim_keeps_claim_recoverable" to 7)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -1160,13 +1183,48 @@ class ClaimTest {
                                 replayEpochOverride = replayEpochOverride)
                         val mode = step.optString("mode")
                         if (mode.isNotEmpty()) org.junit.Assert.assertTrue(at,
-                            mode in setOf("expire_lease_during_status", "regress_clock_during_status"))
+                            mode in setOf("expire_lease_during_status", "regress_clock_during_status",
+                                "cancel_before_claim", "cancel_during_status"))
                         val callbackTime = if (mode.isEmpty()) null else step.getLong("time")
                         if (mode == "expire_lease_during_status") org.junit.Assert.assertTrue(at, callbackTime!! > currentTime)
                         if (mode == "regress_clock_during_status") org.junit.Assert.assertTrue(at, callbackTime!! < currentTime)
+                        if (mode == "cancel_before_claim" || mode == "cancel_during_status")
+                            assertEquals(at, currentTime, callbackTime)
                         val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(requestName),
-                            req, callbackTime?.let { time -> { store.setTime(time) } })
-                        val result = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+                            req, callbackTime?.takeUnless { mode.startsWith("cancel_") }?.let { time -> { store.setTime(time) } })
+                        val result: VerifyOutcome
+                        if (mode == "cancel_before_claim") {
+                            val receiver = GatedReceiver()
+                            val observed = AtomicReference<VerifyOutcome?>()
+                            val verifyStore = store
+                            val call = launch(Dispatchers.Default) {
+                                observed.set(verifyProofBundle(req, verifyStore, receiverBinding = receiver,
+                                    trust = trust, statusEvidence = status, statusJournal = journal))
+                            }
+                            val reached = receiver.started.await(10, TimeUnit.SECONDS)
+                            call.cancel()
+                            receiver.release.countDown()
+                            call.join()
+                            org.junit.Assert.assertTrue(at, reached)
+                            result = checkNotNull(observed.get()) { "$at: cancelled call did not return an outcome" }
+                        } else if (mode == "cancel_during_status") {
+                            val started = CompletableDeferred<Unit>()
+                            val release = CompletableDeferred<Unit>()
+                            val observed = AtomicReference<VerifyOutcome?>()
+                            val verifyStore = store
+                            val call = launch(Dispatchers.Default) {
+                                observed.set(verifyProofBundle(req, verifyStore,
+                                    trust = trust, statusEvidence = GatedStatus(status, started, release),
+                                    statusJournal = journal))
+                            }
+                            val reached = withTimeoutOrNull(10_000) { started.await(); true } == true
+                            call.cancel()
+                            release.complete(Unit)
+                            call.join()
+                            org.junit.Assert.assertTrue(at, reached)
+                            result = checkNotNull(observed.get()) { "$at: cancelled call did not return an outcome" }
+                        } else result = verifyProofBundle(req, store, trust = trust,
+                            statusEvidence = status, statusJournal = journal)
                         assertEquals(at, want.getString("stage"), result.stage.spelling)
                         claimed[requestName]?.let { assertEquals(at, it, result.claim) }
                         if (want.has("error_class")) {
@@ -1222,7 +1280,10 @@ class ClaimTest {
                         }
                     }
                     "recover" -> {
-                        val claimId = checkNotNull(claimed[requestName]) { at }.claimId
+                        val claimId = claimed[requestName]?.claimId ?: run {
+                            val expected = checkNotNull(request(requestName, corpusName = "lifecycle-scenarios.json").expected) { at }
+                            protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value)
+                        }
                         if (want.has("error_class")) {
                             assertEquals(at, setOf("error_class"), want.keys().asSequence().toSet())
                             try {

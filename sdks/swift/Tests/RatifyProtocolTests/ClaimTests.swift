@@ -356,6 +356,28 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    final class GatedReceiver: ReceiverBindingHook, @unchecked Sendable {
+        let started: XCTestExpectation
+        let release = DispatchSemaphore(value: 0)
+        init(started: XCTestExpectation) { self.started = started }
+        func validate(bundle: ProofBundle, expected: ExpectedChallenge) {
+            started.fulfill()
+            release.wait()
+        }
+    }
+
+    struct GatedStatus: StatusEvidenceProvider {
+        let inner: VectorStatus
+        let gate: FinalizationGate
+        let started: XCTestExpectation
+        func provide(_ request: StatusEvidenceRequest) async throws -> [StatusEvidenceObject] {
+            started.fulfill()
+            await gate.wait()
+            try Task.checkCancellation()
+            return try await inner.provide(request)
+        }
+    }
+
     actor EmptyAudience: AudienceProvider {
         let values: [AudienceMembership]
         let fails: Bool
@@ -996,7 +1018,8 @@ final class ClaimTests: XCTestCase {
             "release_of_claim_the_store_does_not_hold", "planted_release_record_does_not_replace_acknowledgement",
             "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
             "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
-            "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances"]
+            "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances",
+            "cancel_before_claim_consumes_nothing", "cancel_after_claim_keeps_claim_recoverable"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -1051,7 +1074,8 @@ final class ClaimTests: XCTestCase {
             "planted_release_record_does_not_replace_acknowledgement": 8,
             "recorded_withheld_answers_before_receipt_checks": 7, "withheld_when_recording_fails": 7,
             "withheld_record_conflict_is_rejected": 7, "checkpoint_fork_freezes_log": 11,
-            "checkpoint_refusal_without_fork_does_not_freeze": 11, "concurrent_stream_advances": 4]
+            "checkpoint_refusal_without_fork_does_not_freeze": 11, "concurrent_stream_advances": 4,
+            "cancel_before_claim_consumes_nothing": 5, "cancel_after_claim_keeps_claim_recoverable": 7]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1229,21 +1253,51 @@ final class ClaimTests: XCTestCase {
                             replayEpochOverride: replayEpochOverride)
                     let mode = step["mode"] as? String
                     if mode != nil {
-                        XCTAssertTrue(["expire_lease_during_status", "regress_clock_during_status"].contains(mode!), at)
+                        XCTAssertTrue(["expire_lease_during_status", "regress_clock_during_status",
+                            "cancel_before_claim", "cancel_during_status"].contains(mode!), at)
                     }
                     let callbackTime = mode == nil ? nil : Int64(step.int("time"))
                     if mode == "expire_lease_during_status" { XCTAssertGreaterThan(callbackTime!, currentTime, at) }
                     if mode == "regress_clock_during_status" { XCTAssertLessThan(callbackTime!, currentTime, at) }
+                    if mode == "cancel_before_claim" || mode == "cancel_during_status" {
+                        XCTAssertEqual(callbackTime, currentTime, at)
+                    }
                     let onFirstStatus: (@Sendable () throws -> Void)?
-                    if let callbackTime {
+                    if let callbackTime, mode != "cancel_before_claim" && mode != "cancel_during_status" {
                         let statusStore = store
                         onFirstStatus = { try statusStore.setTime(callbackTime) }
                     }
                     else { onFirstStatus = nil }
                     let (trust, status, journal) = try await vectorProviders(corpus.obj("requests").obj(requestName),
                         request: req, onFirstStatus: onFirstStatus)
-                    let result = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
-                        statusEvidence: status, statusJournal: journal)
+                    let result: VerifyOutcome
+                    if mode == "cancel_before_claim" {
+                        let started = expectation(description: "\(at) receiver reached")
+                        let receiver = GatedReceiver(started: started)
+                        let verifyStore = store
+                        let call = Task { try await Ratify.verifyProofBundle(req, claimStore: verifyStore,
+                            receiverBinding: receiver, trust: trust, statusEvidence: status, statusJournal: journal) }
+                        await fulfillment(of: [started], timeout: 10)
+                        call.cancel()
+                        receiver.release.signal()
+                        result = try await call.value
+                    } else if mode == "cancel_during_status" {
+                        let gate = FinalizationGate()
+                        let started = expectation(description: "\(at) status reached")
+                        let verifyStore = store
+                        let call = Task {
+                            try await Ratify.verifyProofBundle(req, claimStore: verifyStore,
+                                trust: trust, statusEvidence: GatedStatus(inner: status, gate: gate, started: started),
+                                statusJournal: journal)
+                        }
+                        await fulfillment(of: [started], timeout: 10)
+                        call.cancel()
+                        await gate.open()
+                        result = try await call.value
+                    } else {
+                        result = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
+                            statusEvidence: status, statusJournal: journal)
+                    }
                     XCTAssertEqual(result.stage.rawValue, want.s("stage"), at)
                     if let seeded = claimed[requestName] { XCTAssertEqual(result.claim, seeded, at) }
                     if want.keys.contains("error_class") {
@@ -1303,7 +1357,13 @@ final class ClaimTests: XCTestCase {
                             ? Int64(want.int("allow_horizon")) : nil, at)
                     }
                 case "recover":
-                    let claimId = try XCTUnwrap(claimed[requestName], at).claimId
+                    let claimId: String
+                    if let claim = claimed[requestName] { claimId = claim.claimId }
+                    else {
+                        let expected = try XCTUnwrap(request(requestName, corpusName: "lifecycle-scenarios.json").expected, at)
+                        claimId = try Ratify.protocolClaimId(namespace: expected.verifierNamespace,
+                            replayEpoch: expected.replayEpoch, challenge: expected.value)
+                    }
                     if want.keys.contains("error_class") {
                         XCTAssertEqual(Set(want.keys), ["error_class"], at)
                         do {

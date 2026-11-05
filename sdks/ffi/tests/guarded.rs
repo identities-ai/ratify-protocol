@@ -69,11 +69,9 @@ fn collect_types(items: &[Item], records: &mut BTreeMap<String, Vec<Type>>, erro
     }
     fn aliases(tree: &syn::UseTree, records: &mut BTreeMap<String, Vec<Type>>, errors: &mut Vec<String>) {
         match tree {
-            syn::UseTree::Rename(rename) => {
-                if rename.ident.to_string().starts_with("Ffi") {
-                    let target = &rename.ident;
-                    insert(rename.rename.to_string(), vec![syn::parse_quote!(#target)], records, errors);
-                }
+            syn::UseTree::Rename(rename) if rename.ident.to_string().starts_with("Ffi") => {
+                let target = &rename.ident;
+                insert(rename.rename.to_string(), vec![syn::parse_quote!(#target)], records, errors);
             }
             syn::UseTree::Path(path) => aliases(&path.tree, records, errors),
             syn::UseTree::Group(group) => for item in &group.items { aliases(item, records, errors); },
@@ -129,9 +127,9 @@ fn guarded(body: &Block, want: &str) -> bool {
 fn token_guard_uses_input(body: &Block, sig: &syn::Signature) -> bool {
     let [Stmt::Expr(Expr::Call(call), None)] = body.stmts.as_slice() else { return false; };
     if call.args.len() != 3 { return false; }
-    let inputs = sig.inputs.iter().filter_map(|arg| match arg {
-        FnArg::Typed(typed) => Some(typed.pat.to_token_stream().to_string().replace(' ', "")),
-        FnArg::Receiver(_) => Some("self".to_string()),
+    let inputs = sig.inputs.iter().map(|arg| match arg {
+        FnArg::Typed(typed) => typed.pat.to_token_stream().to_string().replace(' ', ""),
+        FnArg::Receiver(_) => "self".to_string(),
     }).collect::<Vec<_>>();
     let first = call.args[0].to_token_stream().to_string().replace(' ', "");
     let second = call.args[1].to_token_stream().to_string().replace(' ', "");

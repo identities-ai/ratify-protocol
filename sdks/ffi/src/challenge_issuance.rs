@@ -184,7 +184,7 @@ impl Read for ForeignRandom {
                 if matches!(e, FfiRandomError::Cancelled) {
                     self.cancelled.store(true, Ordering::SeqCst);
                 }
-                IoError::new(ErrorKind::Other, e.to_string())
+                IoError::other(e.to_string())
             })?;
         if bytes.len() != buf.len() {
             return Err(IoError::new(

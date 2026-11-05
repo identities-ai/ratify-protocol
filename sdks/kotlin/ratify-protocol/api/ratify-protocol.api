@@ -928,6 +928,8 @@ public abstract interface class com/ratifyprotocol/ReleaseClaimStore : com/ratif
 }
 
 public final class com/ratifyprotocol/ReleaseKt {
+	public static final fun decodeCheckpointAcknowledgement ([B)Lcom/ratifyprotocol/CheckpointAcknowledgement;
+	public static final fun encodeCheckpointAcknowledgement (Lcom/ratifyprotocol/CheckpointAcknowledgement;)[B
 	public static final fun publishReceipt-5_5nbZA (Lcom/ratifyprotocol/CommittedOutcome;Lcom/ratifyprotocol/ReceiptPublisher;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun publishReceipt-5_5nbZA$default (Lcom/ratifyprotocol/CommittedOutcome;Lcom/ratifyprotocol/ReceiptPublisher;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static final fun receiptOutboxDigest ([B)Ljava/lang/String;

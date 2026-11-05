@@ -8990,8 +8990,9 @@
  },
  "decode_v2_checkpoint_acknowledgement": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "decodeCheckpointAcknowledgement",
+  "status": "mapped",
+  "swift": "Ratify.decodeCheckpointAcknowledgement"
  },
  "decode_v2_status_evidence_batch": {
   "kind": "fn",
@@ -9077,8 +9078,9 @@
  },
  "encode_v2_checkpoint_acknowledgement": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "encodeCheckpointAcknowledgement",
+  "status": "mapped",
+  "swift": "Ratify.encodeCheckpointAcknowledgement"
  },
  "encode_v2_status_evidence_batch": {
   "kind": "fn",

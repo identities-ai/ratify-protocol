@@ -551,6 +551,7 @@ Ratify.checkVerificationReceiptBundleBinding(_:bundle:) [Func] -> (), RatifyProt
 Ratify.claimProofBundle(bundle:preflight:namespace:replayEpoch:now:store:timeout:) [Func] -> RatifyProtocol.StagedClaim, Foundation.Data, RatifyProtocol.PreflightResult, Swift.String, Swift.Int64, Swift.Int64, any RatifyProtocol.ClaimStore, Swift.Duration?
 Ratify.configureStatusKeyEpoch(store:issuerId:epoch:key:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, Swift.Duration?
 Ratify.constraintProfileDigest(_:) [Func] -> Swift.String, RatifyProtocol.ConstraintProfileDescriptor
+Ratify.decodeCheckpointAcknowledgement(_:) [Func] -> RatifyProtocol.CheckpointAcknowledgement, Foundation.Data
 Ratify.decodeDelegationCert(_:) [Func] -> RatifyProtocol.DelegationCert, Foundation.Data
 Ratify.decodeKeyRotationStatement(_:) [Func] -> RatifyProtocol.KeyRotationStatement, Foundation.Data
 Ratify.decodePayloadDigest(_:) [Func] -> Foundation.Data?, Swift.String?
@@ -566,6 +567,7 @@ Ratify.delegationCertSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol
 Ratify.deviceStateProjectionTestOnly(_:) [Func] -> RatifyProtocol.DeviceStateProjectionBridge, Foundation.Data
 Ratify.emptyRevocationStatusState() [Func] -> RatifyProtocol.RevocationStatusState
 Ratify.emptySecurityJournalSnapshot() [Func] -> RatifyProtocol.SecurityJournalSnapshot
+Ratify.encodeCheckpointAcknowledgement(_:) [Func] -> Foundation.Data, RatifyProtocol.CheckpointAcknowledgement
 Ratify.encodeDelegationCert(_:) [Func] -> Foundation.Data, RatifyProtocol.DelegationCert
 Ratify.encodeKeyRotationStatement(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
 Ratify.encodeProofBundle(_:) [Func] -> Foundation.Data, RatifyProtocol.ProofBundle

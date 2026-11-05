@@ -16768,6 +16768,22 @@ func ffiReferenceTrustRegistry(records: [FfiPublicKey])throws  -> FfiReferenceTr
     )
 })
 }
+func ffiDecodeCheckpointAcknowledgement(data: Data)throws  -> FfiCheckpointAcknowledgement  {
+    return try  FfiConverterTypeFfiCheckpointAcknowledgement_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_decode_checkpoint_acknowledgement(
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+func ffiEncodeCheckpointAcknowledgement(ack: FfiCheckpointAcknowledgement)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_encode_checkpoint_acknowledgement(
+        FfiConverterTypeFfiCheckpointAcknowledgement_lower(ack),uniffiCallStatus
+    )
+})
+}
 func ffiPublishReceipt(publisher: FfiReceiptPublisher, claimId: String, receiptBody: Data, token: FfiCancelToken)throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -17860,6 +17876,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_reference_trust_registry() != 36076) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_checkpoint_acknowledgement() != 30202) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_checkpoint_acknowledgement() != 46361) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_publish_receipt() != 38493) {

@@ -17,6 +17,7 @@ class HostVectorsTest {
     }
 
     @Test fun corpus() = CorpusRunners.runAll()
+    @Test fun decoderFuzz() = DecoderFuzz.run()
     @Test fun generate() = KeysVectors.generate()
     @Test fun badSeed() = KeysVectors.badSeed()
     @Test fun errorClassesPinned() = KeysVectors.errorClassesPinned()

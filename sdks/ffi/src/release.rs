@@ -96,6 +96,16 @@ impl From<FfiCheckpointAcknowledgement> for core::V2CheckpointAcknowledgement {
     }
 }
 
+#[uniffi::export]
+pub fn ffi_encode_checkpoint_acknowledgement(ack: FfiCheckpointAcknowledgement) -> FfiResult<Vec<u8>> {
+    call(|| Ok(core::encode_v2_checkpoint_acknowledgement(&ack.into())?))
+}
+
+#[uniffi::export]
+pub fn ffi_decode_checkpoint_acknowledgement(data: Vec<u8>) -> FfiResult<FfiCheckpointAcknowledgement> {
+    call(|| Ok(core::decode_v2_checkpoint_acknowledgement(&data)?.into()))
+}
+
 #[uniffi::export(with_foreign)]
 pub trait FfiReceiptPublisher: Send + Sync {
     fn publish(&self, claim_id: String, receipt_body: Vec<u8>,

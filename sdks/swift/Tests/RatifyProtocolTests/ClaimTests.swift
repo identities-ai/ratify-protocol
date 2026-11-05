@@ -1297,6 +1297,15 @@ final class ClaimTests: XCTestCase {
                 trust: trust, statusEvidence: status, statusJournal: journal)
             XCTAssertEqual(replay.stage, .replay, "iteration \(iteration)")
             XCTAssertEqual(replay.disposition, .terminalReplay, "iteration \(iteration)")
+            let wire = try await store.publish(claimId: winner.claimId, receiptBody: winner.receiptBody)
+            XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence, 1, "iteration \(iteration)")
+            let republished = try await store.publish(claimId: winner.claimId, receiptBody: winner.receiptBody)
+            XCTAssertEqual(republished, wire, "iteration \(iteration)")
+            let released = try await Ratify.releaseDecision(winner, signedReceipt: wire,
+                verifierPublicKey: key.publicKey, logId: inputs.s("log_id"), claimStore: store, checkpoint: store)
+            XCTAssertEqual(released.status, .released, "iteration \(iteration)")
+            XCTAssertEqual(released.decision?.decision, "allow", "iteration \(iteration)")
+            XCTAssertEqual(released.decision?.releaseTime, Int64(scenario.int("start_time")), "iteration \(iteration)")
         }
     }
 

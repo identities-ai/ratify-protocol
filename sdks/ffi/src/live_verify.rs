@@ -72,7 +72,6 @@ impl TryFrom<FfiLiveVerifyRequest> for V2VerifyRequest {
             })).collect::<BTreeMap<_, _>>(),
             status_policy: r.status_policy.into(),
             constraint_evaluators: r.constraint_evaluators.map(|p| p.inner.clone()),
-            ..Default::default()
         })
     }
 }
@@ -146,6 +145,7 @@ pub fn ffi_preflight_proof_bundle(request: FfiPreflightRequest) -> FfiResult<Arc
 }
 
 #[uniffi::export]
+#[allow(clippy::too_many_arguments)] // UniFFI exposes each callback as a separate typed argument.
 pub fn ffi_live_verify_proof_bundle(
     request: FfiLiveVerifyRequest,
     claim_store: Option<Arc<dyn FfiClaimStore>>,
@@ -167,6 +167,7 @@ pub fn ffi_live_verify_proof_bundle(
 
 /// The claim and rate capability views refer to the same foreign store object.
 #[uniffi::export]
+#[allow(clippy::too_many_arguments)] // UniFFI exposes each callback as a separate typed argument.
 pub fn ffi_live_verify_proof_bundle_barrier(
     request: FfiLiveVerifyRequest,
     claim_store: Arc<dyn FfiClaimStore>,
@@ -185,6 +186,7 @@ pub fn ffi_live_verify_proof_bundle_barrier(
     })
 }
 
+#[allow(clippy::too_many_arguments)] // Mirrors the typed callback arguments of the two exports.
 fn verify(
     request: V2VerifyRequest,
     claim_store: Option<Arc<dyn core::ClaimStoreV2>>,
@@ -204,7 +206,6 @@ fn verify(
         status_evidence: status_evidence.map(status_callback),
         status_journal: status_journal.map(|s| Arc::new(ForeignJournalStore(s)) as Arc<dyn core::SecurityJournalStoreV2>),
         rate,
-        ..Default::default()
     };
     core::verify_proof_bundle_v2(token.context(), &request, &callbacks).into()
 }

@@ -1227,6 +1227,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_reference_trust_registry(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_checkpoint_acknowledgement(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_checkpoint_acknowledgement(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_publish_receipt(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_receipt_outbox_digest(
@@ -2226,6 +2230,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_reference_trust_registry(`records`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_decode_checkpoint_acknowledgement(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_encode_checkpoint_acknowledgement(`ack`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_publish_receipt(`publisher`: Long,`claimId`: RustBuffer.ByValue,`receiptBody`: RustBuffer.ByValue,`token`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_receipt_outbox_digest(`body`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2683,6 +2691,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_reference_trust_registry() and 0xFFFF) != 36076) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_checkpoint_acknowledgement() and 0xFFFF) != 30202) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_encode_checkpoint_acknowledgement() and 0xFFFF) != 46361) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_publish_receipt() and 0xFFFF) != 38493) {
@@ -24515,6 +24529,30 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
 
 
         FfiConverterSequenceTypeFfiPublicKey.lower(`records`),_status)
+}
+    )
+    }
+
+
+    @Throws(FfiException::class) internal fun `ffiDecodeCheckpointAcknowledgement`(`data`: kotlin.ByteArray): FfiCheckpointAcknowledgement {
+            return FfiConverterTypeFfiCheckpointAcknowledgement.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_decode_checkpoint_acknowledgement(
+
+
+        FfiConverterByteArray.lower(`data`),_status)
+}
+    )
+    }
+
+
+    @Throws(FfiException::class) internal fun `ffiEncodeCheckpointAcknowledgement`(`ack`: FfiCheckpointAcknowledgement): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_encode_checkpoint_acknowledgement(
+
+
+        FfiConverterTypeFfiCheckpointAcknowledgement.lower(`ack`),_status)
 }
     )
     }

@@ -61,6 +61,18 @@ public struct CheckpointAcknowledgement: Sendable {
         sequence: sequence, entryHash: entryHash, timestamp: timestamp) }
 }
 
+extension Ratify {
+    /// Canonical wire form of an independent checkpoint acknowledgement.
+    public static func encodeCheckpointAcknowledgement(_ ack: CheckpointAcknowledgement) throws(RatifyError) -> Data {
+        try ffi { try ffiEncodeCheckpointAcknowledgement(ack: ack.ffi) }
+    }
+
+    /// Strictly decodes only the canonical acknowledgement wire form.
+    public static func decodeCheckpointAcknowledgement(_ data: Data) throws(RatifyError) -> CheckpointAcknowledgement {
+        try CheckpointAcknowledgement(ffi { try ffiDecodeCheckpointAcknowledgement(data: data) })
+    }
+}
+
 /// Durable terminal state and first-write-wins release record for the same claim store used by verification.
 public protocol ReleaseClaimStore: AuthoritativeClock {
     func loadTerminal(claimId: String) async throws -> TerminalClaimRecord

@@ -115,11 +115,11 @@ impl FfiReferenceStore {
     }
 
     pub fn set_time(&self, now: i64) -> FfiResult<()> {
-        call_on(&self.poison, || Ok(self.inner.set_time(now)))
+        call_on(&self.poison, || { self.inner.set_time(now); Ok(()) })
     }
 
     pub fn corrupt_sealed_state_test_only(&self, claim_id: String) -> FfiResult<()> {
-        call_on(&self.poison, || Ok(self.inner.corrupt_sealed_state_test_only(&claim_id)))
+        call_on(&self.poison, || { self.inner.corrupt_sealed_state_test_only(&claim_id); Ok(()) })
     }
 
     pub fn now(&self) -> FfiResult<i64> {
@@ -127,11 +127,11 @@ impl FfiReferenceStore {
     }
 
     pub fn set_signer_failure(&self, failing: bool) -> FfiResult<()> {
-        call_on(&self.poison, || Ok(self.inner.set_signer_failure(failing)))
+        call_on(&self.poison, || { self.inner.set_signer_failure(failing); Ok(()) })
     }
 
     pub fn set_acknowledgement_withheld(&self, withheld: bool) -> FfiResult<()> {
-        call_on(&self.poison, || Ok(self.inner.set_acknowledgement_withheld(withheld)))
+        call_on(&self.poison, || { self.inner.set_acknowledgement_withheld(withheld); Ok(()) })
     }
 
     pub fn log_length(&self) -> FfiResult<u64> {
@@ -139,7 +139,7 @@ impl FfiReferenceStore {
     }
 
     pub fn plant_release_test_only(&self, claim_id: String, ack_timestamp: i64) -> FfiResult<()> {
-        call_on(&self.poison, || Ok(self.inner.plant_release_test_only(&claim_id, ack_timestamp)))
+        call_on(&self.poison, || { self.inner.plant_release_test_only(&claim_id, ack_timestamp); Ok(()) })
     }
 
     pub fn abandon_pending_receipts(&self) -> FfiResult<Vec<String>> {

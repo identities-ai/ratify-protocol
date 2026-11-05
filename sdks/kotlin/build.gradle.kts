@@ -5,3 +5,8 @@ plugins {
     // on any change, and the inventory gate reads the dump.
     id("org.jetbrains.kotlinx.binary-compatibility-validator") version "0.16.3"
 }
+
+allprojects {
+    group = providers.gradleProperty("GROUP").get()
+    version = providers.gradleProperty("VERSION_NAME").get()
+}

@@ -1,0 +1,170 @@
+name: Mobile v2
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ffi:
+    name: Mobile FFI and API gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            sdks/ffi
+            sdks/rust
+      - name: FFI tests, including guarded exports
+        working-directory: sdks/ffi
+        run: cargo test --locked --all-targets
+      - name: FFI tests with test hooks
+        working-directory: sdks/ffi
+        run: cargo test --locked --all-targets --features test-hooks
+      - name: Clippy
+        working-directory: sdks/ffi
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: sdks/ffi/Cargo.toml
+      - name: Public API inventory and Swift baseline
+        run: python3 sdks/ffi/scripts/api_inventory.py check
+
+  swift:
+    name: Swift macOS and iOS simulator
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            sdks/ffi
+            sdks/rust
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - name: Install Kotlin API build platform and Rust API tools
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          rustup toolchain install nightly --profile minimal
+          cargo install cargo-public-api --version 0.52.0 --locked
+      - name: Build all Apple slices with test hooks
+        run: FEATURES=test-hooks sdks/swift/scripts/build-xcframework.sh
+      - name: Generated Swift bindings match the tree
+        run: git diff --exit-code -- sdks/swift/Sources/RatifyProtocol/Generated/ratify_ffi.swift
+      - name: Mobile API inventory and baselines
+        run: sdks/ffi/scripts/check-mobile-api.sh
+      - name: Swift full suite and decoder fuzz
+        run: swift test
+      - name: Swift concurrency under Thread Sanitizer
+        run: swift test --sanitize=thread --filter ClaimTests/testConcurrentClaimStormHasOneCommit
+      - name: iOS simulator suite
+        env:
+          RATIFY_FUZZ_SECONDS: '1'
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          cd sdks/swift/HostApp
+          xcodegen generate
+          xcodebuild test -project RatifyHost.xcodeproj -scheme RatifyHost \
+            -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
+
+  kotlin:
+    name: Kotlin host and Android API ${{ matrix.api-level }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [28, 36]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: sdks/kotlin/gradle/wrapper/gradle-wrapper.properties
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            sdks/ffi
+            sdks/rust
+      - uses: android-actions/setup-android@v4
+      - name: Install Android build components and cargo-ndk
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          cargo install cargo-ndk --version 4.1.2 --locked
+      - name: Build Rust for host and emulator
+        env:
+          ABIS: x86_64
+          FEATURES: test-hooks
+        run: sdks/kotlin/scripts/build-rust.sh
+      - name: Generated Kotlin bindings match the tree
+        run: git diff --exit-code -- sdks/kotlin/ratify-protocol/src/main/kotlin/com/ratifyprotocol/internal/ffi/ratify_ffi.kt
+      - name: Kotlin API check
+        working-directory: sdks/kotlin
+        run: ./gradlew :ratify-protocol:apiCheck
+      - name: Kotlin host suite and decoder fuzz
+        if: matrix.api-level == 36
+        working-directory: sdks/kotlin
+        run: ./gradlew :ratify-protocol:testDebugUnitTest
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          profile: pixel_6
+          script: cd sdks/kotlin && ./gradlew :ratify-protocol:connectedDebugAndroidTest
+
+  artifacts:
+    name: Build release candidate artifacts without publishing
+    needs: [ffi, swift, kotlin]
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios,aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            sdks/ffi
+            sdks/rust
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - name: Install Android build components and cargo-ndk
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          cargo install cargo-ndk --version 4.1.2 --locked
+      - name: Build and inspect mobile release candidates
+        run: bash scripts/build-mobile-artifacts.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-v2-candidates-${{ github.sha }}
+          path: dist/mobile/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

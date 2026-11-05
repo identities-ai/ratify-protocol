@@ -1582,6 +1582,14 @@ class ClaimTest {
                 trust = trust, statusEvidence = status, statusJournal = journal)
             assertEquals("iteration $iteration", VerifyStage.REPLAY, replay.stage)
             assertEquals("iteration $iteration", ClaimDisposition.TERMINAL_REPLAY, replay.disposition)
+            val winner = checkNotNull(outcomes.first { it.stage == VerifyStage.COMMITTED }.committed)
+            val wire = store.publish(winner.claimId, winner.receiptBody)
+            assertEquals("iteration $iteration", 1L, decodeVerificationReceipt(wire).sequence)
+            org.junit.Assert.assertArrayEquals(wire, store.publish(winner.claimId, winner.receiptBody))
+            val released = releaseDecision(winner, wire, key.publicKey, inputs.getString("log_id"), store, store)
+            assertEquals("iteration $iteration", ReleaseStatus.RELEASED, released.status)
+            assertEquals("iteration $iteration", "allow", released.decision?.decision)
+            assertEquals("iteration $iteration", scenario.getLong("start_time"), released.decision?.releaseTime)
         }
     }
 

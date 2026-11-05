@@ -146,6 +146,7 @@ pub fn ffi_configure_status_key_epoch(
 }
 
 #[uniffi::export]
+#[allow(clippy::too_many_arguments)] // The FFI boundary keeps the core's typed inputs explicit.
 pub fn ffi_apply_revocation_list_to_journal(
     store: Arc<dyn FfiJournalStore>, token: Arc<FfiCancelToken>, list: FfiRevocationList,
     issuer_id: String, epoch: u64, key: FfiPublicKey, policy: FfiStatusPolicy, now: i64,
@@ -156,6 +157,7 @@ pub fn ffi_apply_revocation_list_to_journal(
 }
 
 #[uniffi::export]
+#[allow(clippy::too_many_arguments)] // The FFI boundary keeps the core's typed inputs explicit.
 pub fn ffi_apply_revocation_push_to_journal(
     store: Arc<dyn FfiJournalStore>, token: Arc<FfiCancelToken>, push: FfiRevocationPush,
     issuer_id: String, epoch: u64, key: FfiPublicKey, policy: FfiStatusPolicy, now: i64,
@@ -166,6 +168,7 @@ pub fn ffi_apply_revocation_push_to_journal(
 }
 
 #[uniffi::export]
+#[allow(clippy::too_many_arguments)] // The FFI boundary keeps the core's typed inputs explicit.
 pub fn ffi_revocation_status_from_journal(
     store: Arc<dyn FfiJournalStore>, token: Arc<FfiCancelToken>, issuer_id: String, cert_id: String,
     epoch: u64, key: FfiPublicKey, policy: FfiStatusPolicy, now: i64,

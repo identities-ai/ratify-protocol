@@ -1,9 +1,12 @@
 // Ratify Protocol v2 SDK for Kotlin (Android). The public API is the
 // hand-written com.ratifyprotocol package; com.ratifyprotocol.internal.ffi is
 // generated from sdks/ffi and is never public API.
+import org.gradle.api.publish.maven.MavenPublication
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    id("maven-publish")
 }
 
 val repoRoot = rootProject.projectDir.resolve("../..")
@@ -40,6 +43,43 @@ android {
             it.systemProperty("ratify.corpus", repoRoot.resolve("testvectors").absolutePath)
             it.systemProperty("ratify.annex", repoRoot.resolve("SPEC-v2-ANNEX-A.md").absolutePath)
         }
+    }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                from(components["release"])
+                pom {
+                    name.set("Ratify Protocol for Android")
+                    description.set("Protocol v2 Android SDK")
+                    url.set("https://github.com/identities-ai/ratify-protocol")
+                    licenses { license {
+                        name.set("Apache License, Version 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                    } }
+                    developers { developer {
+                        id.set("identities-ai")
+                        name.set("Identities.AI, Inc.")
+                    } }
+                    scm {
+                        connection.set("scm:git:https://github.com/identities-ai/ratify-protocol.git")
+                        url.set("https://github.com/identities-ai/ratify-protocol")
+                    }
+                }
+            }
+        }
+        repositories { maven {
+            name = "staging"
+            url = uri(rootProject.layout.buildDirectory.dir("mobile-staging").get().asFile)
+        } }
     }
 }
 

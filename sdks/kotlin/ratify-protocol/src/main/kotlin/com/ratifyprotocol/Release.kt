@@ -12,6 +12,8 @@ import com.ratifyprotocol.internal.ffi.FfiTerminalClaimRecord
 import com.ratifyprotocol.internal.ffi.ffiPublishReceipt
 import com.ratifyprotocol.internal.ffi.ffiReleaseDecision
 import com.ratifyprotocol.internal.ffi.ffiReceiptOutboxDigest
+import com.ratifyprotocol.internal.ffi.ffiEncodeCheckpointAcknowledgement
+import com.ratifyprotocol.internal.ffi.ffiDecodeCheckpointAcknowledgement
 import com.ratifyprotocol.internal.ffi.ffiValidReleaseRecordOutcome
 import kotlin.time.Duration
 
@@ -56,6 +58,14 @@ public class CheckpointAcknowledgement(
     internal constructor(f: FfiCheckpointAcknowledgement) : this(f.logId, f.sequence, f.entryHash, f.timestamp)
     internal fun toFfi() = FfiCheckpointAcknowledgement(logId, sequence, hash.copyOf(), timestamp)
 }
+
+/** Canonical wire form of an independent checkpoint acknowledgement. */
+public fun encodeCheckpointAcknowledgement(ack: CheckpointAcknowledgement): ByteArray =
+    ffi { ffiEncodeCheckpointAcknowledgement(ack.toFfi()) }
+
+/** Strictly decodes only the canonical acknowledgement wire form. */
+public fun decodeCheckpointAcknowledgement(data: ByteArray): CheckpointAcknowledgement =
+    CheckpointAcknowledgement(ffi { ffiDecodeCheckpointAcknowledgement(data.copyOf()) })
 
 /** Durable terminal state and first-write-wins release record for the same claim store used by verification. */
 public interface ReleaseClaimStore : AuthoritativeClock {

@@ -1,0 +1,15 @@
+[licenses]
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-1-Clause",
+    "BSD-3-Clause",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

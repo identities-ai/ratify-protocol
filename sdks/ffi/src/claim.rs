@@ -804,8 +804,9 @@ mod tests {
         assert_eq!(*foreign.0.lock().unwrap(), vec!["finalize"]);
     }
 
+    type BarrierState = (HashMap<String, Vec<FfiRateReservation>>, HashMap<String, i64>);
     #[derive(Default)]
-    struct ContendedBarrierStore(Mutex<(HashMap<String, Vec<FfiRateReservation>>, HashMap<String, i64>)>);
+    struct ContendedBarrierStore(Mutex<BarrierState>);
 
     impl FfiClaimStore for ContendedBarrierStore {
         fn authoritative_time(&self, _: Arc<FfiStoreContext>) -> Result<i64, FfiStoreError> { Ok(42) }

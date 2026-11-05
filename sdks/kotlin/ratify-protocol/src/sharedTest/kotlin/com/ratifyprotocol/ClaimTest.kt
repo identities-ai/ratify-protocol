@@ -1771,6 +1771,61 @@ class ClaimTest {
         }
     }
 
+    @Test fun concurrentTwoCounterRateAdmissionIsAtomic() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first {
+            it.getString("name") == "rate_two_counter_admission_under_contention"
+        }
+        val participants = scenario.arr("participants")
+        assertEquals(listOf("T1", "T2"), participants.map { it.getString("request") })
+        org.junit.Assert.assertTrue(scenario.getBoolean("rate_at_finalization"))
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+                inputs.getString("log_id"), key)
+            val rateStore = store.withRateAtFinalization()
+            val calls = participants.flatMap { participant ->
+                val name = participant.getString("request")
+                val req = request(name, corpusName = "lifecycle-scenarios.json")
+                val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject(name), req)
+                List(participant.getInt("count")) {
+                    async(Dispatchers.Default) {
+                        name to verifyProofBundle(req, rateStore,
+                            trust = trust, statusEvidence = status, statusJournal = journal)
+                    }
+                }
+            }
+            val results = calls.map { it.await() }
+            assertEquals("iteration $iteration", 4, results.size)
+            val committed = results.filter { it.second.stage == VerifyStage.COMMITTED }
+            assertEquals("iteration $iteration", 2, committed.size)
+            assertEquals("iteration $iteration", setOf("T1", "T2"), committed.map { it.first }.toSet())
+            val decisions = committed.map {
+                val body = JSONObject(String(checkNotNull(it.second.committed).receiptBody))
+                body.getString("decision") to body.getString("decision_reason")
+            }
+            assertEquals("iteration $iteration", setOf("allow" to "authorized", "deny" to "constraint_denied"),
+                decisions.toSet())
+            org.junit.Assert.assertTrue("iteration $iteration", results.all {
+                it.second.stage == VerifyStage.COMMITTED || it.second.stage == VerifyStage.REPLAY &&
+                    it.second.disposition in setOf(ClaimDisposition.TERMINAL_REPLAY, ClaimDisposition.IN_PROGRESS)
+            })
+            val later = scenario.arr("after").first()
+            store.setTime(later.getLong("time"))
+            val req = request("T3", corpusName = "lifecycle-scenarios.json", atTime = later.getLong("time"))
+            val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("T3"), req)
+            val outcome = verifyProofBundle(req, rateStore, trust = trust, statusEvidence = status, statusJournal = journal)
+            assertEquals("iteration $iteration", VerifyStage.COMMITTED, outcome.stage)
+            val body = JSONObject(String(checkNotNull(outcome.committed).receiptBody))
+            assertEquals("iteration $iteration", "allow", body.getString("decision"))
+            assertEquals("iteration $iteration", "authorized", body.getString("decision_reason"))
+        }
+    }
+
     @Test fun concurrentConflictingProofsSealOneChallenge() = runBlocking {
         val corpus = Corpus.load("concurrency-scenarios.json")
         val scenario = corpus.arr("scenarios").first {

@@ -5374,13 +5374,15 @@
  },
  "V2CertificateStatusCheck": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CertificateStatusCheck",
+  "kotlin": "CertificateStatusCheck"
  },
  "V2CertificateStatusCheck::cert_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CertificateStatusCheck.certId",
+  "kotlin": "CertificateStatusCheck.certId"
  },
  "V2CertificateStatusCheck::clone": {
   "kind": "fn",
@@ -5389,8 +5391,9 @@
  },
  "V2CertificateStatusCheck::delegation_index": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CertificateStatusCheck.delegationIndex",
+  "kotlin": "CertificateStatusCheck.delegationIndex"
  },
  "V2CertificateStatusCheck::eq": {
   "kind": "fn",
@@ -5404,13 +5407,15 @@
  },
  "V2CertificateStatusCheck::issuer_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CertificateStatusCheck.issuerId",
+  "kotlin": "CertificateStatusCheck.issuerId"
  },
  "V2CertificateStatusCheck::subject_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "CertificateStatusCheck.subjectId",
+  "kotlin": "CertificateStatusCheck.subjectId"
  },
  "V2ChallengeClaim": {
   "kind": "struct",
@@ -6554,8 +6559,9 @@
  },
  "V2EvaluationToken": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "EvaluationToken",
+  "kotlin": "EvaluationToken"
  },
  "V2EvaluationToken::clone": {
   "kind": "fn",
@@ -6613,28 +6619,33 @@
  },
  "V2LocalAuthorizationAssessment": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment",
+  "kotlin": "LocalAuthorizationAssessment"
  },
  "V2LocalAuthorizationAssessment::agent_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.agentId",
+  "kotlin": "LocalAuthorizationAssessment.agentId"
  },
  "V2LocalAuthorizationAssessment::audience_evidence_digests": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.audienceEvidenceDigests",
+  "kotlin": "LocalAuthorizationAssessment.audienceEvidenceDigests"
  },
  "V2LocalAuthorizationAssessment::audience_fresh_until": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.audienceFreshUntil",
+  "kotlin": "LocalAuthorizationAssessment.audienceFreshUntil"
  },
  "V2LocalAuthorizationAssessment::bundle_hash": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.bundleHash",
+  "kotlin": "LocalAuthorizationAssessment.bundleHash"
  },
  "V2LocalAuthorizationAssessment::clone": {
   "kind": "fn",
@@ -6643,13 +6654,15 @@
  },
  "V2LocalAuthorizationAssessment::context_assessment": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.contextAssessment",
+  "kotlin": "LocalAuthorizationAssessment.contextAssessment"
  },
  "V2LocalAuthorizationAssessment::context_policy_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.contextPolicyDigest",
+  "kotlin": "LocalAuthorizationAssessment.contextPolicyDigest"
  },
  "V2LocalAuthorizationAssessment::default": {
   "kind": "fn",
@@ -6658,28 +6671,33 @@
  },
  "V2LocalAuthorizationAssessment::deferred": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.deferred",
+  "kotlin": "LocalAuthorizationAssessment.deferred"
  },
  "V2LocalAuthorizationAssessment::delegation_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.delegationDigest",
+  "kotlin": "LocalAuthorizationAssessment.delegationDigest"
  },
  "V2LocalAuthorizationAssessment::delegation_valid_until": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.delegationValidUntil",
+  "kotlin": "LocalAuthorizationAssessment.delegationValidUntil"
  },
  "V2LocalAuthorizationAssessment::detail": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.detail",
+  "kotlin": "LocalAuthorizationAssessment.detail"
  },
  "V2LocalAuthorizationAssessment::effective_scope": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.effectiveScope",
+  "kotlin": "LocalAuthorizationAssessment.effectiveScope"
  },
  "V2LocalAuthorizationAssessment::eq": {
   "kind": "fn",
@@ -6688,8 +6706,9 @@
  },
  "V2LocalAuthorizationAssessment::extension_valid_until": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.extensionValidUntil",
+  "kotlin": "LocalAuthorizationAssessment.extensionValidUntil"
  },
  "V2LocalAuthorizationAssessment::fmt": {
   "kind": "fn",
@@ -6698,78 +6717,93 @@
  },
  "V2LocalAuthorizationAssessment::issuer_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.issuerIds",
+  "kotlin": "LocalAuthorizationAssessment.issuerIds"
  },
  "V2LocalAuthorizationAssessment::local_policy_failure": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.localPolicyFailure",
+  "kotlin": "LocalAuthorizationAssessment.localPolicyFailure"
  },
  "V2LocalAuthorizationAssessment::local_time_valid_until": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.localTimeValidUntil",
+  "kotlin": "LocalAuthorizationAssessment.localTimeValidUntil"
  },
  "V2LocalAuthorizationAssessment::rate_admission_deferred": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.rateAdmissionDeferred",
+  "kotlin": "LocalAuthorizationAssessment.rateAdmissionDeferred"
  },
  "V2LocalAuthorizationAssessment::rate_store_unavailable": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.rateStoreUnavailable",
+  "kotlin": "LocalAuthorizationAssessment.rateStoreUnavailable"
  },
  "V2LocalAuthorizationAssessment::reason": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.reason",
+  "kotlin": "LocalAuthorizationAssessment.reason"
  },
  "V2LocalAuthorizationAssessment::required_scope": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.requiredScope",
+  "kotlin": "LocalAuthorizationAssessment.requiredScope"
  },
  "V2LocalAuthorizationAssessment::root_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.rootId",
+  "kotlin": "LocalAuthorizationAssessment.rootId"
  },
  "V2LocalAuthorizationAssessment::status": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.status",
+  "kotlin": "LocalAuthorizationAssessment.status"
  },
  "V2LocalAuthorizationAssessment::status_assessment": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.statusAssessment",
+  "kotlin": "LocalAuthorizationAssessment.statusAssessment"
  },
  "V2LocalAuthorizationAssessment::status_checks": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.statusChecks",
+  "kotlin": "LocalAuthorizationAssessment.statusChecks"
  },
  "V2LocalAuthorizationAssessment::status_evidence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.statusEvidence",
+  "kotlin": "LocalAuthorizationAssessment.statusEvidence"
  },
  "V2LocalAuthorizationAssessment::status_fresh_until": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationAssessment.statusFreshUntil",
+  "kotlin": "LocalAuthorizationAssessment.statusFreshUntil"
  },
  "V2LocalAuthorizationOptions": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions",
+  "kotlin": "LocalAuthorizationOptions"
  },
  "V2LocalAuthorizationOptions::claim_token": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.claimToken",
+  "kotlin": "LocalAuthorizationOptions.claimToken"
  },
  "V2LocalAuthorizationOptions::clone": {
   "kind": "fn",
@@ -6778,13 +6812,15 @@
  },
  "V2LocalAuthorizationOptions::context": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.context",
+  "kotlin": "LocalAuthorizationOptions.context"
  },
  "V2LocalAuthorizationOptions::context_policy": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.contextPolicy",
+  "kotlin": "LocalAuthorizationOptions.contextPolicy"
  },
  "V2LocalAuthorizationOptions::default": {
   "kind": "fn",
@@ -6793,8 +6829,9 @@
  },
  "V2LocalAuthorizationOptions::expected_challenge": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.expectedChallenge",
+  "kotlin": "LocalAuthorizationOptions.expectedChallenge"
  },
  "V2LocalAuthorizationOptions::fmt": {
   "kind": "fn",
@@ -6803,38 +6840,45 @@
  },
  "V2LocalAuthorizationOptions::future_skew_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.futureSkewSeconds",
+  "kotlin": "LocalAuthorizationOptions.futureSkewSeconds"
  },
  "V2LocalAuthorizationOptions::required_scope": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.requiredScope",
+  "kotlin": "LocalAuthorizationOptions.requiredScope"
  },
  "V2LocalAuthorizationOptions::trust_configured": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.trustConfigured",
+  "kotlin": "LocalAuthorizationOptions.trustConfigured"
  },
  "V2LocalAuthorizationOptions::trusted_root_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.trustedRootId",
+  "kotlin": "LocalAuthorizationOptions.trustedRootId"
  },
  "V2LocalAuthorizationOptions::trusted_root_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.trustedRootKey",
+  "kotlin": "LocalAuthorizationOptions.trustedRootKey"
  },
  "V2LocalAuthorizationOptions::tzdb_version": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalAuthorizationOptions.tzdbVersion",
+  "kotlin": "LocalAuthorizationOptions.tzdbVersion"
  },
  "V2LocalPolicyFailure": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalPolicyFailure",
+  "kotlin": "LocalPolicyFailure"
  },
  "V2LocalPolicyFailure::clone": {
   "kind": "fn",
@@ -6848,8 +6892,9 @@
  },
  "V2LocalPolicyFailure::detail": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalPolicyFailure.detail",
+  "kotlin": "LocalPolicyFailure.detail"
  },
  "V2LocalPolicyFailure::eq": {
   "kind": "fn",
@@ -6863,13 +6908,15 @@
  },
  "V2LocalPolicyFailure::reason": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalPolicyFailure.reason",
+  "kotlin": "LocalPolicyFailure.reason"
  },
  "V2LocalPolicyFailure::status": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "LocalPolicyFailure.status",
+  "kotlin": "LocalPolicyFailure.status"
  },
  "V2ObjectType": {
   "kind": "enum",
@@ -8878,8 +8925,9 @@
  },
  "claim_proof_bundle_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.claimProofBundle",
+  "kotlin": "claimProofBundle"
  },
  "configure_status_key_epoch_v2": {
   "kind": "fn",
@@ -9068,8 +9116,9 @@
  },
  "evaluate_proof_bundle_v2_local_authorization": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.evaluateLocalAuthorization",
+  "kotlin": "evaluateLocalAuthorization"
  },
  "evaluate_receiver_audience_v2": {
   "kind": "fn",
@@ -9095,8 +9144,9 @@
  },
  "finalize_claim_proof_bundle_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.finalizeClaimProofBundle",
+  "kotlin": "finalizeClaimProofBundle"
  },
  "generate_cross_sdk_fixture_v2": {
   "kind": "fn",
@@ -9280,13 +9330,15 @@
  },
  "resolve_claim_proof_bundle_v2_after_audience": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.resolveClaimAfterAudience",
+  "kotlin": "resolveClaimAfterAudience"
  },
  "resolve_claim_proof_bundle_v2_after_rate": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.resolveClaimAfterRate",
+  "kotlin": "resolveClaimAfterRate"
  },
  "resume_committed_claim_v2": {
   "kind": "fn",

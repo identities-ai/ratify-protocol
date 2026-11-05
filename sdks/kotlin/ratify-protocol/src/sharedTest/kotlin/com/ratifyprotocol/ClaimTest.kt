@@ -640,6 +640,8 @@ class ClaimTest {
         val progressRecords = mutableListOf<EvaluationProgress>()
         var finalizations = 0
         val allowHorizons = mutableListOf<Long>()
+        var lastTerminalResult: ByteArray? = null
+        var lastReceiptBody: ByteArray? = null
         override suspend fun authoritativeTime(): Long = claimedAt
         override suspend fun claim(claim: ChallengeClaim): ClaimResult {
             claims++
@@ -655,6 +657,8 @@ class ClaimTest {
             org.junit.Assert.assertTrue(receiptBody.isNotEmpty())
             finalizations++
             allowHorizons.add(allowValidUntil)
+            lastTerminalResult = terminalResult.copyOf()
+            lastReceiptBody = receiptBody.copyOf()
             val finalTime = claimedAt + finalizeTimeOffset
             if (finalTime < claimedAt) throw StoreError.Classified(ErrorClass.CLOCK_REGRESSED, "finalization clock regressed")
             if (allowValidUntil != 0L && (finalTime >= allowValidUntil || finalTime >= claimed!!.expiresAt))
@@ -1071,6 +1075,63 @@ class ClaimTest {
         return PreflightRequest(req.bundle, req.expected, req.contextPolicy, req.requiredScope,
             req.verifierNamespace, req.replayEpoch, req.verifierId, req.now,
             req.maxChallengeAgeSeconds, req.futureSkewSeconds)
+    }
+
+    @Test fun stagedClaimLocalAssessmentStaysPendingWithoutAuthenticatedStatus() = runBlocking {
+        val req = request("allow_bound_context")
+        val preflight = preflightProofBundle(stagedPreflightRequest("allow_bound_context"))
+        val store = CreatedClaimStore(claimedAt = req.now)
+        val staged = claimProofBundle(req.bundle, preflight, req.verifierNamespace,
+            req.replayEpoch, req.now, store)
+        assertEquals(ClaimDisposition.CREATED, staged.disposition)
+        val token = requireNotNull(staged.evaluationToken)
+        val root = Fixture.privateKey("root")
+        val options = LocalAuthorizationOptions(req.futureSkewSeconds, req.requiredScope,
+            root.keyId, root.publicKey, true, req.context, req.tzdbVersion,
+            req.contextPolicy, req.expected, token)
+        val assessment = evaluateLocalAuthorization(req.bundle, options)
+        assertEquals("pending_external_checks", assessment.status)
+        org.junit.Assert.assertTrue(assessment.statusChecks.isNotEmpty())
+        val second = evaluateLocalAuthorization(req.bundle, options)
+        assertEquals("evaluation_in_progress", second.status)
+        assertEquals("claim_in_progress", second.reason)
+        assertEquals("configuration_invalid", classOf {
+            resolveClaimAfterAudience(token, emptyList())
+        })
+        val replay = claimProofBundle(req.bundle, preflight, req.verifierNamespace,
+            req.replayEpoch, req.now, CreatedClaimStore(claimedAt = req.now,
+                disposition = ClaimDisposition.IN_PROGRESS))
+        assertEquals(ClaimDisposition.IN_PROGRESS, replay.disposition)
+        org.junit.Assert.assertNull(replay.evaluationToken)
+    }
+
+    @Test fun stagedFinalizeRefusesSameTokenReentry() = runBlocking {
+        val req = request("trust_unavailable")
+        val payloadStore = CreatedClaimStore(claimedAt = req.now)
+        val composed = verifyProofBundle(req, payloadStore, trust = UnavailableTrust())
+        assertEquals(VerifyStage.COMMITTED, composed.stage)
+        val terminal = requireNotNull(payloadStore.lastTerminalResult)
+        val body = requireNotNull(payloadStore.lastReceiptBody)
+        lateinit var token: EvaluationToken
+        lateinit var store: CreatedClaimStore
+        var nestedError: Throwable? = null
+        store = CreatedClaimStore(onFinalize = {
+            try {
+                finalizeClaimProofBundle(token, store, terminal, body)
+                org.junit.Assert.fail("same-token reentry succeeded")
+            } catch (e: Throwable) { nestedError = e }
+        }, claimedAt = req.now)
+        val preflight = preflightProofBundle(stagedPreflightRequest("trust_unavailable"))
+        val staged = claimProofBundle(req.bundle, preflight, req.verifierNamespace,
+            req.replayEpoch, req.now, store)
+        token = requireNotNull(staged.evaluationToken)
+        val options = LocalAuthorizationOptions(req.futureSkewSeconds, req.requiredScope,
+            "", HybridPublicKey(ByteArray(0), ByteArray(0)), false, req.context,
+            req.tzdbVersion, req.contextPolicy, req.expected, token)
+        assertEquals("trust_unavailable", evaluateLocalAuthorization(req.bundle, options).reason)
+        org.junit.Assert.assertTrue(finalizeClaimProofBundle(token, store, terminal, body))
+        assertEquals(ErrorClass.CONFIGURATION_INVALID, (nestedError as? RatifyException)?.errorClass)
+        assertEquals(1, store.finalizations)
     }
 
     @Test fun sealedPreflightVectors() {

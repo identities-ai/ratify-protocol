@@ -43,6 +43,11 @@ AuthoritativeClock.authoritativeTime() [Func] -> Swift.Int64
 CertificateRef [Struct]
 CertificateRef.certId [Var] -> Swift.String
 CertificateRef.issuerId [Var] -> Swift.String
+CertificateStatusCheck [Struct]
+CertificateStatusCheck.certId [Var] -> Swift.String
+CertificateStatusCheck.delegationIndex [Var] -> Swift.UInt64
+CertificateStatusCheck.issuerId [Var] -> Swift.String
+CertificateStatusCheck.subjectId [Var] -> Swift.String
 ChallengeClaim [Struct]
 ChallengeClaim.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ChallengeClaim, RatifyProtocol.ChallengeClaim
 ChallengeClaim.agentId [Var] -> Swift.String
@@ -296,6 +301,7 @@ EvaluationProgress.init(trustAssessment:statusAssessment:contextAssessment:conte
 EvaluationProgress.statusAssessment [Var] -> Swift.String
 EvaluationProgress.statusEvidence [Var] -> [RatifyProtocol.StatusEvidenceEntry]
 EvaluationProgress.trustAssessment [Var] -> Swift.String
+EvaluationToken [Class]
 ExpectedChallenge [Struct]
 ExpectedChallenge.contextPolicy [Var] -> RatifyProtocol.ContextPolicy?
 ExpectedChallenge.expectedAgentId [Var] -> Swift.String
@@ -381,6 +387,48 @@ KeychainKeyStore.loadSecureEnclaveKey(keyId:) [Func] -> RatifyProtocol.SecureEnc
 KeychainKeyStore.save(_:) [Func] -> (), RatifyProtocol.SecureEnclaveKey @26.0
 KeychainKeyStore.save(_:) [Func] -> (), RatifyProtocol.SoftwarePrivateKey
 KeychainKeyStore.service [Var] -> Swift.String
+LocalAuthorizationAssessment [Struct]
+LocalAuthorizationAssessment.agentId [Var] -> Swift.String
+LocalAuthorizationAssessment.audienceEvidenceDigests [Var] -> [Swift.String]
+LocalAuthorizationAssessment.audienceFreshUntil [Var] -> Swift.Int64
+LocalAuthorizationAssessment.bundleHash [Var] -> Swift.String
+LocalAuthorizationAssessment.contextAssessment [Var] -> Swift.String
+LocalAuthorizationAssessment.contextPolicyDigest [Var] -> Swift.String?
+LocalAuthorizationAssessment.deferred [Var] -> [RatifyProtocol.DeferredConstraint]
+LocalAuthorizationAssessment.delegationDigest [Var] -> Foundation.Data
+LocalAuthorizationAssessment.delegationValidUntil [Var] -> Swift.Int64
+LocalAuthorizationAssessment.detail [Var] -> Swift.String
+LocalAuthorizationAssessment.effectiveScope [Var] -> [Swift.String]
+LocalAuthorizationAssessment.extensionValidUntil [Var] -> Swift.Int64
+LocalAuthorizationAssessment.issuerIds [Var] -> [Swift.String]
+LocalAuthorizationAssessment.localPolicyFailure [Var] -> RatifyProtocol.LocalPolicyFailure?
+LocalAuthorizationAssessment.localTimeValidUntil [Var] -> Swift.Int64
+LocalAuthorizationAssessment.rateAdmissionDeferred [Var] -> Swift.Bool
+LocalAuthorizationAssessment.rateStoreUnavailable [Var] -> Swift.Bool
+LocalAuthorizationAssessment.reason [Var] -> Swift.String
+LocalAuthorizationAssessment.requiredScope [Var] -> Swift.String
+LocalAuthorizationAssessment.rootId [Var] -> Swift.String
+LocalAuthorizationAssessment.status [Var] -> Swift.String
+LocalAuthorizationAssessment.statusAssessment [Var] -> Swift.String
+LocalAuthorizationAssessment.statusChecks [Var] -> [RatifyProtocol.CertificateStatusCheck]
+LocalAuthorizationAssessment.statusEvidence [Var] -> [RatifyProtocol.StatusEvidenceEntry]
+LocalAuthorizationAssessment.statusFreshUntil [Var] -> Swift.Int64
+LocalAuthorizationOptions [Struct]
+LocalAuthorizationOptions.claimToken [Var] -> RatifyProtocol.EvaluationToken
+LocalAuthorizationOptions.context [Var] -> RatifyProtocol.ConstraintContext
+LocalAuthorizationOptions.contextPolicy [Var] -> RatifyProtocol.ContextPolicy?
+LocalAuthorizationOptions.expectedChallenge [Var] -> RatifyProtocol.ExpectedChallenge?
+LocalAuthorizationOptions.futureSkewSeconds [Var] -> Swift.Int64
+LocalAuthorizationOptions.init(futureSkewSeconds:requiredScope:trustedRootId:trustedRootKey:trustConfigured:context:tzdbVersion:contextPolicy:expectedChallenge:claimToken:) [Constructor] -> RatifyProtocol.LocalAuthorizationOptions, Swift.Int64, Swift.String, Swift.String, RatifyProtocol.HybridPublicKey, Swift.Bool, RatifyProtocol.ConstraintContext, Swift.String, RatifyProtocol.ContextPolicy?, RatifyProtocol.ExpectedChallenge?, RatifyProtocol.EvaluationToken
+LocalAuthorizationOptions.requiredScope [Var] -> Swift.String
+LocalAuthorizationOptions.trustConfigured [Var] -> Swift.Bool
+LocalAuthorizationOptions.trustedRootId [Var] -> Swift.String
+LocalAuthorizationOptions.trustedRootKey [Var] -> RatifyProtocol.HybridPublicKey
+LocalAuthorizationOptions.tzdbVersion [Var] -> Swift.String
+LocalPolicyFailure [Struct]
+LocalPolicyFailure.detail [Var] -> Swift.String
+LocalPolicyFailure.reason [Var] -> Swift.String
+LocalPolicyFailure.status [Var] -> Swift.String
 LogResult [Enum]
 LogResult.__derived_enum_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.LogResult, RatifyProtocol.LogResult
 LogResult.appended [EnumElement] -> (RatifyProtocol.LogResult.Type) -> RatifyProtocol.LogResult
@@ -500,6 +548,7 @@ Ratify.bundleHash(_:) [Func] -> Swift.String, RatifyProtocol.ProofBundle
 Ratify.canonicalJSON(_:) [Func] -> Foundation.Data, Foundation.Data
 Ratify.challengeClaimDigest(_:) [Func] -> Foundation.Data, Foundation.Data
 Ratify.checkVerificationReceiptBundleBinding(_:bundle:) [Func] -> (), RatifyProtocol.VerificationReceipt, RatifyProtocol.ProofBundle
+Ratify.claimProofBundle(bundle:preflight:namespace:replayEpoch:now:store:timeout:) [Func] -> RatifyProtocol.StagedClaim, Foundation.Data, RatifyProtocol.PreflightResult, Swift.String, Swift.Int64, Swift.Int64, any RatifyProtocol.ClaimStore, Swift.Duration?
 Ratify.configureStatusKeyEpoch(store:issuerId:epoch:key:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, Swift.Duration?
 Ratify.constraintProfileDigest(_:) [Func] -> Swift.String, RatifyProtocol.ConstraintProfileDescriptor
 Ratify.decodeDelegationCert(_:) [Func] -> RatifyProtocol.DelegationCert, Foundation.Data
@@ -527,9 +576,12 @@ Ratify.encodeVerificationReceipt(_:) [Func] -> Foundation.Data, RatifyProtocol.V
 Ratify.encodeWitnessEntry(_:) [Func] -> Foundation.Data, RatifyProtocol.WitnessEntry
 Ratify.errorClassSpellings() [Func] -> [Swift.String]
 Ratify.evaluateAllowedValues(_:) [Func] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintEvaluationInput
+Ratify.evaluateLocalAuthorization(bundle:options:) [Func] -> RatifyProtocol.LocalAuthorizationAssessment, Foundation.Data, RatifyProtocol.LocalAuthorizationOptions
 Ratify.evaluateMaxCount(_:) [Func] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintEvaluationInput
 Ratify.expandScopes(_:) [Func] -> [Swift.String], [Swift.String]
 Ratify.externalMu(mlDsaPublicKey:mlDsaContext:message:) [Func] -> Foundation.Data, Foundation.Data, Foundation.Data, Foundation.Data
+Ratify.finalizeClaimProofBundle(token:store:terminalResult:receiptBody:timeout:) [Func] -> Swift.Bool, RatifyProtocol.EvaluationToken, any RatifyProtocol.ClaimStore, Foundation.Data, Foundation.Data, Swift.Duration?
+Ratify.finalizeClaimProofBundle(token:store:terminalResult:receiptBody:timeout:) [Func] -> Swift.Bool, RatifyProtocol.EvaluationToken, any RatifyProtocol.RateAtFinalizationClaimStore, Foundation.Data, Foundation.Data, Swift.Duration?
 Ratify.intersectScopes(_:) [Func] -> [Swift.String], [[Swift.String]]
 Ratify.isSensitiveScope(_:) [Func] -> Swift.Bool, Swift.String
 Ratify.issueChallenge(request:clock:store:random:timeout:) [Func] -> RatifyProtocol.ExpectedChallenge, RatifyProtocol.ChallengeIssueRequest, any RatifyProtocol.AuthoritativeClock, any RatifyProtocol.ChallengeIssuanceStore, (any RatifyProtocol.ChallengeRandomSource)?, Swift.Duration?
@@ -553,6 +605,9 @@ Ratify.recordSecurityKeyRole(store:role:key:timeout:) [Func] -> RatifyProtocol.S
 Ratify.recoverInterruptedClaim(store:claimId:timeout:) [Func] -> RatifyProtocol.CommittedOutcome, any RatifyProtocol.ClaimStore, Swift.String, Swift.Duration?
 Ratify.recoverKeyRotation(_:newRecoveryEpoch:newGenesisKey:) [Func] -> RatifyProtocol.RotationJournal, RatifyProtocol.RotationJournal, Swift.Int64, RatifyProtocol.HybridPublicKey
 Ratify.releaseDecision(_:signedReceipt:verifierPublicKey:logId:claimStore:checkpoint:timeout:) [Func] -> RatifyProtocol.ReleaseResult, RatifyProtocol.CommittedOutcome, Foundation.Data?, RatifyProtocol.HybridPublicKey, Swift.String, any RatifyProtocol.ReleaseClaimStore, any RatifyProtocol.ReceiptCheckpoint, Swift.Duration?
+Ratify.resolveClaimAfterAudience(token:memberships:) [Func] -> RatifyProtocol.LocalAuthorizationAssessment, RatifyProtocol.EvaluationToken, [RatifyProtocol.AudienceMembership]
+Ratify.resolveClaimAfterRate(token:store:timeout:) [Func] -> RatifyProtocol.LocalAuthorizationAssessment, RatifyProtocol.EvaluationToken, (any RatifyProtocol.RateReservationStore)?, Swift.Duration?
+Ratify.resolveClaimAfterRate(token:store:timeout:) [Func] -> RatifyProtocol.LocalAuthorizationAssessment, RatifyProtocol.EvaluationToken, any RatifyProtocol.RateAtFinalizationClaimStore, Swift.Duration?
 Ratify.resumeCommittedClaim(store:claimId:timeout:) [Func] -> RatifyProtocol.CommittedOutcome, any RatifyProtocol.CommittedClaimStore, Swift.String, Swift.Duration?
 Ratify.revocationListSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationList
 Ratify.revocationPushSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationPush
@@ -910,6 +965,10 @@ SoftwarePrivateKey.init(storageRecord:) [Constructor] -> RatifyProtocol.Software
 SoftwarePrivateKey.keyId [Var] -> Swift.String
 SoftwarePrivateKey.publicKey [Var] -> RatifyProtocol.HybridPublicKey
 SoftwarePrivateKey.storageRecord() [Func] -> Foundation.Data
+StagedClaim [Struct]
+StagedClaim.claim [Var] -> RatifyProtocol.ChallengeClaim
+StagedClaim.disposition [Var] -> RatifyProtocol.ClaimDisposition
+StagedClaim.evaluationToken [Var] -> RatifyProtocol.EvaluationToken?
 StatusEvidenceEntry [Struct]
 StatusEvidenceEntry.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.StatusEvidenceEntry, RatifyProtocol.StatusEvidenceEntry
 StatusEvidenceEntry.digest [Var] -> Swift.String

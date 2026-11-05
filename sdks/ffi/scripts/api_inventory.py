@@ -142,6 +142,7 @@ def cmd_check():
 # Public declarations that no inventory item maps, each with its reason.
 # Everything else public must be named by a mapped inventory entry.
 EXTRA_SWIFT = {
+    "StagedClaim": "SDK record for the core claim function's tuple result",
     "PreflightRequest": "SDK request grouping for core preflight's explicit arguments",
     "ReferenceStoreBridge": "internal SPI carrier for the separate TestSupport reference store",
     "ReferenceTrustRegistryBridge": "internal SPI carrier for the separate TestSupport trust registry",
@@ -168,6 +169,7 @@ EXTRA_SWIFT = {
     "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
 }
 EXTRA_KOTLIN = {
+    "StagedClaim": "SDK record for the core claim function's tuple result",
     "PreflightRequest": "SDK request grouping for core preflight's explicit arguments",
     "ReferenceStoreBridge": "internal-use carrier for the separate testing artifact",
     "ReferenceTrustRegistryBridge": "internal-use carrier for the separate testing artifact",
@@ -212,6 +214,9 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "StagedClaim.claim": "claim in the core claim function's tuple result",
+    "StagedClaim.disposition": "disposition in the core claim function's tuple result",
+    "StagedClaim.evaluationToken": "sealed token in the core claim function's tuple result",
     "ReferenceTrustRegistryBridge.resolve": "test-only Rust reference trust resolver",
     "PreflightRequest.bundle": "SDK request field for core preflight's explicit argument",
     "PreflightRequest.expected": "SDK request field for core preflight's explicit argument",

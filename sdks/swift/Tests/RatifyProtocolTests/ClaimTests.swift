@@ -238,6 +238,8 @@ final class ClaimTests: XCTestCase {
         private(set) var progressRecords: [EvaluationProgress] = []
         private(set) var finalizations = 0
         private(set) var allowHorizons: [Int64] = []
+        private(set) var lastTerminalResult: Data?
+        private(set) var lastReceiptBody: Data?
         init(onFinalize: (@Sendable () async -> Void)? = nil, claimedAt: Int64 = 1_800_000_000,
              finalizeTimeOffset: Int64 = 0, disposition: ClaimDisposition = .created) {
             self.onFinalize = onFinalize; self.claimedAt = claimedAt
@@ -258,6 +260,8 @@ final class ClaimTests: XCTestCase {
             XCTAssertFalse(receiptBody.isEmpty)
             finalizations += 1
             allowHorizons.append(allowValidUntil)
+            lastTerminalResult = terminalResult
+            lastReceiptBody = receiptBody
             let finalTime = claimedAt + finalizeTimeOffset
             if finalTime < claimedAt { throw StoreError.classified(.clockRegressed, detail: "finalization clock regressed") }
             if allowValidUntil != 0 && (finalTime >= allowValidUntil || finalTime >= claimed!.expiresAt) {
@@ -739,6 +743,85 @@ final class ClaimTests: XCTestCase {
             requiredScope: req.requiredScope, verifierNamespace: req.verifierNamespace,
             replayEpoch: req.replayEpoch, verifierId: req.verifierId, now: req.now,
             maxChallengeAgeSeconds: req.maxChallengeAgeSeconds, futureSkewSeconds: req.futureSkewSeconds)
+    }
+
+    func testStagedClaimLocalAssessmentStaysPendingWithoutAuthenticatedStatus() async throws {
+        let req = try request("allow_bound_context")
+        let preflight = try Ratify.preflightProofBundle(stagedPreflightRequest("allow_bound_context"))
+        let store = CreatedClaimStore(claimedAt: req.now)
+        let staged = try await Ratify.claimProofBundle(bundle: req.bundle, preflight: preflight,
+            namespace: req.verifierNamespace, replayEpoch: req.replayEpoch, now: req.now, store: store)
+        XCTAssertEqual(staged.disposition, .created)
+        let token = try XCTUnwrap(staged.evaluationToken)
+        let root = Fixture.shared.privateKey("root")
+        let options = LocalAuthorizationOptions(futureSkewSeconds: req.futureSkewSeconds,
+            requiredScope: req.requiredScope, trustedRootId: root.keyId,
+            trustedRootKey: root.publicKey, trustConfigured: true, context: req.context,
+            tzdbVersion: req.tzdbVersion, contextPolicy: req.contextPolicy,
+            expectedChallenge: req.expected, claimToken: token)
+        let assessment = try await Ratify.evaluateLocalAuthorization(bundle: req.bundle, options: options)
+        XCTAssertEqual(assessment.status, "pending_external_checks")
+        XCTAssertFalse(assessment.statusChecks.isEmpty)
+        let second = try await Ratify.evaluateLocalAuthorization(bundle: req.bundle, options: options)
+        XCTAssertEqual(second.status, "evaluation_in_progress")
+        XCTAssertEqual(second.reason, "claim_in_progress")
+        XCTAssertEqual(classOf { _ = try Ratify.resolveClaimAfterAudience(token: token, memberships: []) },
+            "configuration_invalid")
+        let replay = try await Ratify.claimProofBundle(bundle: req.bundle, preflight: preflight,
+            namespace: req.verifierNamespace, replayEpoch: req.replayEpoch, now: req.now,
+            store: CreatedClaimStore(claimedAt: req.now, disposition: .inProgress))
+        XCTAssertEqual(replay.disposition, .inProgress)
+        XCTAssertNil(replay.evaluationToken)
+    }
+
+    actor StagedReentryBox {
+        var token: EvaluationToken?
+        var store: CreatedClaimStore?
+        func set(_ token: EvaluationToken, store: CreatedClaimStore) {
+            self.token = token; self.store = store
+        }
+    }
+
+    func testStagedFinalizeRefusesSameTokenReentry() async throws {
+        let req = try request("trust_unavailable")
+        let payloadStore = CreatedClaimStore(claimedAt: req.now)
+        let composed = try await Ratify.verifyProofBundle(req, claimStore: payloadStore,
+            trust: UnavailableTrust())
+        XCTAssertEqual(composed.stage, .committed)
+        let savedTerminal = await payloadStore.lastTerminalResult
+        let savedBody = await payloadStore.lastReceiptBody
+        let terminal = try XCTUnwrap(savedTerminal)
+        let body = try XCTUnwrap(savedBody)
+        let box = StagedReentryBox()
+        let store = CreatedClaimStore(onFinalize: {
+            guard let nestedToken = await box.token, let nestedStore = await box.store else {
+                XCTFail("missing staged token"); return
+            }
+            do {
+                _ = try await Ratify.finalizeClaimProofBundle(token: nestedToken, store: nestedStore,
+                    terminalResult: terminal, receiptBody: body)
+                XCTFail("same-token reentry succeeded")
+            } catch {
+                XCTAssertEqual((error as? RatifyError)?.errorClass, .configurationInvalid)
+            }
+        }, claimedAt: req.now)
+        let preflight = try Ratify.preflightProofBundle(stagedPreflightRequest("trust_unavailable"))
+        let staged = try await Ratify.claimProofBundle(bundle: req.bundle, preflight: preflight,
+            namespace: req.verifierNamespace, replayEpoch: req.replayEpoch, now: req.now, store: store)
+        let token = try XCTUnwrap(staged.evaluationToken)
+        let options = LocalAuthorizationOptions(futureSkewSeconds: req.futureSkewSeconds,
+            requiredScope: req.requiredScope, trustedRootId: "",
+            trustedRootKey: HybridPublicKey(ed25519: Data(), mlDsa65: Data()),
+            trustConfigured: false, context: req.context, tzdbVersion: req.tzdbVersion,
+            contextPolicy: req.contextPolicy, expectedChallenge: req.expected, claimToken: token)
+        let assessment = try await Ratify.evaluateLocalAuthorization(bundle: req.bundle, options: options)
+        XCTAssertEqual(assessment.reason, "trust_unavailable")
+        await box.set(token, store: store)
+        let finalized = try await Ratify.finalizeClaimProofBundle(token: token, store: store,
+            terminalResult: terminal, receiptBody: body)
+        XCTAssertTrue(finalized)
+        let finalizations = await store.finalizations
+        XCTAssertEqual(finalizations, 1)
     }
 
     func testSealedPreflightVectors() throws {

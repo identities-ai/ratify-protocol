@@ -234,6 +234,7 @@ class ClaimTest {
             }
         }
         }
+        Manifest.record("lifecycle-scenarios.json", scenarios.size)
     }
     @Test fun singleDeviceReleaseRequiresComponentAck() = runBlocking {
         val corpus = Corpus.load("lifecycle-scenarios.json")
@@ -441,6 +442,7 @@ class ClaimTest {
             }
         }
         }
+        Manifest.record("lifecycle-scenarios.json", scenarios.size)
     }
     private interface CallbackPanicHooks : Library {
         fun ratify_ffi_test_arm_callback_panic(kind: Int)
@@ -1886,5 +1888,6 @@ class ClaimTest {
                 }
             }
         }
+        Manifest.record("lifecycle-scenarios.json", scenarios.size)
     }
 }

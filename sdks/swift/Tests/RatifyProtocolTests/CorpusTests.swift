@@ -35,13 +35,16 @@ final class CorpusTests: XCTestCase {
         "transaction-verification.json": TransactionVerifyRunner.run,
         "device-state.json": DeviceStateRunner.run,
         "verifier-ordering.json": VerifierOrderingRunner.run,
+        "lifecycle-scenarios.json": {
+            let test = ClaimTests(selector: #selector(XCTestCase.invokeTest))
+            try await test.testLifecycleBasicReleaseScenarios()
+        },
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).
     static let pending: [String: String] = [
         "concurrency-scenarios.json": "M4",
         "cross-sdk": "M4",
-        "lifecycle-scenarios.json": "M3",
     ]
 
     func testCorpus() async throws {
@@ -53,6 +56,10 @@ final class CorpusTests: XCTestCase {
         for (file, run) in Self.runners.sorted(by: { $0.key < $1.key }) {
             try await run()
             XCTAssertGreaterThan(Manifest.count(file), 0, "\(file): runner reported no executed cases")
+            if file == "lifecycle-scenarios.json" {
+                let corpus = Corpus.load(file)
+                XCTAssertEqual(Manifest.count(file), corpus.arr("scenarios").count + corpus.arr("profile_scenarios").count)
+            }
         }
     }
 

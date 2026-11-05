@@ -1804,5 +1804,6 @@ final class ClaimTests: XCTestCase {
                 }
             }
         }
+        Manifest.record("lifecycle-scenarios.json", scenarios.count)
     }
 }

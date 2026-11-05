@@ -41,13 +41,18 @@ object CorpusRunners {
         "transaction-verification.json" to TransactionVerifyVectors::run,
         "device-state.json" to DeviceStateVectors::run,
         "verifier-ordering.json" to VerifierOrderingVectors::run,
+        "lifecycle-scenarios.json" to {
+            val tests = ClaimTest()
+            tests.dualRootBothReleasedExecutesOnce()
+            tests.singleDeviceReleaseRequiresComponentAck()
+            tests.lifecycleBasicReleaseScenarios()
+        },
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
     val pending: Map<String, String> = mapOf(
         "concurrency-scenarios.json" to "M4",
         "cross-sdk" to "M4",
-        "lifecycle-scenarios.json" to "M3",
     )
 
     fun runAll() {
@@ -58,6 +63,11 @@ object CorpusRunners {
         for ((file, run) in runners.toSortedMap()) {
             run()
             assertTrue("$file: runner reported no executed cases", Manifest.count(file) > 0)
+            if (file == "lifecycle-scenarios.json") {
+                val corpus = Corpus.load(file)
+                assertEquals(corpus.arr("scenarios").size + corpus.arr("profile_scenarios").size,
+                    Manifest.count(file))
+            }
         }
     }
 }

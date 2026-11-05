@@ -26,6 +26,28 @@ use crate::error::{FfiError, FfiResult};
 #[derive(Default)]
 pub(crate) struct Poison(AtomicBool);
 
+/// Serializes one sealed evaluation capability before the core token lock.
+#[derive(Default)]
+pub(crate) struct TokenBusy(AtomicBool);
+
+pub(crate) struct TokenUse<'a>(&'a AtomicBool);
+
+#[allow(dead_code)] // Used by the staged token entry points in the next M3 slice.
+impl TokenBusy {
+    pub(crate) fn enter(&self) -> FfiResult<TokenUse<'_>> {
+        self.0.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| crate::error::protocol(
+                ratify_protocol::v2::V2ErrorClass::ConfigurationInvalid,
+                "evaluation token is already in use",
+            ))?;
+        Ok(TokenUse(&self.0))
+    }
+}
+
+impl Drop for TokenUse<'_> {
+    fn drop(&mut self) { self.0.store(false, Ordering::Release); }
+}
+
 pub(crate) const PANIC_MESSAGE: &str = "a panic was caught at the FFI boundary";
 
 fn contained<T>(body: impl FnOnce() -> FfiResult<T>) -> Result<FfiResult<T>, ()> {
@@ -189,6 +211,25 @@ pub mod test_hooks {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn evaluation_token_busy_guard_refuses_aliases_and_releases_on_unwind() {
+        let busy = std::sync::Arc::new(TokenBusy::default());
+        let held = busy.enter().unwrap();
+        let alias = busy.clone();
+        let refused = std::thread::spawn(move || alias.enter().map(|_| ())).join().unwrap();
+        assert!(matches!(refused, Err(FfiError::Protocol { ref class, .. }) if class == "configuration_invalid"));
+        let still_held = busy.enter();
+        assert!(matches!(still_held, Err(FfiError::Protocol { ref class, .. }) if class == "configuration_invalid"));
+        drop(held);
+        assert!(busy.enter().is_ok());
+        let panicked = std::panic::catch_unwind(|| {
+            let _held = busy.enter().unwrap();
+            panic!("injected token user panic");
+        });
+        assert!(panicked.is_err());
+        assert!(busy.enter().is_ok());
+    }
 
     #[test]
     fn a_panic_becomes_internal_and_poisons_only_its_handle() {

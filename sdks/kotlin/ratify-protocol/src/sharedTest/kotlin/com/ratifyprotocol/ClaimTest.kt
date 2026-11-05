@@ -239,7 +239,7 @@ class ClaimTest {
         val expectedCounts = mapOf("device_release_requires_component_ack" to 6,
             "device_power_loss_before_ack" to 9, "device_power_loss_after_ack" to 8,
             "device_checkpoint_storage_full" to 7, "device_offline_recovery_upload" to 13,
-            "device_staged_status_goes_stale" to 9)
+            "device_staged_status_goes_stale" to 9, "device_rtc_regression" to 17)
         val scenarios = corpus.arr("profile_scenarios").filter { expectedCounts.containsKey(it.getString("name")) }
         assertEquals(expectedCounts.size, scenarios.size)
         val keys = Corpus.load("keys.json").getJSONArray("keys")
@@ -263,22 +263,40 @@ class ClaimTest {
             when (op) {
                 "verify" -> {
                     assertEquals(at, setOf("op", "request", "expect"), step.keys().asSequence().toSet())
-                    assertEquals(at, if (want.has("allow_horizon"))
+                    assertEquals(at, if (want.has("error_class")) setOf("stage", "error_class")
+                        else if (want.has("allow_horizon"))
                         setOf("stage", "decision", "decision_reason", "allow_horizon")
                         else setOf("stage", "decision", "decision_reason"),
                         want.keys().asSequence().toSet())
-                    val req = request(name, corpusName = "lifecycle-scenarios.json", atTime = store.now())
-                    assertEquals(at, req.now, store.now())
+                    val now = store.now()
+                    val expectedTime = when {
+                        scenario.getString("name") == "device_staged_status_goes_stale" && index == 5 -> 1800003600L
+                        scenario.getString("name") == "device_rtc_regression" && index == 1 -> 1800000010L
+                        scenario.getString("name") == "device_rtc_regression" && index == 6 -> 1800000005L
+                        scenario.getString("name") == "device_rtc_regression" && index == 13 -> 1800000011L
+                        else -> scenario.getLong("start_time")
+                    }
+                    assertEquals(at, expectedTime, now)
+                    val req = request(name, corpusName = "lifecycle-scenarios.json", atTime = now)
                     val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(name), req)
                     val result = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
                     assertEquals(at, want.getString("stage"), result.stage.spelling)
-                    val value = checkNotNull(result.committed) { at }
-                    val body = JSONObject(String(value.receiptBody))
-                    assertEquals(at, want.getString("decision"), body.getString("decision"))
-                    assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
-                    assertEquals(at, if (want.has("allow_horizon")) want.getLong("allow_horizon") else null,
-                        value.allowHorizon)
-                    committed[name] = value
+                    if (want.has("error_class")) {
+                        assertEquals(at, VerifyStage.PREFLIGHT, result.stage)
+                        assertEquals(at, want.getString("error_class"), result.errorClass?.spelling)
+                        assertEquals(at, null, result.disposition)
+                        assertEquals(at, null, result.committed)
+                    } else {
+                        assertEquals(at, ClaimDisposition.CREATED, result.disposition)
+                        assertEquals(at, null, result.errorClass)
+                        val value = checkNotNull(result.committed) { at }
+                        val body = JSONObject(String(value.receiptBody))
+                        assertEquals(at, want.getString("decision"), body.getString("decision"))
+                        assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
+                        assertEquals(at, if (want.has("allow_horizon")) want.getLong("allow_horizon") else null,
+                            value.allowHorizon)
+                        committed[name] = value
+                    }
                 }
                 "publish" -> {
                     assertEquals(at, setOf("op", "request", "mode", "expect"), step.keys().asSequence().toSet())

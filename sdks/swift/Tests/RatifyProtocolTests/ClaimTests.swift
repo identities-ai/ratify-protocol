@@ -1000,6 +1000,7 @@ final class ClaimTests: XCTestCase {
     func testLifecycleBasicReleaseScenarios() async throws {
         let corpus = Corpus.load("lifecycle-scenarios.json")
         let names: Set<String> = ["allow_published_acknowledged_released", "release_without_receipt_is_pending",
+            "forged_committed_outcome_is_rejected",
             "release_without_acknowledgement_is_pending_then_late_ack_releases",
             "late_ack_at_challenge_expiry_is_withheld", "release_one_second_before_challenge_expiry",
             "release_at_challenge_expiry_is_withheld", "release_at_allow_horizon_is_withheld",
@@ -1071,6 +1072,7 @@ final class ClaimTests: XCTestCase {
             .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
+            "forged_committed_outcome_is_rejected": 1,
             "release_without_acknowledgement_is_pending_then_late_ack_releases": 7,
             "late_ack_at_challenge_expiry_is_withheld": 6, "release_one_second_before_challenge_expiry": 4,
             "release_at_challenge_expiry_is_withheld": 4, "release_at_allow_horizon_is_withheld": 4,
@@ -1150,6 +1152,7 @@ final class ClaimTests: XCTestCase {
             "release": ["op", "request", "checkpoint", "expect"],
             "set_time": ["op", "time", "expect"], "set_ack_withheld": ["op", "withheld", "expect"],
             "resume": ["op", "request", "expect"], "abandon": ["op", "expect"],
+            "release_forged": ["op", "expect"],
             "claim_only": ["op", "request", "expect"], "recover": ["op", "request", "expect"],
             "finalize": ["op", "request", "terminal_b64", "body_b64", "expect"],
             "recover_direct": ["op", "request", "terminal_b64", "body_b64", "expect"],
@@ -1788,6 +1791,14 @@ final class ClaimTests: XCTestCase {
                         XCTAssertEqual(try Ratify.decodeVerificationReceipt(decision.receiptWire).sequence,
                             Int64(want.int("receipt_sequence")), at)
                     } else { XCTAssertNil(result.decision, at) }
+                case "release_forged":
+                    XCTAssertEqual(Set(want.keys), ["release_status", "release_reason"], at)
+                    let forged = try Store.forgedCommittedOutcome()
+                    let result = try await Ratify.releaseDecision(forged, signedReceipt: nil,
+                        verifierPublicKey: key.publicKey, logId: logId, claimStore: store, checkpoint: store)
+                    XCTAssertEqual(result.status.rawValue, want.s("release_status"), at)
+                    XCTAssertEqual(result.reason, want.s("release_reason"), at)
+                    XCTAssertNil(result.decision, at)
                 default:
                     XCTFail("\(at): unsupported operation")
                 }

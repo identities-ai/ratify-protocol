@@ -575,6 +575,19 @@ pub struct FfiCommittedOutcome {
     pub(crate) inner: CommittedV2Outcome,
 }
 
+/// Keeps the binding shape identical in test and release builds. Only a test
+/// build can create the deliberately invalid handoff.
+#[uniffi::export]
+pub fn ffi_forged_committed_outcome_test_only() -> FfiResult<Arc<FfiCommittedOutcome>> {
+    call(|| {
+        #[cfg(feature = "test-hooks")]
+        { Ok(FfiCommittedOutcome::new(core::forged_committed_outcome_test_only())) }
+        #[cfg(not(feature = "test-hooks"))]
+        { Err(crate::error::protocol(core::V2ErrorClass::ConfigurationInvalid,
+            "forged outcomes are available only in conformance test builds")) }
+    })
+}
+
 impl FfiCommittedOutcome {
     pub(crate) fn new(inner: CommittedV2Outcome) -> Arc<Self> {
         Arc::new(Self {
@@ -638,6 +651,15 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use std::sync::Mutex;
+
+    #[test]
+    fn forged_outcome_hook_is_test_build_only() {
+        let result = ffi_forged_committed_outcome_test_only();
+        #[cfg(feature = "test-hooks")]
+        assert_eq!(result.unwrap().inner.claim_id(), "");
+        #[cfg(not(feature = "test-hooks"))]
+        assert!(result.is_err());
+    }
 
     #[derive(Default)]
     struct TestStore(Mutex<Vec<&'static str>>);

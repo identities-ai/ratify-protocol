@@ -8,6 +8,7 @@ import com.ratifyprotocol.ClaimResult
 import com.ratifyprotocol.EvaluationProgress
 import com.ratifyprotocol.InterruptedClaim
 import com.ratifyprotocol.CommittedClaim
+import com.ratifyprotocol.CommittedOutcome
 import com.ratifyprotocol.CommittedClaimStore
 import com.ratifyprotocol.ReleaseClaimStore
 import com.ratifyprotocol.ReleaseRecord
@@ -20,6 +21,9 @@ import com.ratifyprotocol.RateAtFinalizationClaimStore
 /** Rust Part B reference store for conformance tests. */
 public class Store internal constructor(internal val bridge: ReferenceStoreBridge) :
     ClaimStore, CommittedClaimStore, ReleaseClaimStore, ReceiptPublisher, ReceiptCheckpoint {
+    public companion object {
+        public fun forgedCommittedOutcome(): CommittedOutcome = ReferenceStoreBridge.forgedCommittedOutcomeTestOnly()
+    }
     public constructor(now: Long, leaseSeconds: Long, logId: String, verifierKey: SoftwarePrivateKey) :
         this(ReferenceStoreBridge(now, leaseSeconds, logId, verifierKey))
 

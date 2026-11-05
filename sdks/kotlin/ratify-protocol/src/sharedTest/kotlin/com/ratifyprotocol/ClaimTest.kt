@@ -1316,6 +1316,7 @@ class ClaimTest {
     @Test fun lifecycleBasicReleaseScenarios() = runBlocking {
         val corpus = Corpus.load("lifecycle-scenarios.json")
         val names = setOf("allow_published_acknowledged_released", "release_without_receipt_is_pending",
+            "forged_committed_outcome_is_rejected",
             "release_without_acknowledgement_is_pending_then_late_ack_releases",
             "late_ack_at_challenge_expiry_is_withheld", "release_one_second_before_challenge_expiry",
             "release_at_challenge_expiry_is_withheld", "release_at_allow_horizon_is_withheld",
@@ -1371,6 +1372,7 @@ class ClaimTest {
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
+            "forged_committed_outcome_is_rejected" to 1,
             "release_without_acknowledgement_is_pending_then_late_ack_releases" to 7,
             "late_ack_at_challenge_expiry_is_withheld" to 6, "release_one_second_before_challenge_expiry" to 4,
             "release_at_challenge_expiry_is_withheld" to 4, "release_at_allow_horizon_is_withheld" to 4,
@@ -1430,6 +1432,7 @@ class ClaimTest {
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
+            "release_forged" to setOf("op", "expect"),
             "set_time" to setOf("op", "time", "expect"),
             "set_ack_withheld" to setOf("op", "withheld", "expect"),
             "resume" to setOf("op", "request", "expect"),
@@ -1870,6 +1873,14 @@ class ClaimTest {
                             assertEquals(at, want.getLong("release_time"), decision.releaseTime)
                             assertEquals(at, want.getLong("receipt_sequence"), decodeVerificationReceipt(decision.receiptWire).sequence)
                         } else assertEquals(at, null, result.decision)
+                    }
+                    "release_forged" -> {
+                        assertEquals(at, setOf("release_status", "release_reason"), want.keys().asSequence().toSet())
+                        val result = releaseDecision(ReferenceStore.forgedCommittedOutcome(), null,
+                            key.publicKey, logId, store, store)
+                        assertEquals(at, want.getString("release_status"), result.status.spelling)
+                        assertEquals(at, want.getString("release_reason"), result.reason)
+                        assertEquals(at, null, result.decision)
                     }
                     else -> error("$at: unsupported operation")
                 }

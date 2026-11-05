@@ -4,6 +4,7 @@ import androidx.annotation.RestrictTo
 import com.ratifyprotocol.internal.ffi.FfiReferenceStore
 import com.ratifyprotocol.internal.ffi.FfiReferenceStoreReply
 import com.ratifyprotocol.internal.ffi.FfiReferenceStoreFailure
+import com.ratifyprotocol.internal.ffi.ffiForgedCommittedOutcomeTestOnly
 
 internal fun referenceStoreError(failure: FfiReferenceStoreFailure): Throwable = when (failure.kind) {
     "classified" -> StoreError.Classified(
@@ -23,6 +24,10 @@ internal fun referenceStoreError(failure: FfiReferenceStoreFailure): Throwable =
 /** Bridge for the separate testing artifact. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 public class ReferenceStoreBridge internal constructor(internal val handle: FfiReferenceStore) {
+    public companion object {
+        public fun forgedCommittedOutcomeTestOnly(): CommittedOutcome =
+            CommittedOutcome(ffi { ffiForgedCommittedOutcomeTestOnly() })
+    }
     public constructor(now: Long, leaseSeconds: Long, logId: String, verifierKey: SoftwarePrivateKey) :
         this(ffi { FfiReferenceStore(now, leaseSeconds, logId, verifierKey.handle) })
 

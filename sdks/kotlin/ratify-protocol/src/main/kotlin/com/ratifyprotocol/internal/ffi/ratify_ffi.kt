@@ -1149,6 +1149,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_load_expected_challenge(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_forged_committed_outcome_test_only(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_recover_interrupted_claim(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_resume_committed_claim(
@@ -2112,6 +2114,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_load_expected_challenge(`store`: Long,`token`: Long,`namespace`: RustBuffer.ByValue,`replayEpoch`: Long,`challenge`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_forged_committed_outcome_test_only(uniffi_out_err: UniffiRustCallStatus,
+    ): Long
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_recover_interrupted_claim(`store`: Long,`token`: Long,`claimId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_resume_committed_claim(`store`: Long,`token`: Long,`claimId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2510,6 +2514,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_load_expected_challenge() and 0xFFFF) != 24741) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_forged_committed_outcome_test_only() and 0xFFFF) != 49078) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_recover_interrupted_claim() and 0xFFFF) != 6951) {
@@ -22506,6 +22513,21 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
         FfiConverterString.lower(`namespace`),
         FfiConverterLong.lower(`replayEpoch`),
         FfiConverterByteArray.lower(`challenge`),_status)
+}
+    )
+    }
+
+
+        /**
+         * Keeps the binding shape identical in test and release builds. Only a test
+         * build can create the deliberately invalid handoff.
+         */
+    @Throws(FfiException::class) internal fun `ffiForgedCommittedOutcomeTestOnly`(): FfiCommittedOutcome {
+            return FfiConverterTypeFfiCommittedOutcome.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_forged_committed_outcome_test_only(
+
+        _status)
 }
     )
     }

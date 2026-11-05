@@ -208,6 +208,7 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "ReferenceStoreBridge.forgedCommittedOutcomeTestOnly": "test-build-only invalid handoff for release conformance",
     "CommittedClaim.claimRecord": "optional exact canonical sealed-claim bytes at the mobile callback boundary",
     "ReferenceStoreBridge.cloneStore": "test-only reference store clone",
     "ReferenceStoreBridge.setTime": "test-only reference clock control",

@@ -5,6 +5,10 @@ import Foundation
 public final class Store: ClaimStore, CommittedClaimStore, ReleaseClaimStore, ReceiptPublisher, ReceiptCheckpoint {
     let bridge: ReferenceStoreBridge
 
+    public static func forgedCommittedOutcome() throws(RatifyError) -> CommittedOutcome {
+        try ReferenceStoreBridge.forgedCommittedOutcomeTestOnly()
+    }
+
     public init(now: Int64, leaseSeconds: Int64, logId: String, verifierKey: SoftwarePrivateKey) throws(RatifyError) {
         bridge = try ReferenceStoreBridge(now: now, leaseSeconds: leaseSeconds, logId: logId, verifierKey: verifierKey)
     }

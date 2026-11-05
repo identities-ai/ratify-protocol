@@ -20,7 +20,7 @@ required-features = ["bindgen"]
 bindgen = ["uniffi/cli"]
 # Test-only: a one-shot panic injection point in every guarded export,
 # armed by the C symbol `ratify_ffi_test_arm_panic`. Never in a shipped build.
-test-hooks = []
+test-hooks = ["ratify-protocol/test-hooks"]
 
 [dependencies]
 # Exact pin: this crate wraps one core version; release-sync checks it.

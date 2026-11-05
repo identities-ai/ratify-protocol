@@ -15408,6 +15408,17 @@ func ffiLoadExpectedChallenge(store: FfiChallengeIssuanceStore, token: FfiCancel
     )
 })
 }
+/**
+ * Keeps the binding shape identical in test and release builds. Only a test
+ * build can create the deliberately invalid handoff.
+ */
+func ffiForgedCommittedOutcomeTestOnly()throws  -> FfiCommittedOutcome  {
+    return try  FfiConverterTypeFfiCommittedOutcome_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_forged_committed_outcome_test_only(uniffiCallStatus
+    )
+})
+}
 func ffiRecoverInterruptedClaim(store: FfiClaimStore, token: FfiCancelToken, claimId: String)throws  -> FfiCommittedOutcome  {
     return try  FfiConverterTypeFfiCommittedOutcome_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -16656,6 +16667,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_load_expected_challenge() != 24741) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_forged_committed_outcome_test_only() != 49078) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_recover_interrupted_claim() != 6951) {

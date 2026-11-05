@@ -4,6 +4,10 @@ import Foundation
 @_spi(TestSupport) public final class ReferenceStoreBridge: Sendable {
     let handle: FfiReferenceStore
 
+    public static func forgedCommittedOutcomeTestOnly() throws(RatifyError) -> CommittedOutcome {
+        try CommittedOutcome(ffi { try ffiForgedCommittedOutcomeTestOnly() })
+    }
+
     public init(now: Int64, leaseSeconds: Int64, logId: String, verifierKey: SoftwarePrivateKey) throws(RatifyError) {
         handle = try ffi { try FfiReferenceStore(now: now, leaseSeconds: leaseSeconds, logId: logId, verifierKey: verifierKey.handle) }
     }

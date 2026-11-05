@@ -811,6 +811,7 @@ public abstract interface class com/ratifyprotocol/ReceiverBindingHook {
 }
 
 public final class com/ratifyprotocol/ReferenceStoreBridge {
+	public static final field Companion Lcom/ratifyprotocol/ReferenceStoreBridge$Companion;
 	public fun <init> (JJLjava/lang/String;Lcom/ratifyprotocol/SoftwarePrivateKey;)V
 	public final fun abandonPendingReceipts ()Ljava/util/List;
 	public final fun acknowledge (Ljava/lang/String;J[B[B)Lcom/ratifyprotocol/CheckpointAcknowledgement;
@@ -834,6 +835,10 @@ public final class com/ratifyprotocol/ReferenceStoreBridge {
 	public final fun setAcknowledgementWithheld (Z)V
 	public final fun setSignerFailure (Z)V
 	public final fun setTime (J)V
+}
+
+public final class com/ratifyprotocol/ReferenceStoreBridge$Companion {
+	public final fun forgedCommittedOutcomeTestOnly ()Lcom/ratifyprotocol/CommittedOutcome;
 }
 
 public abstract interface class com/ratifyprotocol/ReleaseClaimStore : com/ratifyprotocol/AuthoritativeClock {

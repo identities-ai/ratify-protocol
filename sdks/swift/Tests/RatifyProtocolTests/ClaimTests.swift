@@ -1060,7 +1060,7 @@ final class ClaimTests: XCTestCase {
             "dual_root_set_names_other_verifier", "dual_root_concurrent_completion",
             "device_release_requires_component_ack", "device_power_loss_before_ack",
             "device_power_loss_after_ack", "device_checkpoint_storage_full",
-            "device_offline_recovery_upload"]
+            "device_offline_recovery_upload", "device_staged_status_goes_stale"]
         let scenarios = (corpus.arr("scenarios") + corpus.arr("profile_scenarios"))
             .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
@@ -1129,7 +1129,8 @@ final class ClaimTests: XCTestCase {
             "dual_root_swapped_verifier": 10, "dual_root_set_names_other_verifier": 10,
             "dual_root_concurrent_completion": 9, "device_release_requires_component_ack": 6,
             "device_power_loss_before_ack": 9, "device_power_loss_after_ack": 8,
-            "device_checkpoint_storage_full": 7, "device_offline_recovery_upload": 13]
+            "device_checkpoint_storage_full": 7, "device_offline_recovery_upload": 13,
+            "device_staged_status_goes_stale": 9]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1433,6 +1434,9 @@ final class ClaimTests: XCTestCase {
                     } else if name == "checkpoint_fork_freezes_log" && index == 6 {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, 1_800_000_007, at)
+                    } else if name == "device_staged_status_goes_stale" && index == 5 {
+                        XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
+                        XCTAssertEqual(currentTime, 1_800_003_600, at)
                     } else if rateStore != nil {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, rateTime, at)

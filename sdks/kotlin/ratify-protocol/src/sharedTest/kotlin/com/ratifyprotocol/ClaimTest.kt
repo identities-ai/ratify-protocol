@@ -238,7 +238,8 @@ class ClaimTest {
         val corpus = Corpus.load("lifecycle-scenarios.json")
         val expectedCounts = mapOf("device_release_requires_component_ack" to 6,
             "device_power_loss_before_ack" to 9, "device_power_loss_after_ack" to 8,
-            "device_checkpoint_storage_full" to 7, "device_offline_recovery_upload" to 13)
+            "device_checkpoint_storage_full" to 7, "device_offline_recovery_upload" to 13,
+            "device_staged_status_goes_stale" to 9)
         val scenarios = corpus.arr("profile_scenarios").filter { expectedCounts.containsKey(it.getString("name")) }
         assertEquals(expectedCounts.size, scenarios.size)
         val keys = Corpus.load("keys.json").getJSONArray("keys")
@@ -262,9 +263,11 @@ class ClaimTest {
             when (op) {
                 "verify" -> {
                     assertEquals(at, setOf("op", "request", "expect"), step.keys().asSequence().toSet())
-                    assertEquals(at, setOf("stage", "decision", "decision_reason", "allow_horizon"),
+                    assertEquals(at, if (want.has("allow_horizon"))
+                        setOf("stage", "decision", "decision_reason", "allow_horizon")
+                        else setOf("stage", "decision", "decision_reason"),
                         want.keys().asSequence().toSet())
-                    val req = request(name, corpusName = "lifecycle-scenarios.json")
+                    val req = request(name, corpusName = "lifecycle-scenarios.json", atTime = store.now())
                     assertEquals(at, req.now, store.now())
                     val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(name), req)
                     val result = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
@@ -273,7 +276,8 @@ class ClaimTest {
                     val body = JSONObject(String(value.receiptBody))
                     assertEquals(at, want.getString("decision"), body.getString("decision"))
                     assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
-                    assertEquals(at, want.getLong("allow_horizon"), value.allowHorizon)
+                    assertEquals(at, if (want.has("allow_horizon")) want.getLong("allow_horizon") else null,
+                        value.allowHorizon)
                     committed[name] = value
                 }
                 "publish" -> {

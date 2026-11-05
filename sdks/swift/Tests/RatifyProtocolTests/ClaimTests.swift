@@ -1061,7 +1061,8 @@ final class ClaimTests: XCTestCase {
             "device_release_requires_component_ack", "device_power_loss_before_ack",
             "device_power_loss_after_ack", "device_checkpoint_storage_full",
             "device_offline_recovery_upload", "device_staged_status_goes_stale",
-            "device_rtc_regression"]
+            "device_rtc_regression", "device_planted_release_record",
+            "device_altered_release_record"]
         let scenarios = (corpus.arr("scenarios") + corpus.arr("profile_scenarios"))
             .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
@@ -1131,7 +1132,8 @@ final class ClaimTests: XCTestCase {
             "dual_root_concurrent_completion": 9, "device_release_requires_component_ack": 6,
             "device_power_loss_before_ack": 9, "device_power_loss_after_ack": 8,
             "device_checkpoint_storage_full": 7, "device_offline_recovery_upload": 13,
-            "device_staged_status_goes_stale": 9, "device_rtc_regression": 17]
+            "device_staged_status_goes_stale": 9, "device_rtc_regression": 17,
+            "device_planted_release_record": 7, "device_altered_release_record": 9]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],

@@ -77,7 +77,7 @@ ABI column counts only runners that call `ratify_v2_*` exports.
 | `challenge-claim.json` (claim ID inputs) | Yes | Yes | Yes | Yes | Yes |
 | `challenge-issuance.json` (11 scenarios) | Yes | Yes | Yes | Yes | Yes |
 | `concurrency-scenarios.json` (18 scenarios) | Yes | Yes | Yes | Yes | Yes |
-| `cross-sdk/` (5 fixtures, one per SDK, 4 verifier and release scenarios each) | Yes | Yes | Yes | Yes | Yes |
+| `cross-sdk/` (7 fixtures, one per SDK, 4 verifier and release scenarios each) | Yes | Yes | Yes | Yes | Yes |
 | `digest-functions.json` (25 cases) | Yes | Yes | Yes | Yes | Yes |
 | `delegation-signature.json` (signature primitive and negatives) | Yes | Yes | Yes | Yes | Yes |
 | `device-state.json` (6 complete-state projections) | Yes | Yes | Yes | Yes | Yes |
@@ -125,18 +125,23 @@ with its `objects.json` positive procedure. The format and procedure are in
 are the producing SDK and columns the verifying SDK. A cell is filled only
 when that verifier's suite runs that fixture and passes.
 
-| Producer (row), verifier (column) | Go | TypeScript | Python v2 | Rust | C ABI |
-|---|---|---|---|---|---|
-| Go (`go.json`, `go run ./cmd/ratify-v2-cross-sdk`) | Pass | Pass | Pass | Pass | Pass |
-| TypeScript (`typescript.json`, `npm run generate:cross-sdk`) | Pass | Pass | Pass | Pass | Pass |
-| Python v2 (`python.json`, `python tests/gen_cross_sdk_fixture.py`) | Pass | Pass | Pass | Pass | Pass |
-| Rust (`rust.json`, `cargo run --example v2_cross_sdk_fixture`) | Pass | Pass | Pass | Pass | Pass |
-| C ABI (`c.json`, `RATIFY_WRITE_CROSS_SDK=1 cargo test --test v2c_cross_sdk`) | Pass | Pass | Pass | Pass | Pass |
+| Producer (row), verifier (column) | Go | TypeScript | Python v2 | Rust | C ABI | Swift | Kotlin |
+|---|---|---|---|---|---|---|---|
+| Go (`go.json`, `go run ./cmd/ratify-v2-cross-sdk`) | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| TypeScript (`typescript.json`, `npm run generate:cross-sdk`) | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| Python v2 (`python.json`, `python tests/gen_cross_sdk_fixture.py`) | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| Rust (`rust.json`, `cargo run --example v2_cross_sdk_fixture`) | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| C ABI (`c.json`, `RATIFY_WRITE_CROSS_SDK=1 cargo test --test v2c_cross_sdk`) | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| Swift (`swift.json`, `RATIFY_GENERATE_SWIFT_FIXTURE=1 swift test --filter SwiftCrossSdkGeneratorTests`) | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| Kotlin (`kotlin.json`, `RATIFY_GENERATE_KOTLIN_FIXTURE=1 ./gradlew :ratify-protocol:testDebugUnitTest --tests com.ratifyprotocol.KotlinCrossSdkGeneratorTest`) | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
 
 The verifying tests are Go `TestV2CrossSDKFixtures` (`tests/cross_sdk_v2_test.go`),
 TypeScript `test/v2/cross_sdk_v2.test.ts`, Python `tests/test_cross_sdk_v2.py`,
-Rust `tests/v2_cross_sdk.rs`, and C `tests/v2c_cross_sdk.rs` together with the
-compiled C program of `scripts/test-v2-c-abi.sh`. All 25 cells pass.
+Rust `tests/v2_cross_sdk.rs`, C `tests/v2c_cross_sdk.rs`, Swift `CrossSdkObjectTests`,
+and Kotlin `CrossSdkObjectVectors`. All 49 cells passed in-tree on 2026-11-05;
+Python ran with the matching `ratify-protocol-native-v2` wheel and had no skips.
+The compiled C program of `sdks/c/scripts/test-v2-c-abi.sh` also passed with
+seven fixtures, 105 objects, 133 signatures, and 7244 checks with zero failures.
 
 ## Corpus changes since alpha.1 (beta reconciliation)
 

@@ -14,7 +14,7 @@ from cross_sdk_v2 import KINDS, SCENARIO_NAMES, build_fixture, verify_fixture
 from ratify_protocol.v2 import _native
 
 FIXTURES = sorted(CROSS_SDK_DIR.glob("*.json")) if CROSS_SDK_DIR.exists() else []
-KNOWN_SDKS = {"go", "typescript", "python", "rust", "c"}
+KNOWN_SDKS = {"go", "typescript", "python", "rust", "c", "swift", "kotlin"}
 
 
 def test_cross_sdk_directory_holds_only_known_fixtures():

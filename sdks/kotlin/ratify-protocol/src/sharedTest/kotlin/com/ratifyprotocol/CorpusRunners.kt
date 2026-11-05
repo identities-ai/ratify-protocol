@@ -42,6 +42,11 @@ object CorpusRunners {
         "device-state.json" to DeviceStateVectors::run,
         "verifier-ordering.json" to VerifierOrderingVectors::run,
         "concurrency-scenarios.json" to ConcurrencyVectors::run,
+        "cross-sdk" to {
+            CrossSdkObjectVectors.run()
+            CrossSdkObjectVectors.scenarios()
+            Manifest.record("cross-sdk", Manifest.count("cross-sdk-objects") + Manifest.count("cross-sdk-scenarios"))
+        },
         "lifecycle-scenarios.json" to {
             val tests = ClaimTest()
             tests.dualRootBothReleasedExecutesOnce()
@@ -51,9 +56,7 @@ object CorpusRunners {
     )
 
     /** Entries whose runners land in a later milestone (build plan §9). */
-    val pending: Map<String, String> = mapOf(
-        "cross-sdk" to "M4",
-    )
+    val pending: Map<String, String> = emptyMap()
 
     fun runAll() {
         val entries = Corpus.list("v2").toSet()

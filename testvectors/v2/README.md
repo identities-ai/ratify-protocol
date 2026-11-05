@@ -64,7 +64,7 @@ tests.
 [SPEC-v2 §8.1](../../SPEC-v2.md#8-conformance-and-release-gates) requires
 fixtures produced by every SDK to be verified by every other SDK. Each SDK
 writes one file, `cross-sdk/<sdk>.json`, where `<sdk>` is one of `go`,
-`typescript`, `python`, `rust`, or `c`. Each SDK's conformance suite verifies
+`typescript`, `python`, `rust`, `c`, `swift`, or `kotlin`. Each SDK's conformance suite verifies
 every file present in the directory, including its own, and fails on any
 error. A missing file from another SDK is not a failure; that SDK's
 column in the cross-SDK matrix of
@@ -79,6 +79,11 @@ values below so verifiers can recompute every digest. The producer MUST
 verify its own output before writing it. The Go fixture is written by
 `go run ./cmd/ratify-v2-cross-sdk -out testvectors/v2/cross-sdk/go.json` and
 verified by `TestV2CrossSDKFixtures` (`tests/cross_sdk_v2_test.go`).
+The Swift fixture is generated with
+`RATIFY_GENERATE_SWIFT_FIXTURE=1 swift test --filter SwiftCrossSdkGeneratorTests`
+from the repository root. The Kotlin fixture is generated with
+`RATIFY_GENERATE_KOTLIN_FIXTURE=1 ./gradlew :ratify-protocol:testDebugUnitTest --tests com.ratifyprotocol.KotlinCrossSdkGeneratorTest`
+from `sdks/kotlin`. Both generators verify their signed objects before writing.
 
 ### File schema
 
@@ -340,7 +345,7 @@ vectors that closed it, or what remains open.
 | Composed transaction verification | §5.7 | `transaction-verification.json`, `object-negatives.json` | |
 | Archival results | §6.10 | `archival.json`, `object-negatives.json` (proof bundle) | Closed: per-object shared vectors, `archival.json` (19 cases, every object kind) |
 | External signer | §3.2 | `external-signer.json`, `objects.json` (`tr`, `mu`), `hedged-signatures.json` | Closed: key-binding and invalid-component shared scenarios, `external-signer.json` (17 cases) |
-| Cross-SDK fixtures | §8.1 | `cross-sdk/go.json`, `typescript.json`, `python.json`, `rust.json`, and `c.json`, each verified by all five SDKs | Closed: every fixture carries the 4 verifier and release scenarios (see cross-sdk/), and every SDK replays every fixture's scenarios |
+| Cross-SDK fixtures | §8.1 | `cross-sdk/go.json`, `typescript.json`, `python.json`, `rust.json`, `c.json`, `swift.json`, and `kotlin.json` | Seven fixtures, each with four verifier and release scenarios; see the compatibility matrix for the latest per-SDK run evidence |
 | Error classes | §2.7 | every file; `digest-functions.json` (25 cases) | Closed: a shared vector for every one of the 49 classes, previously missing for `unsupported_object_type` (`digest-functions.json`), `claim_not_found` and `evaluation_cancelled` (`lifecycle-scenarios.json`), and `transaction_party_mismatch` (`object-negatives.json`); `TestV2CorpusAssertsEveryErrorClass` fails if a class loses its last vector |
 
 Error classes are the closed list of SPEC-v2 §2.7, declared in `errors_v2.go` (`V2ErrorClass`). Precedence for a

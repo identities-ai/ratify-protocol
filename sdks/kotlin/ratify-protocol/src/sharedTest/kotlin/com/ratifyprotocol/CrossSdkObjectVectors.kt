@@ -8,7 +8,7 @@ import java.util.Base64
 object CrossSdkObjectVectors {
     fun run() {
         val names = Corpus.list("v2/cross-sdk").filter { it.endsWith(".json") }.sorted()
-        check(names.toSet() == setOf("c", "go", "python", "rust", "typescript").map { "$it.json" }.toSet())
+        check(names.toSet() == setOf("c", "go", "kotlin", "python", "rust", "swift", "typescript").map { "$it.json" }.toSet())
         val tally = Tally("cross-sdk-objects")
         var keyCount = 0
         var objectCount = 0

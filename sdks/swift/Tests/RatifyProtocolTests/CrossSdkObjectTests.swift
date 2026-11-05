@@ -10,7 +10,7 @@ final class CrossSdkObjectTests: XCTestCase {
     func testOtherSdkObjects() throws {
         let names = try FileManager.default.contentsOfDirectory(atPath: Corpus.url("cross-sdk").path)
             .filter { $0.hasSuffix(".json") }.sorted()
-        XCTAssertEqual(Set(names), Set(["c", "go", "python", "rust", "typescript"].map { "\($0).json" }))
+        XCTAssertEqual(Set(names), Set(["c", "go", "kotlin", "python", "rust", "swift", "typescript"].map { "\($0).json" }))
         let t = Tally("cross-sdk-objects")
         var keysCount = 0, objectsCount = 0, signaturesCount = 0, digestsCount = 0
         for file in names {

@@ -1076,7 +1076,7 @@ pub fn ratify_protocol::v2::CrossSdkVerifyV2::serialize<__S>(&self, __S) -> core
 pub fn ratify_protocol::v2::CrossSdkVerifyV2::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
 pub const ratify_protocol::v2::cross_sdk::CROSS_SDK_KEY_NAMES_V2: [&str; 11]
 pub const ratify_protocol::v2::cross_sdk::CROSS_SDK_KINDS_V2: [&str; 9]
-pub const ratify_protocol::v2::cross_sdk::CROSS_SDK_NAMES_V2: [&str; 5]
+pub const ratify_protocol::v2::cross_sdk::CROSS_SDK_NAMES_V2: [&str; 7]
 pub const ratify_protocol::v2::cross_sdk::CROSS_SDK_NOW_V2: i64
 pub const ratify_protocol::v2::cross_sdk::CROSS_SDK_SCENARIO_NAMES_V2: [&str; 4]
 pub fn ratify_protocol::v2::cross_sdk::generate_cross_sdk_fixture_v2(&str, &str, &str) -> ratify_protocol::v2::V2Result<alloc::vec::Vec<u8>>
@@ -3868,7 +3868,7 @@ pub const ratify_protocol::v2::CONSTRAINT_RESOURCE_PATH: &str
 pub const ratify_protocol::v2::CONSTRAINT_TIME_WINDOW: &str
 pub const ratify_protocol::v2::CROSS_SDK_KEY_NAMES_V2: [&str; 11]
 pub const ratify_protocol::v2::CROSS_SDK_KINDS_V2: [&str; 9]
-pub const ratify_protocol::v2::CROSS_SDK_NAMES_V2: [&str; 5]
+pub const ratify_protocol::v2::CROSS_SDK_NAMES_V2: [&str; 7]
 pub const ratify_protocol::v2::CROSS_SDK_NOW_V2: i64
 pub const ratify_protocol::v2::CROSS_SDK_SCENARIO_NAMES_V2: [&str; 4]
 pub const ratify_protocol::v2::FRESHNESS_UNVERIFIED_V2: &str

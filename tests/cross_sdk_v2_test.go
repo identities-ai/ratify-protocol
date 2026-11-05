@@ -186,7 +186,7 @@ func TestV2CrossSDKFixtures(t *testing.T) {
 		found[name] = true
 		t.Run(name, func(t *testing.T) { v2CheckCrossSDKFile(t, path, name) })
 	}
-	for _, sdk := range []string{"c", "go", "python", "rust", "typescript"} {
+	for _, sdk := range []string{"c", "go", "kotlin", "python", "rust", "swift", "typescript"} {
 		if !found[sdk] {
 			t.Errorf("testvectors/v2/cross-sdk/%s.json is missing", sdk)
 		}

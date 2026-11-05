@@ -36,6 +36,12 @@ final class CorpusTests: XCTestCase {
         "device-state.json": DeviceStateRunner.run,
         "verifier-ordering.json": VerifierOrderingRunner.run,
         "concurrency-scenarios.json": ConcurrencyRunner.run,
+        "cross-sdk": {
+            let test = CrossSdkObjectTests(selector: #selector(CrossSdkObjectTests.testOtherSdkObjects))
+            try test.testOtherSdkObjects()
+            try await test.testOtherSdkVerifierAndReleaseScenarios()
+            Manifest.record("cross-sdk", Manifest.count("cross-sdk-objects") + Manifest.count("cross-sdk-scenarios"))
+        },
         "lifecycle-scenarios.json": {
             let test = ClaimTests(selector: #selector(ClaimTests.corpusHarness))
             try await test.testLifecycleBasicReleaseScenarios()
@@ -43,9 +49,7 @@ final class CorpusTests: XCTestCase {
     ]
 
     /// Entries whose runners land in a later milestone (build plan §9).
-    static let pending: [String: String] = [
-        "cross-sdk": "M4",
-    ]
+    static let pending: [String: String] = [:]
 
     func testCorpus() async throws {
         let entries = Set(try FileManager.default.contentsOfDirectory(atPath: Corpus.dir.path))

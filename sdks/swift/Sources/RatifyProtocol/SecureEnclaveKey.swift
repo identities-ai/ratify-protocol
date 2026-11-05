@@ -10,7 +10,9 @@ import Security
 /// SDK verifies both returned components before using them.
 @available(iOS 26.0, macOS 26.0, *)
 public final class SecureEnclaveKey: Sendable {
-    private let mldsa: SecureEnclave.MLDSA65.PrivateKey
+    // ObjC realizes class metadata on iOS 17 before availability checks; a
+    // stored iOS 26-only type crashes the test host during class discovery.
+    private let mldsa: any Sendable
     private let edSeed: Data
     public let publicKey: HybridPublicKey
     public let keyId: String
@@ -55,6 +57,7 @@ public final class SecureEnclaveKey: Sendable {
     /// This key's type 0x02 storage record. It is device-bound by design: the
     /// Secure Enclave data representation works only on this device.
     public func storageRecord() throws(RatifyError) -> Data {
+        let mldsa = self.mldsa as! SecureEnclave.MLDSA65.PrivateKey
         let fields = [FfiStorageField(tag: 0x01, value: edSeed),
                       FfiStorageField(tag: 0x03, value: publicKey.mlDsa65),
                       FfiStorageField(tag: 0x04, value: mldsa.dataRepresentation)]
@@ -83,6 +86,7 @@ public final class SecureEnclaveKey: Sendable {
     /// Sign one SDK-computed request in direct mode: Ed25519 over `M`, and
     /// ML-DSA-65 over `M` with the SDK's context, in the Secure Enclave.
     func sign(_ request: SignRequest, contextOverride: Data? = nil) throws -> HybridSignature {
+        let mldsa = self.mldsa as! SecureEnclave.MLDSA65.PrivateKey
         guard request.mode == .direct, let sdkCtx = request.mlDsaContext, request.publicKey == publicKey else {
             throw RatifyError.signing(.configurationInvalid, kind: .provider, message: "request is not for this key in direct mode")
         }

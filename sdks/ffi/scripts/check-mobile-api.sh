@@ -26,7 +26,7 @@ swift build -q
 headers="$(ls -d sdks/swift/build/RatifyProtocolFFI.xcframework/macos-*/Headers)"
 xcrun swift-api-digester -dump-sdk -module RatifyProtocol -o "$tmp/swift-api.json" \
   -I .build/debug/Modules -I "$headers" \
-  -sdk "$(xcrun --show-sdk-path --sdk macosx)" -target arm64-apple-macosx14.0
+  -sdk "$(xcrun --show-sdk-path --sdk macosx)" -target "$(uname -m)-apple-macosx14.0"
 # Full public signatures: Kotlin through BCV's committed .api dump, Swift
 # through the committed digester baseline. UPDATE_API=1 rewrites both.
 mode="${UPDATE_API:+update}"

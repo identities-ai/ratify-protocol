@@ -22,7 +22,12 @@ for a in $abis; do targets+=(-t "$a"); done
 (cd "$ffi" && cargo ndk --platform 28 "${targets[@]}" -o "$out" build --lib --release ${features:+--features "$features"})
 
 host_library="target/release/libratify_protocol_ffi.dylib"
-if [ "$(uname -s)" = Linux ]; then host_library="target/release/libratify_protocol_ffi.so"; fi
+if [ "$(uname -s)" = Linux ]; then
+  # The release profile strips ELF symbols, including UniFFI metadata. Keep
+  # the release .so for host tests, but generate bindings from a debug .so.
+  host_library="target/debug/libratify_protocol_ffi.so"
+  (cd "$ffi" && cargo build --lib ${features:+--features "$features"})
+fi
 (cd "$ffi" && cargo build --lib --release ${features:+--features "$features"} && \
   cargo run -q --features bindgen --bin uniffi-bindgen -- generate --no-format \
     --library "$host_library" \

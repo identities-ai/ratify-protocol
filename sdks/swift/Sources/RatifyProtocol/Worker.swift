@@ -12,10 +12,12 @@ func onWorker<T: Sendable>(
     _ body: @escaping @Sendable (FfiCancelToken) throws(RatifyError) -> T
 ) async throws(RatifyError) -> T {
     let token = try ffi { try FfiCancelToken(timeoutMs: timeout.map(milliseconds)) }
+    let handoff = NSLock()
     let result: Result<T, RatifyError> = await withTaskCancellationHandler {
         await withCheckedContinuation { (cont: CheckedContinuation<Result<T, RatifyError>, Never>) in
             let thread = Thread {
-                cont.resume(returning: Result { () throws(RatifyError) in try body(token) })
+                let value = Result { () throws(RatifyError) in try body(token) }
+                handoff.withLock { cont.resume(returning: value) }
             }
             thread.name = "ratify-protocol-worker"
             thread.start()
@@ -23,6 +25,7 @@ func onWorker<T: Sendable>(
     } onCancel: {
         _ = try? token.cancel()
     }
+    handoff.withLock { }
     return try result.get()
 }
 

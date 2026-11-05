@@ -613,10 +613,7 @@ mod tests {
             key,
             Arc::new(Ed(ed)),
         );
-        assert!(
-            matches!(r, Err(crate::error::FfiError::Signing { .. })),
-            "{r:?}"
-        );
+        assert!(matches!(r, Err(crate::error::FfiError::Signing { .. })));
     }
 }
 

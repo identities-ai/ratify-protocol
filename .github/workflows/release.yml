@@ -282,8 +282,8 @@ jobs:
           echo "✓ tag $tag matches all $LINE SDK versions"
 
   # ──────────────────────────────────────────────────────────────────────────
-  # A v2 dry run builds the same mobile candidates that the tag will need.
-  # This job has read-only permissions and never publishes either package.
+  # A v2 dry run builds candidates. A tag verifies the prebuilt draft assets;
+  # rebuilding after the checksum was committed would break SwiftPM provenance.
   mobile-candidates:
     name: Mobile SDK release candidates
     if: needs.gate-tests.outputs.line == 'v2'
@@ -295,21 +295,36 @@ jobs:
         with:
           ref: ${{ env.RELEASE_REF }}
       - uses: dtolnay/rust-toolchain@stable
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios,aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
       - uses: actions/setup-java@v6
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
         with:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v4
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
       - name: Install Android build components and cargo-ndk
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
         run: |
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
           cargo install cargo-ndk --version 4.1.2 --locked
       - name: Build and verify mobile release candidates
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
         run: bash scripts/build-mobile-artifacts.sh
+      - name: Verify draft mobile assets against tagged source and SwiftPM
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          mkdir -p dist/mobile
+          gh release download "$RELEASE_TAG" -D dist/mobile
+          python3 scripts/verify-mobile-staging.py "$RELEASE_TAG" dist/mobile
       - uses: actions/upload-artifact@v7
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
         with:
           name: mobile-v2-candidates
           path: dist/mobile/

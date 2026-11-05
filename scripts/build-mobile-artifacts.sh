@@ -4,6 +4,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+export RATIFY_SWIFT_LOCAL_BINARY=1
 if [ -n "$(git status --porcelain)" ]; then
   echo "mobile artifact build requires a clean source tree" >&2
   exit 1
@@ -37,9 +38,14 @@ bash scripts/smoke-swift-staging.sh
 python3 - "$out" <<'PY'
 import hashlib, json, pathlib, subprocess, sys
 out = pathlib.Path(sys.argv[1])
+source = hashlib.sha256()
+for entry in subprocess.check_output(["git", "ls-tree", "-r", "-z", "HEAD"]).split(b"\0"):
+    if entry and entry.split(b"\t", 1)[1] != b"Package.swift":
+        source.update(entry + b"\0")
 manifest = {
     "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
     "tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip(),
+    "source_except_package_sha256": source.hexdigest(),
     "artifacts": {},
 }
 for path in sorted(out.iterdir()):

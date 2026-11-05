@@ -43,6 +43,8 @@ jobs:
     name: Swift macOS and iOS simulator
     runs-on: macos-26-intel
     timeout-minutes: 90
+    env:
+      RATIFY_SWIFT_LOCAL_BINARY: '1'
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -72,7 +74,7 @@ jobs:
       - name: Swift full suite and decoder fuzz
         run: swift test
       - name: Swift concurrency under Thread Sanitizer
-        run: swift test --sanitize=thread --filter ClaimTests/testConcurrentClaimStormHasOneCommit
+        run: swift test --sanitize=thread --filter ClaimTests/testConcurrent
       - name: iOS simulator suite
         env:
           RATIFY_FUZZ_SECONDS: '1'

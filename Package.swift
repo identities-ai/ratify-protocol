@@ -6,11 +6,19 @@
 // sdks/swift/scripts/build-xcframework.sh; release builds point at the
 // published, checksummed asset instead.
 import PackageDescription
+import Foundation
 
-let ffi: Target = .binaryTarget(
-    name: "RatifyProtocolFFI",
-    path: "sdks/swift/build/RatifyProtocolFFI.xcframework"
-)
+// The release-prepare step fills these from the CI-built draft asset. Source
+// builds opt into their local XCFramework with RATIFY_SWIFT_LOCAL_BINARY=1.
+let releaseAssetURL = ""
+let releaseAssetChecksum = ""
+let useLocalBinary = ProcessInfo.processInfo.environment["RATIFY_SWIFT_LOCAL_BINARY"] == "1"
+let ffi: Target
+if useLocalBinary || releaseAssetURL.isEmpty {
+    ffi = .binaryTarget(name: "RatifyProtocolFFI", path: "sdks/swift/build/RatifyProtocolFFI.xcframework")
+} else {
+    ffi = .binaryTarget(name: "RatifyProtocolFFI", url: releaseAssetURL, checksum: releaseAssetChecksum)
+}
 
 let package = Package(
     name: "RatifyProtocol",

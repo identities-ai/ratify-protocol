@@ -947,7 +947,8 @@ class ClaimTest {
             "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
             "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
             "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances",
-            "cancel_before_claim_consumes_nothing", "cancel_after_claim_keeps_claim_recoverable")
+            "cancel_before_claim_consumes_nothing", "cancel_after_claim_keeps_claim_recoverable",
+            "late_worker_fenced_after_recovery")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -1002,7 +1003,8 @@ class ClaimTest {
             "recorded_withheld_answers_before_receipt_checks" to 7, "withheld_when_recording_fails" to 7,
             "withheld_record_conflict_is_rejected" to 7, "checkpoint_fork_freezes_log" to 11,
             "checkpoint_refusal_without_fork_does_not_freeze" to 11, "concurrent_stream_advances" to 4,
-            "cancel_before_claim_consumes_nothing" to 5, "cancel_after_claim_keeps_claim_recoverable" to 7)
+            "cancel_before_claim_consumes_nothing" to 5, "cancel_after_claim_keeps_claim_recoverable" to 7,
+            "late_worker_fenced_after_recovery" to 4)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -1155,14 +1157,16 @@ class ClaimTest {
                         }
                     }
                     "verify" -> {
-                        assertEquals(at, if (want.has("error_class")) setOf("stage", "error_class")
+                        assertEquals(at, if (want.has("recovered")) setOf("stage", "error_class", "recovered")
+                            else if (want.has("error_class")) setOf("stage", "error_class")
                             else if (want.has("decision"))
                             setOf("stage", "decision", "decision_reason", "allow_horizon")
                             else setOf("stage", "disposition"), want.keys().asSequence().toSet())
                         val fixtureRequest = request(requestName, corpusName = "lifecycle-scenarios.json")
                         val currentTime = store.now()
                         if (name == "crash_after_claim_lease_recovery" && index == 6 ||
-                            name == "lease_expires_during_status_then_recovery" && index == 1) {
+                            name == "lease_expires_during_status_then_recovery" && index == 1 ||
+                            name == "late_worker_fenced_after_recovery" && index == 1) {
                             assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
                             assertEquals(at, 1_800_000_030L, currentTime)
                         } else if (name == "clock_regression_at_claim" && index == 2) {
@@ -1184,14 +1188,16 @@ class ClaimTest {
                         val mode = step.optString("mode")
                         if (mode.isNotEmpty()) org.junit.Assert.assertTrue(at,
                             mode in setOf("expire_lease_during_status", "regress_clock_during_status",
-                                "cancel_before_claim", "cancel_during_status"))
+                                "cancel_before_claim", "cancel_during_status", "recover_during_status"))
                         val callbackTime = if (mode.isEmpty()) null else step.getLong("time")
                         if (mode == "expire_lease_during_status") org.junit.Assert.assertTrue(at, callbackTime!! > currentTime)
                         if (mode == "regress_clock_during_status") org.junit.Assert.assertTrue(at, callbackTime!! < currentTime)
+                        if (mode == "recover_during_status") org.junit.Assert.assertTrue(at, callbackTime!! > currentTime)
                         if (mode == "cancel_before_claim" || mode == "cancel_during_status")
                             assertEquals(at, currentTime, callbackTime)
                         val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(requestName),
-                            req, callbackTime?.takeUnless { mode.startsWith("cancel_") }?.let { time -> { store.setTime(time) } })
+                            req, callbackTime?.takeUnless { mode.startsWith("cancel_") || mode == "recover_during_status" }
+                                ?.let { time -> { store.setTime(time) } })
                         val result: VerifyOutcome
                         if (mode == "cancel_before_claim") {
                             val receiver = GatedReceiver()
@@ -1207,6 +1213,46 @@ class ClaimTest {
                             call.join()
                             org.junit.Assert.assertTrue(at, reached)
                             result = checkNotNull(observed.get()) { "$at: cancelled call did not return an outcome" }
+                        } else if (mode == "recover_during_status") {
+                            val started = CompletableDeferred<Unit>()
+                            val release = CompletableDeferred<Unit>()
+                            val observed = AtomicReference<VerifyOutcome?>()
+                            val verifyStore = store
+                            val call = launch(Dispatchers.Default) {
+                                observed.set(verifyProofBundle(req, verifyStore,
+                                    trust = trust, statusEvidence = GatedStatus(status, started, release),
+                                    statusJournal = journal))
+                            }
+                            val reached = withTimeoutOrNull(10_000) { started.await(); true } == true
+                            if (!reached) {
+                                call.cancel()
+                                release.complete(Unit)
+                                call.join()
+                                fail("$at: status callback was not reached")
+                            }
+                            var recoveredBodyData: ByteArray? = null
+                            try {
+                                store.setTime(callbackTime!!)
+                                val expected = checkNotNull(req.expected) { at }
+                                val claimId = protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value)
+                                val recovered = recoverInterruptedClaim(store, claimId)
+                                recoveredBodyData = recovered.receiptBody
+                                org.junit.Assert.assertArrayEquals(at, recovered.receiptBody,
+                                    store.loadCommitted(claimId).receiptBody)
+                                val recoveredBody = JSONObject(String(recovered.receiptBody))
+                                val expectedRecovery = want.getJSONObject("recovered")
+                                assertEquals(at, setOf("stage", "decision", "decision_reason", "trust_assessment",
+                                    "status_assessment", "context_assessment"), expectedRecovery.keys().asSequence().toSet())
+                                assertEquals(at, "committed", expectedRecovery.getString("stage"))
+                                for (field in listOf("decision", "decision_reason", "trust_assessment", "status_assessment",
+                                    "context_assessment"))
+                                    assertEquals(at, expectedRecovery.getString(field), recoveredBody.getString(field))
+                                committed[requestName] = recovered
+                            } finally { release.complete(Unit) }
+                            call.join()
+                            result = checkNotNull(observed.get()) { "$at: late verifier did not return an outcome" }
+                            org.junit.Assert.assertArrayEquals(at, recoveredBodyData,
+                                store.loadCommitted(result.claim.claimId).receiptBody)
                         } else if (mode == "cancel_during_status") {
                             val started = CompletableDeferred<Unit>()
                             val release = CompletableDeferred<Unit>()
@@ -1228,7 +1274,8 @@ class ClaimTest {
                         assertEquals(at, want.getString("stage"), result.stage.spelling)
                         claimed[requestName]?.let { assertEquals(at, it, result.claim) }
                         if (want.has("error_class")) {
-                            assertEquals(at, setOf("stage", "error_class"), want.keys().asSequence().toSet())
+                            assertEquals(at, if (mode == "recover_during_status") setOf("stage", "error_class", "recovered")
+                                else setOf("stage", "error_class"), want.keys().asSequence().toSet())
                             assertEquals(at, want.getString("error_class"), result.errorClass?.spelling)
                             if (result.stage == VerifyStage.EVALUATING) {
                                 assertEquals(at, ClaimDisposition.CREATED, result.disposition)

@@ -1019,7 +1019,8 @@ final class ClaimTests: XCTestCase {
             "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
             "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
             "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances",
-            "cancel_before_claim_consumes_nothing", "cancel_after_claim_keeps_claim_recoverable"]
+            "cancel_before_claim_consumes_nothing", "cancel_after_claim_keeps_claim_recoverable",
+            "late_worker_fenced_after_recovery"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -1075,7 +1076,8 @@ final class ClaimTests: XCTestCase {
             "recorded_withheld_answers_before_receipt_checks": 7, "withheld_when_recording_fails": 7,
             "withheld_record_conflict_is_rejected": 7, "checkpoint_fork_freezes_log": 11,
             "checkpoint_refusal_without_fork_does_not_freeze": 11, "concurrent_stream_advances": 4,
-            "cancel_before_claim_consumes_nothing": 5, "cancel_after_claim_keeps_claim_recoverable": 7]
+            "cancel_before_claim_consumes_nothing": 5, "cancel_after_claim_keeps_claim_recoverable": 7,
+            "late_worker_fenced_after_recovery": 4]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1226,13 +1228,15 @@ final class ClaimTests: XCTestCase {
                         XCTAssertEqual((error as? StoreError)?.errorClass?.rawValue, want.s("error_class"), at)
                     }
                 case "verify":
-                    XCTAssertEqual(Set(want.keys), want["error_class"] != nil ? ["stage", "error_class"]
+                    XCTAssertEqual(Set(want.keys), want["recovered"] != nil ? ["stage", "error_class", "recovered"]
+                        : want["error_class"] != nil ? ["stage", "error_class"]
                         : want["decision"] == nil ? ["stage", "disposition"]
                         : ["stage", "decision", "decision_reason", "allow_horizon"], at)
                     let fixtureRequest = try request(requestName, corpusName: "lifecycle-scenarios.json")
                     let currentTime = try store.now()
                     if name == "crash_after_claim_lease_recovery" && index == 6 ||
-                       name == "lease_expires_during_status_then_recovery" && index == 1 {
+                       name == "lease_expires_during_status_then_recovery" && index == 1 ||
+                       name == "late_worker_fenced_after_recovery" && index == 1 {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, 1_800_000_030, at)
                     } else if name == "clock_regression_at_claim" && index == 2 {
@@ -1254,16 +1258,18 @@ final class ClaimTests: XCTestCase {
                     let mode = step["mode"] as? String
                     if mode != nil {
                         XCTAssertTrue(["expire_lease_during_status", "regress_clock_during_status",
-                            "cancel_before_claim", "cancel_during_status"].contains(mode!), at)
+                            "cancel_before_claim", "cancel_during_status", "recover_during_status"].contains(mode!), at)
                     }
                     let callbackTime = mode == nil ? nil : Int64(step.int("time"))
                     if mode == "expire_lease_during_status" { XCTAssertGreaterThan(callbackTime!, currentTime, at) }
                     if mode == "regress_clock_during_status" { XCTAssertLessThan(callbackTime!, currentTime, at) }
+                    if mode == "recover_during_status" { XCTAssertGreaterThan(callbackTime!, currentTime, at) }
                     if mode == "cancel_before_claim" || mode == "cancel_during_status" {
                         XCTAssertEqual(callbackTime, currentTime, at)
                     }
                     let onFirstStatus: (@Sendable () throws -> Void)?
-                    if let callbackTime, mode != "cancel_before_claim" && mode != "cancel_during_status" {
+                    if let callbackTime, mode != "cancel_before_claim" && mode != "cancel_during_status" &&
+                        mode != "recover_during_status" {
                         let statusStore = store
                         onFirstStatus = { try statusStore.setTime(callbackTime) }
                     }
@@ -1281,6 +1287,47 @@ final class ClaimTests: XCTestCase {
                         call.cancel()
                         receiver.release.signal()
                         result = try await call.value
+                    } else if mode == "recover_during_status" {
+                        let gate = FinalizationGate()
+                        let started = expectation(description: "\(at) status reached")
+                        started.assertForOverFulfill = false
+                        let verifyStore = store
+                        let call = Task {
+                            try await Ratify.verifyProofBundle(req, claimStore: verifyStore,
+                                trust: trust, statusEvidence: GatedStatus(inner: status, gate: gate, started: started),
+                                statusJournal: journal)
+                        }
+                        await fulfillment(of: [started], timeout: 10)
+                        var recoveredBodyData: Data?
+                        do {
+                            try store.setTime(callbackTime!)
+                            let expected = try XCTUnwrap(req.expected, at)
+                            let claimId = try Ratify.protocolClaimId(namespace: expected.verifierNamespace,
+                                replayEpoch: expected.replayEpoch, challenge: expected.value)
+                            let recovered = try await Ratify.recoverInterruptedClaim(store: store, claimId: claimId)
+                            recoveredBodyData = recovered.receiptBody
+                            let stored = try await store.loadCommitted(claimId: claimId)
+                            XCTAssertEqual(stored.receiptBody, recovered.receiptBody, at)
+                            let recoveredBody = try XCTUnwrap(JSONSerialization.jsonObject(with: recovered.receiptBody)
+                                as? [String: Any], at)
+                            let expectedRecovery = want.obj("recovered")
+                            XCTAssertEqual(Set(expectedRecovery.keys), ["stage", "decision", "decision_reason",
+                                "trust_assessment", "status_assessment", "context_assessment"], at)
+                            XCTAssertEqual(expectedRecovery.s("stage"), "committed", at)
+                            for field in ["decision", "decision_reason", "trust_assessment", "status_assessment", "context_assessment"] {
+                                XCTAssertEqual(recoveredBody[field] as? String, expectedRecovery.s(field), at)
+                            }
+                            committed[requestName] = recovered
+                        } catch {
+                            call.cancel()
+                            await gate.open()
+                            _ = try? await call.value
+                            throw error
+                        }
+                        await gate.open()
+                        result = try await call.value
+                        let stored = try await store.loadCommitted(claimId: result.claim.claimId)
+                        XCTAssertEqual(stored.receiptBody, recoveredBodyData, at)
                     } else if mode == "cancel_during_status" {
                         let gate = FinalizationGate()
                         let started = expectation(description: "\(at) status reached")
@@ -1301,7 +1348,8 @@ final class ClaimTests: XCTestCase {
                     XCTAssertEqual(result.stage.rawValue, want.s("stage"), at)
                     if let seeded = claimed[requestName] { XCTAssertEqual(result.claim, seeded, at) }
                     if want.keys.contains("error_class") {
-                        XCTAssertEqual(Set(want.keys), ["stage", "error_class"], at)
+                        XCTAssertEqual(Set(want.keys), mode == "recover_during_status"
+                            ? ["stage", "error_class", "recovered"] : ["stage", "error_class"], at)
                         XCTAssertEqual(result.errorClass?.rawValue, want.s("error_class"), at)
                         if result.stage == .evaluating {
                             XCTAssertEqual(result.disposition, .created, at)

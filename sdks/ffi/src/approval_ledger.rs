@@ -70,9 +70,8 @@ impl FfiApprovalLedger {
 
     pub fn record(&self, set_id: String, slot: u32, decision: Option<Arc<FfiReleasedDecision>>,
                   bundle_wire: Vec<u8>) -> FfiResult<FfiApprovalReply> {
-        let mut handles = vec![&self.poison];
-        if let Some(value) = decision.as_ref() { handles.push(&value.poison); }
-        call_with(&handles, || Ok(match self.inner.record_approval(&set_id, slot as usize,
+        call_with(&[&self.poison, decision.as_ref().map_or(&self.poison, |value| &value.poison)],
+            || Ok(match self.inner.record_approval(&set_id, slot as usize,
             decision.as_ref().map(|value| &value.inner), &bundle_wire) {
             Ok(complete) => FfiApprovalReply { complete: Some(complete), ..Default::default() },
             Err(error) => FfiApprovalReply { failure: Some(error.as_str().into()), ..Default::default() },

@@ -59,7 +59,8 @@ fn check(
     let takes_handle = sig.inputs.iter().any(|a| {
         let t = a.to_token_stream().to_string().replace(' ', "");
         t.contains("Arc<FfiSoftwareKey>") || t.contains("Arc<FfiSplitKey>")
-            || t.contains("FfiCommittedOutcome>")
+            || t.contains("FfiCommittedOutcome>") || t.contains("Arc<FfiReferenceStore>")
+            || t.contains("Arc<FfiDeviceSnapshot>") || t.contains("Arc<FfiReleasedDecision>")
     });
     let want = if takes_handle {
         "call_with"

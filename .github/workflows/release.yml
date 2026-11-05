@@ -288,7 +288,7 @@ jobs:
     name: Mobile SDK release candidates
     if: needs.gate-tests.outputs.line == 'v2'
     needs: gate-tests
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7

@@ -1593,6 +1593,90 @@ class ClaimTest {
         }
     }
 
+    @Test fun concurrentClaimsRecoverOnceAfterLease() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first {
+            it.getString("name") == "same_challenge_claim_storm_store_level"
+        }
+        val participant = scenario.arr("participants").first()
+        assertEquals("claim_only", participant.getString("op"))
+        assertEquals(8, participant.getInt("count"))
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val expected = checkNotNull(req.expected)
+        val bundle = decodeProofBundle(req.bundle)
+        val hash = bundleHash(bundle)
+        val claim = ChallengeClaim(protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value),
+            expected.verifierNamespace, expected.replayEpoch, "sha384:" + challengeClaimDigest(expected.value).hex(),
+            hash, hash, bundle.delegations.map { it.issuerId }.distinct().sorted(), req.requiredScope,
+            req.contextPolicy?.digest ?: "", expected.verifierId, bundle.agentId, false, emptyList(),
+            expected.issuedAt, expected.expiresAt, req.maxChallengeAgeSeconds, req.futureSkewSeconds,
+            bundle.streamId, bundle.streamSeq, emptyList())
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+                inputs.getString("log_id"), key)
+            val calls = List(participant.getInt("count")) { async(Dispatchers.Default) { store.claim(claim) } }
+            val results = calls.map { it.await() }
+            assertEquals("iteration $iteration", 1, results.count { it.disposition == ClaimDisposition.CREATED })
+            org.junit.Assert.assertTrue("iteration $iteration", results.all {
+                it.disposition in setOf(ClaimDisposition.CREATED, ClaimDisposition.IN_PROGRESS)
+            })
+            val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("A"), req)
+            val replay = verifyProofBundle(req, store,
+                trust = trust, statusEvidence = status, statusJournal = journal)
+            assertEquals("iteration $iteration", VerifyStage.REPLAY, replay.stage)
+            assertEquals("iteration $iteration", ClaimDisposition.IN_PROGRESS, replay.disposition)
+            store.setTime(scenario.arr("after")[1].getLong("time"))
+            val recovered = recoverInterruptedClaim(store, claim.claimId)
+            val body = JSONObject(String(recovered.receiptBody))
+            assertEquals("iteration $iteration", "indeterminate", body.getString("decision"))
+            assertEquals("iteration $iteration", "evaluation_interrupted", body.getString("decision_reason"))
+            val wire = store.publish(recovered.claimId, recovered.receiptBody)
+            assertEquals("iteration $iteration", 1L, decodeVerificationReceipt(wire).sequence)
+        }
+    }
+
+    @Test fun concurrentReleaseIsIdentical() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first { it.getString("name") == "concurrent_release_of_one_decision" }
+        val participant = scenario.arr("participants").first()
+        assertEquals("release", participant.getString("op"))
+        assertEquals(8, participant.getInt("count"))
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("A"), req)
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+                inputs.getString("log_id"), key)
+            val verified = verifyProofBundle(req, store,
+                trust = trust, statusEvidence = status, statusJournal = journal)
+            val committed = checkNotNull(verified.committed) { "iteration $iteration" }
+            val wire = store.publish(committed.claimId, committed.receiptBody)
+            val calls = List(participant.getInt("count")) {
+                async(Dispatchers.Default) {
+                    releaseDecision(committed, wire, key.publicKey, inputs.getString("log_id"), store, store)
+                }
+            }
+            val releases = calls.map { it.await() }
+            assertEquals("iteration $iteration", 8, releases.size)
+            for (result in releases) {
+                assertEquals("iteration $iteration", ReleaseStatus.RELEASED, result.status)
+                assertEquals("iteration $iteration", "allow", result.decision?.decision)
+                assertEquals("iteration $iteration", scenario.getLong("start_time"), result.decision?.releaseTime)
+                org.junit.Assert.assertArrayEquals(wire, result.decision?.receiptWire)
+            }
+            org.junit.Assert.assertArrayEquals(wire, store.publish(committed.claimId, committed.receiptBody))
+        }
+    }
+
     @Test fun lifecycleBasicReleaseScenarios() = runBlocking {
         val corpus = Corpus.load("lifecycle-scenarios.json")
         val names = setOf("allow_published_acknowledged_released", "release_without_receipt_is_pending",

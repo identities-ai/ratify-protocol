@@ -41,7 +41,7 @@ jobs:
 
   swift:
     name: Swift macOS and iOS simulator
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -137,7 +137,7 @@ jobs:
   artifacts:
     name: Build release candidate artifacts without publishing
     needs: [ffi, swift, kotlin]
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7

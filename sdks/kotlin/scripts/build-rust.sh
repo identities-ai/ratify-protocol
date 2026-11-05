@@ -21,9 +21,12 @@ targets=()
 for a in $abis; do targets+=(-t "$a"); done
 (cd "$ffi" && cargo ndk --platform 28 "${targets[@]}" -o "$out" build --lib --release ${features:+--features "$features"})
 
+host_library="target/release/libratify_protocol_ffi.dylib"
+if [ "$(uname -s)" = Linux ]; then host_library="target/release/libratify_protocol_ffi.so"; fi
 (cd "$ffi" && cargo build --lib --release ${features:+--features "$features"} && \
   cargo run -q --features bindgen --bin uniffi-bindgen -- generate --no-format \
-    --library target/release/libratify_protocol_ffi.dylib --language kotlin --out-dir "$here/build/gen")
+    --library "$host_library" \
+    --language kotlin --out-dir "$here/build/gen")
 
 mkdir -p "$gen"
 {

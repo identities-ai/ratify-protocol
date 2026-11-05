@@ -41,6 +41,7 @@ object CorpusRunners {
         "transaction-verification.json" to TransactionVerifyVectors::run,
         "device-state.json" to DeviceStateVectors::run,
         "verifier-ordering.json" to VerifierOrderingVectors::run,
+        "concurrency-scenarios.json" to ConcurrencyVectors::run,
         "lifecycle-scenarios.json" to {
             val tests = ClaimTest()
             tests.dualRootBothReleasedExecutesOnce()
@@ -51,7 +52,6 @@ object CorpusRunners {
 
     /** Entries whose runners land in a later milestone (build plan §9). */
     val pending: Map<String, String> = mapOf(
-        "concurrency-scenarios.json" to "M4",
         "cross-sdk" to "M4",
     )
 
@@ -67,6 +67,9 @@ object CorpusRunners {
                 val corpus = Corpus.load(file)
                 assertEquals(corpus.arr("scenarios").size + corpus.arr("profile_scenarios").size,
                     Manifest.count(file))
+            }
+            if (file == "concurrency-scenarios.json") {
+                assertEquals(Corpus.load(file).arr("scenarios").size, Manifest.count(file))
             }
         }
     }

@@ -35,6 +35,7 @@ final class CorpusTests: XCTestCase {
         "transaction-verification.json": TransactionVerifyRunner.run,
         "device-state.json": DeviceStateRunner.run,
         "verifier-ordering.json": VerifierOrderingRunner.run,
+        "concurrency-scenarios.json": ConcurrencyRunner.run,
         "lifecycle-scenarios.json": {
             let test = ClaimTests(selector: #selector(ClaimTests.corpusHarness))
             try await test.testLifecycleBasicReleaseScenarios()
@@ -43,7 +44,6 @@ final class CorpusTests: XCTestCase {
 
     /// Entries whose runners land in a later milestone (build plan §9).
     static let pending: [String: String] = [
-        "concurrency-scenarios.json": "M4",
         "cross-sdk": "M4",
     ]
 
@@ -59,6 +59,9 @@ final class CorpusTests: XCTestCase {
             if file == "lifecycle-scenarios.json" {
                 let corpus = Corpus.load(file)
                 XCTAssertEqual(Manifest.count(file), corpus.arr("scenarios").count + corpus.arr("profile_scenarios").count)
+            }
+            if file == "concurrency-scenarios.json" {
+                XCTAssertEqual(Manifest.count(file), Corpus.load(file).arr("scenarios").count)
             }
         }
     }

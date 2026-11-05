@@ -12,12 +12,13 @@ public struct DeviceReply: Sendable {
     }
 }
 
-/// Single-device reference checkpoint and outbox for conformance tests.
+/// Copy of the device primary for rollback conformance tests.
 public final class OfflineDeviceSnapshot {
     let bridge: OfflineDeviceSnapshotBridge
     init(_ bridge: OfflineDeviceSnapshotBridge) { self.bridge = bridge }
 }
 
+/// Single-device reference checkpoint and outbox for conformance tests.
 public final class OfflineDevice: ReceiptCheckpoint {
     private let bridge: OfflineDeviceBridge
 

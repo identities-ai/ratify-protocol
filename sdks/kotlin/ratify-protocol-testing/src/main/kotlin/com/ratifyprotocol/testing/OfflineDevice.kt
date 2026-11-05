@@ -12,7 +12,7 @@ public class DeviceReply internal constructor(value: OfflineDeviceReplyBridge) {
     public val failure: String? = value.failure
 }
 
-/** Single-device reference checkpoint and outbox for conformance tests. */
+/** Copy of the device primary for rollback conformance tests. */
 public class OfflineDeviceSnapshot internal constructor(internal val bridge: OfflineDeviceSnapshotBridge)
 
 /** Single-device reference checkpoint and outbox for conformance tests. */

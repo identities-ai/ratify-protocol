@@ -208,6 +208,7 @@ EXTRA_MEMBERS = {
     "ReferenceStoreBridge.abandonPendingReceipts": "test-only receipt abandonment",
     "ReferenceStoreBridge.authoritativeTime": "reference authoritative clock for test callbacks",
     "ReferenceStoreBridge.claim": "reference atomic claim for test callbacks",
+    "ReferenceStoreBridge.enableRateAtFinalization": "test-only atomic rate finalization mode",
     "ReferenceStoreBridge.finalize": "reference terminal commit for test callbacks",
     "ReferenceStoreBridge.recordProgress": "reference progress write for test callbacks",
     "ReferenceStoreBridge.loadInterrupted": "reference interrupted claim load for test callbacks",

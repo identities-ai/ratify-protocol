@@ -107,6 +107,13 @@ impl FfiReferenceStore {
         })))
     }
 
+    pub fn enable_rate_at_finalization(&self) -> FfiResult<()> {
+        call_on(&self.poison, || {
+            self.inner.with_rate_at_finalization();
+            Ok(())
+        })
+    }
+
     pub fn set_time(&self, now: i64) -> FfiResult<()> {
         call_on(&self.poison, || Ok(self.inner.set_time(now)))
     }

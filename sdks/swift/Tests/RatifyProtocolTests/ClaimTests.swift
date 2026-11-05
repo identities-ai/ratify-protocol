@@ -1020,7 +1020,9 @@ final class ClaimTests: XCTestCase {
             "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
             "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances",
             "cancel_before_claim_consumes_nothing", "cancel_after_claim_keeps_claim_recoverable",
-            "late_worker_fenced_after_recovery"]
+            "late_worker_fenced_after_recovery", "rate_admission_at_finalization",
+            "rate_admission_is_all_or_none", "rate_retry_and_changed_batch_count_once",
+            "rate_clock_rollback_keeps_admissions_blocking", "rate_counts_only_allow"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -1077,7 +1079,9 @@ final class ClaimTests: XCTestCase {
             "withheld_record_conflict_is_rejected": 7, "checkpoint_fork_freezes_log": 11,
             "checkpoint_refusal_without_fork_does_not_freeze": 11, "concurrent_stream_advances": 4,
             "cancel_before_claim_consumes_nothing": 5, "cancel_after_claim_keeps_claim_recoverable": 7,
-            "late_worker_fenced_after_recovery": 4]
+            "late_worker_fenced_after_recovery": 4, "rate_admission_at_finalization": 5,
+            "rate_admission_is_all_or_none": 5, "rate_retry_and_changed_batch_count_once": 5,
+            "rate_clock_rollback_keeps_admissions_blocking": 9, "rate_counts_only_allow": 7]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1095,6 +1099,8 @@ final class ClaimTests: XCTestCase {
             XCTAssertEqual(scenario.arr("steps").count, counts[name], name)
             var store = try Store(now: Int64(scenario.int("start_time")), leaseSeconds: Int64(corpus.int("lease_seconds")),
                 logId: corpus.s("log_id"), verifierKey: key)
+            let rateStore = scenario["rate_at_finalization"] as? Bool == true ? try store.withRateAtFinalization() : nil
+            var rateTime = Int64(scenario.int("start_time"))
             var logId = corpus.s("log_id")
             var replayEpochOverride: Int64?
             var committed: [String: CommittedOutcome] = [:]
@@ -1124,12 +1130,14 @@ final class ClaimTests: XCTestCase {
                 switch op {
                 case "set_time":
                     try store.setTime(Int64(step.int("time")))
+                    rateTime = Int64(step.int("time"))
                     XCTAssertTrue(want.isEmpty, at)
                 case "set_ack_withheld":
                     try store.setAcknowledgementWithheld(step.bool("withheld"))
                     XCTAssertTrue(want.isEmpty, at)
                 case "restore":
                     XCTAssertTrue(want.isEmpty, at)
+                    XCTAssertNil(rateStore, at)
                     if step.s("mode") == "exact" { store = try store.cloneStore() }
                     else {
                         XCTAssertEqual(step.s("mode"), "lost_state_epoch_bump", at)
@@ -1191,14 +1199,22 @@ final class ClaimTests: XCTestCase {
                     let req = try request(requestName, corpusName: "lifecycle-scenarios.json")
                     let expected = try XCTUnwrap(req.expected, at)
                     let bundle = try Ratify.decodeProofBundle(req.bundle)
-                    XCTAssertTrue(bundle.delegations.allSatisfy { $0.constraints.isEmpty }, at)
+                    XCTAssertTrue(bundle.delegations.allSatisfy {
+                        $0.constraints.allSatisfy { $0.kind == "max_rate" }
+                    }, at)
+                    let rateBatch = bundle.delegations.flatMap { cert in cert.constraints.map {
+                        RateReservation(issuerId: cert.issuerId, certId: cert.certId,
+                            windowSeconds: $0.windowS, limit: $0.count)
+                    }}
+                    XCTAssertEqual(rateBatch.isEmpty, rateStore == nil, at)
                     let hash = try Ratify.bundleHash(bundle)
                     let claim = ChallengeClaim(claimId: try Ratify.protocolClaimId(namespace: expected.verifierNamespace,
                         replayEpoch: expected.replayEpoch, challenge: expected.value), namespace: expected.verifierNamespace,
                         replayEpoch: expected.replayEpoch, challengeDigest: "sha384:" + (try Ratify.challengeClaimDigest(expected.value)).hex,
                         proofDigest: hash, bundleHash: hash, issuerIds: Array(Set(bundle.delegations.map(\.issuerId))).sorted(),
                         requiredScope: req.requiredScope, contextPolicyDigest: req.contextPolicy?.digest ?? "",
-                        verifierId: expected.verifierId, agentId: bundle.agentId, requiresRate: false, rateBatch: [],
+                        verifierId: expected.verifierId, agentId: bundle.agentId,
+                        requiresRate: !rateBatch.isEmpty, rateBatch: rateBatch,
                         issuedAt: expected.issuedAt, expiresAt: expected.expiresAt,
                         maxAgeSeconds: req.maxChallengeAgeSeconds, clockSkewSeconds: req.futureSkewSeconds,
                         streamId: bundle.streamId, streamSeq: bundle.streamSeq, constraintEvaluators: [])
@@ -1231,6 +1247,7 @@ final class ClaimTests: XCTestCase {
                     XCTAssertEqual(Set(want.keys), want["recovered"] != nil ? ["stage", "error_class", "recovered"]
                         : want["error_class"] != nil ? ["stage", "error_class"]
                         : want["decision"] == nil ? ["stage", "disposition"]
+                        : want["allow_horizon"] == nil ? ["stage", "decision", "decision_reason"]
                         : ["stage", "decision", "decision_reason", "allow_horizon"], at)
                     let fixtureRequest = try request(requestName, corpusName: "lifecycle-scenarios.json")
                     let currentTime = try store.now()
@@ -1251,6 +1268,9 @@ final class ClaimTests: XCTestCase {
                     } else if name == "checkpoint_fork_freezes_log" && index == 6 {
                         XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
                         XCTAssertEqual(currentTime, 1_800_000_007, at)
+                    } else if rateStore != nil {
+                        XCTAssertEqual(fixtureRequest.now, Int64(scenario.int("start_time")), at)
+                        XCTAssertEqual(currentTime, rateTime, at)
                     } else { XCTAssertEqual(fixtureRequest.now, currentTime, at) }
                     let req = fixtureRequest.now == currentTime && replayEpochOverride == nil ? fixtureRequest
                         : try request(requestName, corpusName: "lifecycle-scenarios.json", atTime: currentTime,
@@ -1278,6 +1298,7 @@ final class ClaimTests: XCTestCase {
                         request: req, onFirstStatus: onFirstStatus)
                     let result: VerifyOutcome
                     if mode == "cancel_before_claim" {
+                        XCTAssertNil(rateStore, at)
                         let started = expectation(description: "\(at) receiver reached")
                         let receiver = GatedReceiver(started: started)
                         let verifyStore = store
@@ -1329,6 +1350,7 @@ final class ClaimTests: XCTestCase {
                         let stored = try await store.loadCommitted(claimId: result.claim.claimId)
                         XCTAssertEqual(stored.receiptBody, recoveredBodyData, at)
                     } else if mode == "cancel_during_status" {
+                        XCTAssertNil(rateStore, at)
                         let gate = FinalizationGate()
                         let started = expectation(description: "\(at) status reached")
                         let verifyStore = store
@@ -1341,6 +1363,9 @@ final class ClaimTests: XCTestCase {
                         call.cancel()
                         await gate.open()
                         result = try await call.value
+                    } else if let rateStore {
+                        result = try await Ratify.verifyProofBundle(req, claimStore: rateStore, trust: trust,
+                            statusEvidence: status, statusJournal: journal)
                     } else {
                         result = try await Ratify.verifyProofBundle(req, claimStore: store, trust: trust,
                             statusEvidence: status, statusJournal: journal)
@@ -1368,7 +1393,8 @@ final class ClaimTests: XCTestCase {
                         let body = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
                         XCTAssertEqual(body["decision"] as? String, want.s("decision"), at)
                         XCTAssertEqual(body["decision_reason"] as? String, want.s("decision_reason"), at)
-                        XCTAssertEqual(value.allowHorizon, Int64(want.int("allow_horizon")), at)
+                        XCTAssertEqual(value.allowHorizon, want["allow_horizon"] == nil
+                            ? nil : Int64(want.int("allow_horizon")), at)
                     } else { XCTAssertNil(result.committed, at) }
                 case "resume":
                     let claimId: String

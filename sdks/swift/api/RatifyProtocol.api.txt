@@ -615,6 +615,7 @@ ReferenceStoreBridge.acknowledge(logId:sequence:previousEntryHash:entryHash:) [F
 ReferenceStoreBridge.authoritativeTime() [Func] -> Swift.Int64
 ReferenceStoreBridge.claim(_:) [Func] -> RatifyProtocol.ClaimResult, RatifyProtocol.ChallengeClaim
 ReferenceStoreBridge.cloneStore() [Func] -> RatifyProtocol.ReferenceStoreBridge
+ReferenceStoreBridge.enableRateAtFinalization() [Func] -> ()
 ReferenceStoreBridge.finalize(claimId:ownerToken:terminalResult:receiptBody:allowValidUntil:) [Func] -> Swift.Bool, Swift.String, Foundation.Data, Foundation.Data, Foundation.Data, Swift.Int64
 ReferenceStoreBridge.get(logId:sequence:) [Func] -> RatifyProtocol.CheckpointAcknowledgement, Swift.String, Swift.Int64
 ReferenceStoreBridge.init(now:leaseSeconds:logId:verifierKey:) [Constructor] -> RatifyProtocol.ReferenceStoreBridge, Swift.Int64, Swift.Int64, Swift.String, RatifyProtocol.SoftwarePrivateKey

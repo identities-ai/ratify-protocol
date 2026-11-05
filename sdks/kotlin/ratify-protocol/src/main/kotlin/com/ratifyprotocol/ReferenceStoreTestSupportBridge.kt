@@ -11,6 +11,7 @@ public class ReferenceStoreBridge private constructor(private val handle: FfiRef
         this(ffi { FfiReferenceStore(now, leaseSeconds, logId, verifierKey.handle) })
 
     public fun cloneStore(): ReferenceStoreBridge = ReferenceStoreBridge(ffi { handle.cloneStore() })
+    public fun enableRateAtFinalization(): Unit = ffi { handle.enableRateAtFinalization() }
     public fun setTime(now: Long): Unit = ffi { handle.setTime(now) }
     public fun now(): Long = ffi { handle.now() }
     public fun setSignerFailure(failing: Boolean): Unit = ffi { handle.setSignerFailure(failing) }

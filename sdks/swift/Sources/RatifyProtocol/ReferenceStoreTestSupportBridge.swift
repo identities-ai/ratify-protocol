@@ -14,6 +14,10 @@ import Foundation
         try ReferenceStoreBridge(ffi { try handle.cloneStore() })
     }
 
+    public func enableRateAtFinalization() throws(RatifyError) {
+        try ffi { try handle.enableRateAtFinalization() }
+    }
+
     public func setTime(_ now: Int64) throws(RatifyError) { try ffi { try handle.setTime(now: now) } }
     public func now() throws(RatifyError) -> Int64 { try ffi { try handle.now() } }
     public func setSignerFailure(_ failing: Bool) throws(RatifyError) { try ffi { try handle.setSignerFailure(failing: failing) } }

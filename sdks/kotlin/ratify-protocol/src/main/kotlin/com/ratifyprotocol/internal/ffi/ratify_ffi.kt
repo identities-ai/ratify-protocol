@@ -1489,6 +1489,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_clone_store(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_enable_rate_at_finalization(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_finalize(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_get_acknowledgement(
@@ -1844,6 +1846,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_clone_store(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_enable_rate_at_finalization(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_finalize(`ptr`: Long,`claimId`: RustBuffer.ByValue,`ownerToken`: RustBuffer.ByValue,`terminalResult`: RustBuffer.ByValue,`receiptBody`: RustBuffer.ByValue,`allowValidUntil`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_get_acknowledgement(`ptr`: Long,`logId`: RustBuffer.ByValue,`sequence`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2932,6 +2936,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_clone_store() and 0xFFFF) != 22065) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_enable_rate_at_finalization() and 0xFFFF) != 47414) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_finalize() and 0xFFFF) != 10538) {
@@ -9623,6 +9630,8 @@ internal interface FfiReferenceStoreInterface {
 
     fun `cloneStore`(): FfiReferenceStore
 
+    fun `enableRateAtFinalization`()
+
     fun `finalize`(`claimId`: kotlin.String, `ownerToken`: kotlin.ByteArray, `terminalResult`: kotlin.ByteArray, `receiptBody`: kotlin.ByteArray, `allowValidUntil`: kotlin.Long): FfiReferenceStoreReply
 
     fun `getAcknowledgement`(`logId`: kotlin.String, `sequence`: kotlin.Long): FfiReferenceStoreReply
@@ -9842,6 +9851,19 @@ internal open class FfiReferenceStore: Disposable, AutoCloseable, FfiReferenceSt
     }
     )
     }
+
+
+
+    @Throws(FfiException::class)override fun `enableRateAtFinalization`()
+        =
+    callWithHandle {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_enable_rate_at_finalization(
+        it,
+        _status)
+}
+    }
+
 
 
 

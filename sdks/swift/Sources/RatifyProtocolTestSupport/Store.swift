@@ -12,6 +12,11 @@ public final class Store: ClaimStore, CommittedClaimStore, ReleaseClaimStore, Re
     private init(_ bridge: ReferenceStoreBridge) { self.bridge = bridge }
 
     public func cloneStore() throws(RatifyError) -> Store { try Store(bridge.cloneStore()) }
+    /// Enables rate admission on this store and returns its verifier capability view.
+    public func withRateAtFinalization() throws(RatifyError) -> RateStore {
+        try bridge.enableRateAtFinalization()
+        return RateStore(self)
+    }
     public func setTime(_ now: Int64) throws(RatifyError) { try bridge.setTime(now) }
     public func now() throws(RatifyError) -> Int64 { try bridge.now() }
     public func setSignerFailure(_ failing: Bool) throws(RatifyError) { try bridge.setSignerFailure(failing) }
@@ -49,5 +54,27 @@ public final class Store: ClaimStore, CommittedClaimStore, ReleaseClaimStore, Re
     }
     public func get(logId: String, sequence: Int64) async throws -> CheckpointAcknowledgement {
         try bridge.get(logId: logId, sequence: sequence)
+    }
+}
+
+/// The same reference store with atomic rate admission during finalization.
+public struct RateStore: RateAtFinalizationClaimStore {
+    private let store: Store
+    fileprivate init(_ store: Store) { self.store = store }
+    public func authoritativeTime() async throws -> Int64 { try await store.authoritativeTime() }
+    public func claim(_ claim: ChallengeClaim) async throws -> ClaimResult { try await store.claim(claim) }
+    public func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data,
+                         allowValidUntil: Int64) async throws -> Bool {
+        try await store.finalize(claimId: claimId, ownerToken: ownerToken, terminalResult: terminalResult,
+            receiptBody: receiptBody, allowValidUntil: allowValidUntil)
+    }
+    public func recordProgress(claimId: String, ownerToken: Data, progress: EvaluationProgress) async throws {
+        try await store.recordProgress(claimId: claimId, ownerToken: ownerToken, progress: progress)
+    }
+    public func loadInterrupted(claimId: String) async throws -> InterruptedClaim {
+        try await store.loadInterrupted(claimId: claimId)
+    }
+    public func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) async throws -> Bool {
+        try await store.recoverInterrupted(claimId: claimId, terminalResult: terminalResult, receiptBody: receiptBody)
     }
 }

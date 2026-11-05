@@ -4436,6 +4436,8 @@ protocol FfiReferenceStoreProtocol: AnyObject, Sendable {
 
     func cloneStore() throws  -> FfiReferenceStore
 
+    func enableRateAtFinalization() throws
+
     func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data, allowValidUntil: Int64) throws  -> FfiReferenceStoreReply
 
     func getAcknowledgement(logId: String, sequence: Int64) throws  -> FfiReferenceStoreReply
@@ -4580,6 +4582,14 @@ func cloneStore()throws  -> FfiReferenceStore  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+
+func enableRateAtFinalization()throws   {try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencestore_enable_rate_at_finalization(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
 }
 
 func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data, allowValidUntil: Int64)throws  -> FfiReferenceStoreReply  {
@@ -16375,6 +16385,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_clone_store() != 22065) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_enable_rate_at_finalization() != 47414) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_finalize() != 10538) {

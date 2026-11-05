@@ -948,7 +948,9 @@ class ClaimTest {
             "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
             "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances",
             "cancel_before_claim_consumes_nothing", "cancel_after_claim_keeps_claim_recoverable",
-            "late_worker_fenced_after_recovery")
+            "late_worker_fenced_after_recovery", "rate_admission_at_finalization",
+            "rate_admission_is_all_or_none", "rate_retry_and_changed_batch_count_once",
+            "rate_clock_rollback_keeps_admissions_blocking", "rate_counts_only_allow")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -1004,7 +1006,9 @@ class ClaimTest {
             "withheld_record_conflict_is_rejected" to 7, "checkpoint_fork_freezes_log" to 11,
             "checkpoint_refusal_without_fork_does_not_freeze" to 11, "concurrent_stream_advances" to 4,
             "cancel_before_claim_consumes_nothing" to 5, "cancel_after_claim_keeps_claim_recoverable" to 7,
-            "late_worker_fenced_after_recovery" to 4)
+            "late_worker_fenced_after_recovery" to 4, "rate_admission_at_finalization" to 5,
+            "rate_admission_is_all_or_none" to 5, "rate_retry_and_changed_batch_count_once" to 5,
+            "rate_clock_rollback_keeps_admissions_blocking" to 9, "rate_counts_only_allow" to 7)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -1028,6 +1032,8 @@ class ClaimTest {
             val name = scenario.getString("name")
             assertEquals(name, counts[name], scenario.arr("steps").size)
             var store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"), logId, key)
+            val rateStore = if (scenario.optBoolean("rate_at_finalization")) store.withRateAtFinalization() else null
+            var rateTime = scenario.getLong("start_time")
             var scenarioLogId = logId
             var replayEpochOverride: Long? = null
             val committed = mutableMapOf<String, CommittedOutcome>()
@@ -1056,6 +1062,7 @@ class ClaimTest {
                 when (op) {
                     "set_time" -> {
                         store.setTime(step.getLong("time"))
+                        rateTime = step.getLong("time")
                         assertEquals(at, 0, want.length())
                     }
                     "set_ack_withheld" -> {
@@ -1064,6 +1071,7 @@ class ClaimTest {
                     }
                     "restore" -> {
                         assertEquals(at, 0, want.length())
+                        assertEquals(at, null, rateStore)
                         if (step.getString("mode") == "exact") store = store.cloneStore()
                         else {
                             assertEquals(at, "lost_state_epoch_bump", step.getString("mode"))
@@ -1127,12 +1135,19 @@ class ClaimTest {
                         val req = request(requestName, corpusName = "lifecycle-scenarios.json")
                         val expected = checkNotNull(req.expected) { at }
                         val bundle = decodeProofBundle(req.bundle)
-                        org.junit.Assert.assertTrue(at, bundle.delegations.all { it.constraints.isEmpty() })
+                        org.junit.Assert.assertTrue(at, bundle.delegations.all { cert ->
+                            cert.constraints.all { it.kind == "max_rate" }
+                        })
+                        val rateBatch = bundle.delegations.flatMap { cert -> cert.constraints.map {
+                            RateReservation(cert.issuerId, cert.certId, it.windowS, it.count)
+                        } }
+                        assertEquals(at, rateStore == null, rateBatch.isEmpty())
                         val hash = bundleHash(bundle)
                         val claim = ChallengeClaim(protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value),
                             expected.verifierNamespace, expected.replayEpoch, "sha384:" + challengeClaimDigest(expected.value).hex(),
                             hash, hash, bundle.delegations.map { it.issuerId }.distinct().sorted(), req.requiredScope,
-                            req.contextPolicy?.digest ?: "", expected.verifierId, bundle.agentId, false, emptyList(),
+                            req.contextPolicy?.digest ?: "", expected.verifierId, bundle.agentId,
+                            rateBatch.isNotEmpty(), rateBatch,
                             expected.issuedAt, expected.expiresAt, req.maxChallengeAgeSeconds, req.futureSkewSeconds,
                             bundle.streamId, bundle.streamSeq, emptyList())
                         claimed[requestName] = claim
@@ -1160,7 +1175,8 @@ class ClaimTest {
                         assertEquals(at, if (want.has("recovered")) setOf("stage", "error_class", "recovered")
                             else if (want.has("error_class")) setOf("stage", "error_class")
                             else if (want.has("decision"))
-                            setOf("stage", "decision", "decision_reason", "allow_horizon")
+                            if (want.has("allow_horizon")) setOf("stage", "decision", "decision_reason", "allow_horizon")
+                            else setOf("stage", "decision", "decision_reason")
                             else setOf("stage", "disposition"), want.keys().asSequence().toSet())
                         val fixtureRequest = request(requestName, corpusName = "lifecycle-scenarios.json")
                         val currentTime = store.now()
@@ -1181,6 +1197,9 @@ class ClaimTest {
                         } else if (name == "checkpoint_fork_freezes_log" && index == 6) {
                             assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
                             assertEquals(at, 1_800_000_007L, currentTime)
+                        } else if (rateStore != null) {
+                            assertEquals(at, scenario.getLong("start_time"), fixtureRequest.now)
+                            assertEquals(at, rateTime, currentTime)
                         } else assertEquals(at, fixtureRequest.now, currentTime)
                         val req = if (fixtureRequest.now == currentTime && replayEpochOverride == null) fixtureRequest
                             else request(requestName, corpusName = "lifecycle-scenarios.json", atTime = currentTime,
@@ -1200,6 +1219,7 @@ class ClaimTest {
                                 ?.let { time -> { store.setTime(time) } })
                         val result: VerifyOutcome
                         if (mode == "cancel_before_claim") {
+                            assertEquals(at, null, rateStore)
                             val receiver = GatedReceiver()
                             val observed = AtomicReference<VerifyOutcome?>()
                             val verifyStore = store
@@ -1254,6 +1274,7 @@ class ClaimTest {
                             org.junit.Assert.assertArrayEquals(at, recoveredBodyData,
                                 store.loadCommitted(result.claim.claimId).receiptBody)
                         } else if (mode == "cancel_during_status") {
+                            assertEquals(at, null, rateStore)
                             val started = CompletableDeferred<Unit>()
                             val release = CompletableDeferred<Unit>()
                             val observed = AtomicReference<VerifyOutcome?>()
@@ -1269,7 +1290,9 @@ class ClaimTest {
                             call.join()
                             org.junit.Assert.assertTrue(at, reached)
                             result = checkNotNull(observed.get()) { "$at: cancelled call did not return an outcome" }
-                        } else result = verifyProofBundle(req, store, trust = trust,
+                        } else if (rateStore != null) result = verifyProofBundle(req, rateStore, trust = trust,
+                            statusEvidence = status, statusJournal = journal)
+                        else result = verifyProofBundle(req, store, trust = trust,
                             statusEvidence = status, statusJournal = journal)
                         assertEquals(at, want.getString("stage"), result.stage.spelling)
                         claimed[requestName]?.let { assertEquals(at, it, result.claim) }
@@ -1293,7 +1316,8 @@ class ClaimTest {
                             val body = JSONObject(String(value.receiptBody))
                             assertEquals(at, want.getString("decision"), body.getString("decision"))
                             assertEquals(at, want.getString("decision_reason"), body.getString("decision_reason"))
-                            assertEquals(at, want.getLong("allow_horizon"), value.allowHorizon)
+                            assertEquals(at, if (want.has("allow_horizon")) want.getLong("allow_horizon") else null,
+                                value.allowHorizon)
                         } else assertEquals(at, null, result.committed)
                     }
                     "resume" -> {

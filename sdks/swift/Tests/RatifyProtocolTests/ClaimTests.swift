@@ -1727,6 +1727,75 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    func testConcurrentResumeSeesOwnerFinalizeOrLiveLease() async throws {
+        let corpus = Corpus.load("concurrency-scenarios.json")
+        let scenario = try XCTUnwrap(corpus.arr("scenarios").first { $0.s("name") == "resume_races_owner_finalize" })
+        let participants = scenario.arr("participants")
+        XCTAssertEqual(participants.map { $0.s("op") }, ["finalize", "resume"])
+        let inputs = Corpus.load("lifecycle-scenarios.json")
+        let req = try request("A", corpusName: "lifecycle-scenarios.json")
+        let expected = try XCTUnwrap(req.expected)
+        let bundle = try Ratify.decodeProofBundle(req.bundle)
+        let hash = try Ratify.bundleHash(bundle)
+        let claim = ChallengeClaim(claimId: try Ratify.protocolClaimId(namespace: expected.verifierNamespace,
+            replayEpoch: expected.replayEpoch, challenge: expected.value), namespace: expected.verifierNamespace,
+            replayEpoch: expected.replayEpoch, challengeDigest: "sha384:" +
+                (try Ratify.challengeClaimDigest(expected.value)).hex,
+            proofDigest: hash, bundleHash: hash, issuerIds: Array(Set(bundle.delegations.map(\.issuerId))).sorted(),
+            requiredScope: req.requiredScope, contextPolicyDigest: req.contextPolicy?.digest ?? "",
+            verifierId: expected.verifierId, agentId: bundle.agentId, requiresRate: false, rateBatch: [],
+            issuedAt: expected.issuedAt, expiresAt: expected.expiresAt,
+            maxAgeSeconds: req.maxChallengeAgeSeconds, clockSkewSeconds: req.futureSkewSeconds,
+            streamId: bundle.streamId, streamSeq: bundle.streamSeq, constraintEvaluators: [])
+        let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        let terminal = participants[0].b64("terminal_b64"), body = participants[0].b64("body_b64")
+        for iteration in 0..<corpus.int("default_iterations") {
+            let store = try Store(now: Int64(scenario.int("start_time")),
+                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: inputs.s("log_id"), verifierKey: key)
+            let claimed = try await store.claim(claim)
+            XCTAssertEqual(claimed.disposition, .created, "iteration \(iteration)")
+            let results = await withTaskGroup(of: String.self) { group in
+                group.addTask {
+                    do {
+                        let changed = try await store.finalize(claimId: claim.claimId,
+                            ownerToken: claimed.ownerToken, terminalResult: terminal,
+                            receiptBody: body, allowValidUntil: 0)
+                        return changed ? "owner/committed" : "owner/identical"
+                    } catch { return "owner/error" }
+                }
+                for _ in 0..<participants[1].int("count") {
+                    group.addTask {
+                        do {
+                            let value = try await Ratify.resumeCommittedClaim(store: store, claimId: claim.claimId)
+                            let receipt = try JSONSerialization.jsonObject(with: value.receiptBody) as! [String: Any]
+                            return "resume/committed/\(receipt["decision"] ?? "")/\(receipt["decision_reason"] ?? "")"
+                        } catch {
+                            let klass = (error as? RatifyError)?.errorClass ?? (error as? StoreError)?.errorClass
+                            return "resume/error/" + (klass?.rawValue ?? "unclassified")
+                        }
+                    }
+                }
+                var values: [String] = []
+                for await value in group { values.append(value) }
+                return values
+            }
+            XCTAssertEqual(results.count, 7, "iteration \(iteration)")
+            XCTAssertEqual(results.filter { $0 == "owner/committed" }.count, 1, "iteration \(iteration)")
+            XCTAssertTrue(results.filter { $0.hasPrefix("resume/") }.allSatisfy {
+                $0 == "resume/error/claim_lease_live" ||
+                    $0 == "resume/committed/indeterminate/status_unavailable"
+            }, "iteration \(iteration): \(results)")
+            let resumed = try await Ratify.resumeCommittedClaim(store: store, claimId: claim.claimId)
+            XCTAssertEqual(resumed.receiptBody, body, "iteration \(iteration)")
+            let wire = try await store.publish(claimId: claim.claimId, receiptBody: body)
+            XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence, 1, "iteration \(iteration)")
+            let release = try await Ratify.releaseDecision(resumed, signedReceipt: wire,
+                verifierPublicKey: key.publicKey, logId: inputs.s("log_id"), claimStore: store, checkpoint: store)
+            XCTAssertEqual(release.status, .released, "iteration \(iteration)")
+            XCTAssertEqual(release.decision?.decision, "indeterminate", "iteration \(iteration)")
+        }
+    }
+
     func testConcurrentIdenticalFinalizationsAndProofRetries() async throws {
         let corpus = Corpus.load("concurrency-scenarios.json")
         let scenario = try XCTUnwrap(corpus.arr("scenarios").first { $0.s("name") == "concurrent_identical_retries" })

@@ -1983,6 +1983,81 @@ class ClaimTest {
         }
     }
 
+    @Test fun concurrentOwnerFinalizeAgainstLeaseExpiryRecovery() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first {
+            it.getString("name") == "owner_finalize_races_lease_expiry_and_recovery"
+        }
+        val participants = scenario.arr("participants")
+        assertEquals(listOf("finalize", "recover_direct", "set_time"), participants.map { it.getString("op") })
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val expected = checkNotNull(req.expected)
+        val bundle = decodeProofBundle(req.bundle)
+        val hash = bundleHash(bundle)
+        val claim = ChallengeClaim(protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value),
+            expected.verifierNamespace, expected.replayEpoch, "sha384:" + challengeClaimDigest(expected.value).hex(),
+            hash, hash, bundle.delegations.map { it.issuerId }.distinct().sorted(), req.requiredScope,
+            req.contextPolicy?.digest ?: "", expected.verifierId, bundle.agentId, false, emptyList(),
+            expected.issuedAt, expected.expiresAt, req.maxChallengeAgeSeconds, req.futureSkewSeconds,
+            bundle.streamId, bundle.streamSeq, emptyList())
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val ownerTerminal = participants[0].b64("terminal_b64")
+        val ownerBody = participants[0].b64("body_b64")
+        val recoveryTerminal = participants[1].b64("terminal_b64")
+        val recoveryBody = participants[1].b64("body_b64")
+        val expiryTime = participants[2].getLong("time")
+        val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("A"), req)
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+                inputs.getString("log_id"), key)
+            val claimed = store.claim(claim)
+            assertEquals("iteration $iteration", ClaimDisposition.CREATED, claimed.disposition)
+            val owner = async(Dispatchers.Default) {
+                try {
+                    "owner/" + if (store.finalize(claim.claimId, claimed.ownerToken, ownerTerminal, ownerBody, 0))
+                        "committed" else "identical"
+                } catch (e: StoreError.Classified) { "owner/error/${e.errorClass.spelling}" }
+            }
+            val recoverers = List(participants[1].getInt("count")) {
+                async(Dispatchers.Default) {
+                    try {
+                        "recover/" + if (store.recoverInterrupted(claim.claimId, recoveryTerminal, recoveryBody))
+                            "committed" else "identical"
+                    } catch (e: StoreError.Classified) { "recover/error/${e.errorClass.spelling}" }
+                }
+            }
+            val clock = async(Dispatchers.Default) { store.setTime(expiryTime); "clock/set" }
+            val results = listOf(owner.await()) + recoverers.map { it.await() } + clock.await()
+            assertEquals("iteration $iteration", 5, results.size)
+            assertEquals("iteration $iteration", 1, results.count { it == "clock/set" })
+            org.junit.Assert.assertTrue("iteration $iteration: $results",
+                results.count { it in setOf("owner/committed", "recover/committed") } <= 1)
+            org.junit.Assert.assertTrue("iteration $iteration: $results", results.filter { it.startsWith("owner/") }
+                .all { it in setOf("owner/committed", "owner/error/claim_lease_lost",
+                    "owner/error/claim_already_terminal") })
+            org.junit.Assert.assertTrue("iteration $iteration: $results", results.filter { it.startsWith("recover/") }
+                .all { it in setOf("recover/committed", "recover/identical", "recover/error/claim_lease_live",
+                    "recover/error/claim_already_terminal") })
+            if (results.contains("owner/committed")) {
+                try {
+                    recoverInterruptedClaim(store, claim.claimId)
+                    fail("owner terminal result was replaced at iteration $iteration")
+                } catch (e: RatifyException.Protocol) {
+                    assertEquals("iteration $iteration", ErrorClass.CLAIM_ALREADY_TERMINAL, e.errorClass)
+                }
+            } else {
+                val recovered = recoverInterruptedClaim(store, claim.claimId)
+                org.junit.Assert.assertArrayEquals(recoveryBody, recovered.receiptBody)
+            }
+            val replay = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+            assertEquals("iteration $iteration", ClaimDisposition.TERMINAL_REPLAY, replay.disposition)
+        }
+    }
+
     @Test fun concurrentLateOwnerCannotReplaceRecovery() = runBlocking {
         val corpus = Corpus.load("concurrency-scenarios.json")
         val scenario = corpus.arr("scenarios").first { it.getString("name") == "late_worker_finalize_after_recovery" }

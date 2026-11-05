@@ -1826,6 +1826,149 @@ class ClaimTest {
         }
     }
 
+    @Test fun concurrentResumeAndReleaseOfOneAllow() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first {
+            it.getString("name") == "concurrent_resumes_and_releases_of_one_allow"
+        }
+        val participants = scenario.arr("participants")
+        assertEquals(listOf("resume", "release"), participants.map { it.getString("op") })
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val logId = inputs.getString("log_id")
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("A"), req)
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"), logId, key)
+            val verified = verifyProofBundle(req, store,
+                trust = trust, statusEvidence = status, statusJournal = journal)
+            val committed = checkNotNull(verified.committed) { "iteration $iteration" }
+            val wire = store.publish(committed.claimId, committed.receiptBody)
+            val calls = participants.flatMap { participant ->
+                List(participant.getInt("count")) {
+                    async(Dispatchers.Default) {
+                        if (participant.getString("op") == "resume") {
+                            val resumed = resumeCommittedClaim(store, committed.claimId)
+                            releaseDecision(resumed, wire, key.publicKey, logId, store, store) to resumed.receiptBody
+                        } else {
+                            releaseDecision(committed, wire, key.publicKey, logId, store, store) to null
+                        }
+                    }
+                }
+            }
+            val results = calls.map { it.await() }
+            assertEquals("iteration $iteration", 10, results.size)
+            assertEquals("iteration $iteration", participants[0].getInt("count"), results.count { it.second != null })
+            for ((result, resumedBody) in results) {
+                if (resumedBody != null) org.junit.Assert.assertArrayEquals(committed.receiptBody, resumedBody)
+                assertEquals("iteration $iteration", ReleaseStatus.RELEASED, result.status)
+                assertEquals("iteration $iteration", "allow", result.decision?.decision)
+                assertEquals("iteration $iteration", scenario.getLong("start_time"), result.decision?.releaseTime)
+                org.junit.Assert.assertArrayEquals(wire, result.decision?.receiptWire)
+            }
+            val resumed = resumeCommittedClaim(store, committed.claimId)
+            org.junit.Assert.assertArrayEquals(committed.receiptBody, resumed.receiptBody)
+            val after = releaseDecision(committed, wire, key.publicKey, logId, store, store)
+            assertEquals("iteration $iteration", ReleaseStatus.RELEASED, after.status)
+            org.junit.Assert.assertArrayEquals(wire, after.decision?.receiptWire)
+        }
+    }
+
+    @Test fun concurrentReleaseWhileAcknowledgementLands() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first {
+            it.getString("name") == "release_while_acknowledgement_lands"
+        }
+        val participants = scenario.arr("participants")
+        assertEquals(listOf("release", "acknowledge"), participants.map { it.getString("op") })
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val logId = inputs.getString("log_id")
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("A"), req)
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"), logId, key)
+            store.setAcknowledgementWithheld(true)
+            val verified = verifyProofBundle(req, store,
+                trust = trust, statusEvidence = status, statusJournal = journal)
+            val committed = checkNotNull(verified.committed) { "iteration $iteration" }
+            val wire = store.publish(committed.claimId, committed.receiptBody)
+            val receipt = decodeVerificationReceipt(wire)
+            val digest = verificationReceiptDigest(receipt)
+            val calls = participants.flatMap { participant ->
+                List(participant.getInt("count")) {
+                    async(Dispatchers.Default) {
+                        if (participant.getString("op") == "acknowledge") {
+                            val ack = store.acknowledge(logId, receipt.sequence, receipt.previousReceiptHash, digest)
+                            "acknowledged/${ack.timestamp}"
+                        } else {
+                            val result = releaseDecision(committed, wire, key.publicKey, logId, store, store)
+                            result.decision?.let {
+                                "released/${it.decision}/${it.releaseTime}/${receipt.sequence}"
+                            } ?: "${result.status.spelling}/${result.reason}"
+                        }
+                    }
+                }
+            }
+            val results = calls.map { it.await() }
+            assertEquals("iteration $iteration", 7, results.size)
+            assertEquals("iteration $iteration", listOf("acknowledged/1800000000"),
+                results.filter { it.startsWith("acknowledged/") })
+            org.junit.Assert.assertTrue("iteration $iteration", results.filterNot { it.startsWith("acknowledged/") }
+                .all { it in setOf("pending/acknowledgement_unavailable", "released/allow/1800000000/1") })
+            val after = releaseDecision(committed, wire, key.publicKey, logId, store, store)
+            assertEquals("iteration $iteration", ReleaseStatus.RELEASED, after.status)
+            org.junit.Assert.assertArrayEquals(wire, after.decision?.receiptWire)
+        }
+    }
+
+    @Test fun concurrentIdenticalRecoveriesCommitOnce() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first { it.getString("name") == "concurrent_identical_recoveries" }
+        val participant = scenario.arr("participants").first()
+        assertEquals("recover_direct", participant.getString("op"))
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val expected = checkNotNull(req.expected)
+        val bundle = decodeProofBundle(req.bundle)
+        val hash = bundleHash(bundle)
+        val claim = ChallengeClaim(protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value),
+            expected.verifierNamespace, expected.replayEpoch, "sha384:" + challengeClaimDigest(expected.value).hex(),
+            hash, hash, bundle.delegations.map { it.issuerId }.distinct().sorted(), req.requiredScope,
+            req.contextPolicy?.digest ?: "", expected.verifierId, bundle.agentId, false, emptyList(),
+            expected.issuedAt, expected.expiresAt, req.maxChallengeAgeSeconds, req.futureSkewSeconds,
+            bundle.streamId, bundle.streamSeq, emptyList())
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val terminal = participant.b64("terminal_b64")
+        val body = participant.b64("body_b64")
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+                inputs.getString("log_id"), key)
+            assertEquals("iteration $iteration", ClaimDisposition.CREATED, store.claim(claim).disposition)
+            store.setTime(scenario.arr("setup")[1].getLong("time"))
+            val calls = List(participant.getInt("count")) {
+                async(Dispatchers.Default) { store.recoverInterrupted(claim.claimId, terminal, body) }
+            }
+            val results = calls.map { it.await() }
+            assertEquals("iteration $iteration", 6, results.size)
+            assertEquals("iteration $iteration", 1, results.count { it })
+            val recovered = recoverInterruptedClaim(store, claim.claimId)
+            org.junit.Assert.assertArrayEquals(body, recovered.receiptBody)
+            val wire = store.publish(claim.claimId, body)
+            assertEquals("iteration $iteration", 1L, decodeVerificationReceipt(wire).sequence)
+            org.junit.Assert.assertArrayEquals(wire, store.publish(claim.claimId, body))
+        }
+    }
+
     @Test fun lifecycleBasicReleaseScenarios() = runBlocking {
         val corpus = Corpus.load("lifecycle-scenarios.json")
         val names = setOf("allow_published_acknowledged_released", "release_without_receipt_is_pending",

@@ -1365,9 +1365,9 @@ final class ClaimTests: XCTestCase {
         XCTAssertEqual(participant.int("count"), 8)
         let inputs = Corpus.load("lifecycle-scenarios.json")
         let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        let logId = inputs.s("log_id")
         let req = try request("A", corpusName: "lifecycle-scenarios.json")
         let (trust, status, journal) = try await vectorProviders(inputs.obj("requests").obj("A"), request: req)
-        let logId = inputs.s("log_id")
         for iteration in 0..<corpus.int("default_iterations") {
             let store = try Store(now: Int64(scenario.int("start_time")),
                 leaseSeconds: Int64(inputs.int("lease_seconds")), logId: logId, verifierKey: key)
@@ -1403,9 +1403,10 @@ final class ClaimTests: XCTestCase {
         XCTAssertEqual(participants.map { $0.s("request") }, ["S2", "S2b"])
         let inputs = Corpus.load("lifecycle-scenarios.json")
         let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        let logId = inputs.s("log_id")
         for iteration in 0..<corpus.int("default_iterations") {
             let store = try Store(now: Int64(scenario.int("start_time")),
-                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: inputs.s("log_id"), verifierKey: key)
+                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: logId, verifierKey: key)
             func verify(_ name: String) async throws -> VerifyOutcome {
                 let req = try request(name, corpusName: "lifecycle-scenarios.json")
                 let (trust, status, journal) = try await vectorProviders(inputs.obj("requests").obj(name), request: req)
@@ -1549,6 +1550,177 @@ final class ClaimTests: XCTestCase {
             let nextBody = try JSONSerialization.jsonObject(with: try XCTUnwrap(next.committed).receiptBody)
                 as! [String: Any]
             XCTAssertEqual(nextBody["decision"] as? String, "allow", "iteration \(iteration)")
+        }
+    }
+
+    func testConcurrentResumeAndReleaseOfOneAllow() async throws {
+        let corpus = Corpus.load("concurrency-scenarios.json")
+        let scenario = try XCTUnwrap(corpus.arr("scenarios").first {
+            $0.s("name") == "concurrent_resumes_and_releases_of_one_allow"
+        })
+        let participants = scenario.arr("participants")
+        XCTAssertEqual(participants.map { $0.s("op") }, ["resume", "release"])
+        let inputs = Corpus.load("lifecycle-scenarios.json")
+        let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        let logId = inputs.s("log_id")
+        let req = try request("A", corpusName: "lifecycle-scenarios.json")
+        let (trust, status, journal) = try await vectorProviders(inputs.obj("requests").obj("A"), request: req)
+        for iteration in 0..<corpus.int("default_iterations") {
+            let store = try Store(now: Int64(scenario.int("start_time")),
+                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: logId, verifierKey: key)
+            let verified = try await Ratify.verifyProofBundle(req, claimStore: store,
+                trust: trust, statusEvidence: status, statusJournal: journal)
+            let committed = try XCTUnwrap(verified.committed, "iteration \(iteration)")
+            let wire = try await store.publish(claimId: committed.claimId, receiptBody: committed.receiptBody)
+            let results = try await withThrowingTaskGroup(of: (ReleaseResult, Data?).self) { group in
+                for participant in participants {
+                    for _ in 0..<participant.int("count") {
+                        if participant.s("op") == "resume" {
+                            group.addTask {
+                                let resumed = try await Ratify.resumeCommittedClaim(store: store, claimId: committed.claimId)
+                                return (try await Ratify.releaseDecision(resumed, signedReceipt: wire,
+                                    verifierPublicKey: key.publicKey, logId: logId,
+                                    claimStore: store, checkpoint: store), resumed.receiptBody)
+                            }
+                        } else {
+                            group.addTask {
+                                (try await Ratify.releaseDecision(committed, signedReceipt: wire,
+                                    verifierPublicKey: key.publicKey, logId: logId,
+                                    claimStore: store, checkpoint: store), nil)
+                            }
+                        }
+                    }
+                }
+                var values: [(ReleaseResult, Data?)] = []
+                for try await value in group { values.append(value) }
+                return values
+            }
+            XCTAssertEqual(results.count, 10, "iteration \(iteration)")
+            XCTAssertEqual(results.compactMap(\.1).count, participants[0].int("count"), "iteration \(iteration)")
+            for (result, resumedBody) in results {
+                XCTAssertEqual(resumedBody ?? committed.receiptBody, committed.receiptBody, "iteration \(iteration)")
+                XCTAssertEqual(result.status, .released, "iteration \(iteration)")
+                XCTAssertEqual(result.decision?.decision, "allow", "iteration \(iteration)")
+                XCTAssertEqual(result.decision?.releaseTime, Int64(scenario.int("start_time")), "iteration \(iteration)")
+                XCTAssertEqual(result.decision?.receiptWire, wire, "iteration \(iteration)")
+            }
+            let resumed = try await Ratify.resumeCommittedClaim(store: store, claimId: committed.claimId)
+            XCTAssertEqual(resumed.receiptBody, committed.receiptBody, "iteration \(iteration)")
+            let after = try await Ratify.releaseDecision(committed, signedReceipt: wire,
+                verifierPublicKey: key.publicKey, logId: logId, claimStore: store, checkpoint: store)
+            XCTAssertEqual(after.status, .released, "iteration \(iteration)")
+            XCTAssertEqual(after.decision?.receiptWire, wire, "iteration \(iteration)")
+        }
+    }
+
+    func testConcurrentReleaseWhileAcknowledgementLands() async throws {
+        let corpus = Corpus.load("concurrency-scenarios.json")
+        let scenario = try XCTUnwrap(corpus.arr("scenarios").first {
+            $0.s("name") == "release_while_acknowledgement_lands"
+        })
+        let participants = scenario.arr("participants")
+        XCTAssertEqual(participants.map { $0.s("op") }, ["release", "acknowledge"])
+        let inputs = Corpus.load("lifecycle-scenarios.json")
+        let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        let logId = inputs.s("log_id")
+        let req = try request("A", corpusName: "lifecycle-scenarios.json")
+        let (trust, status, journal) = try await vectorProviders(inputs.obj("requests").obj("A"), request: req)
+        for iteration in 0..<corpus.int("default_iterations") {
+            let store = try Store(now: Int64(scenario.int("start_time")),
+                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: logId, verifierKey: key)
+            try store.setAcknowledgementWithheld(true)
+            let verified = try await Ratify.verifyProofBundle(req, claimStore: store,
+                trust: trust, statusEvidence: status, statusJournal: journal)
+            let committed = try XCTUnwrap(verified.committed, "iteration \(iteration)")
+            let wire = try await store.publish(claimId: committed.claimId, receiptBody: committed.receiptBody)
+            let receipt = try Ratify.decodeVerificationReceipt(wire)
+            let digest = try Ratify.verificationReceiptDigest(receipt)
+            let results = try await withThrowingTaskGroup(of: String.self) { group in
+                for participant in participants {
+                    for _ in 0..<participant.int("count") {
+                        if participant.s("op") == "acknowledge" {
+                            group.addTask {
+                                let ack = try await store.acknowledge(logId: logId, sequence: receipt.sequence,
+                                    previousEntryHash: receipt.previousReceiptHash, entryHash: digest)
+                                return "acknowledged/\(ack.timestamp)"
+                            }
+                        } else {
+                            group.addTask {
+                                let result = try await Ratify.releaseDecision(committed, signedReceipt: wire,
+                                    verifierPublicKey: key.publicKey, logId: logId,
+                                    claimStore: store, checkpoint: store)
+                                if let decision = result.decision {
+                                    return "released/\(decision.decision)/\(decision.releaseTime)/\(receipt.sequence)"
+                                }
+                                return "\(result.status.rawValue)/\(result.reason)"
+                            }
+                        }
+                    }
+                }
+                var values: [String] = []
+                for try await value in group { values.append(value) }
+                return values
+            }
+            XCTAssertEqual(results.count, 7, "iteration \(iteration)")
+            XCTAssertEqual(results.filter { $0.hasPrefix("acknowledged/") }, ["acknowledged/1800000000"],
+                "iteration \(iteration)")
+            XCTAssertTrue(results.filter { !$0.hasPrefix("acknowledged/") }.allSatisfy {
+                ["pending/acknowledgement_unavailable", "released/allow/1800000000/1"].contains($0)
+            }, "iteration \(iteration)")
+            let after = try await Ratify.releaseDecision(committed, signedReceipt: wire,
+                verifierPublicKey: key.publicKey, logId: logId, claimStore: store, checkpoint: store)
+            XCTAssertEqual(after.status, .released, "iteration \(iteration)")
+            XCTAssertEqual(after.decision?.receiptWire, wire, "iteration \(iteration)")
+        }
+    }
+
+    func testConcurrentIdenticalRecoveriesCommitOnce() async throws {
+        let corpus = Corpus.load("concurrency-scenarios.json")
+        let scenario = try XCTUnwrap(corpus.arr("scenarios").first {
+            $0.s("name") == "concurrent_identical_recoveries"
+        })
+        let participant = try XCTUnwrap(scenario.arr("participants").first)
+        XCTAssertEqual(participant.s("op"), "recover_direct")
+        let inputs = Corpus.load("lifecycle-scenarios.json")
+        let req = try request("A", corpusName: "lifecycle-scenarios.json")
+        let expected = try XCTUnwrap(req.expected)
+        let bundle = try Ratify.decodeProofBundle(req.bundle)
+        let hash = try Ratify.bundleHash(bundle)
+        let claim = ChallengeClaim(claimId: try Ratify.protocolClaimId(namespace: expected.verifierNamespace,
+            replayEpoch: expected.replayEpoch, challenge: expected.value), namespace: expected.verifierNamespace,
+            replayEpoch: expected.replayEpoch, challengeDigest: "sha384:" +
+                (try Ratify.challengeClaimDigest(expected.value)).hex,
+            proofDigest: hash, bundleHash: hash, issuerIds: Array(Set(bundle.delegations.map(\.issuerId))).sorted(),
+            requiredScope: req.requiredScope, contextPolicyDigest: req.contextPolicy?.digest ?? "",
+            verifierId: expected.verifierId, agentId: bundle.agentId, requiresRate: false, rateBatch: [],
+            issuedAt: expected.issuedAt, expiresAt: expected.expiresAt,
+            maxAgeSeconds: req.maxChallengeAgeSeconds, clockSkewSeconds: req.futureSkewSeconds,
+            streamId: bundle.streamId, streamSeq: bundle.streamSeq, constraintEvaluators: [])
+        let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        let terminal = participant.b64("terminal_b64"), body = participant.b64("body_b64")
+        for iteration in 0..<corpus.int("default_iterations") {
+            let store = try Store(now: Int64(scenario.int("start_time")),
+                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: inputs.s("log_id"), verifierKey: key)
+            let claimed = try await store.claim(claim)
+            XCTAssertEqual(claimed.disposition, .created, "iteration \(iteration)")
+            try store.setTime(Int64(scenario.arr("setup")[1].int("time")))
+            let results = try await withThrowingTaskGroup(of: Bool.self) { group in
+                for _ in 0..<participant.int("count") {
+                    group.addTask { try await store.recoverInterrupted(claimId: claim.claimId,
+                        terminalResult: terminal, receiptBody: body) }
+                }
+                var values: [Bool] = []
+                for try await value in group { values.append(value) }
+                return values
+            }
+            XCTAssertEqual(results.count, 6, "iteration \(iteration)")
+            XCTAssertEqual(results.filter { $0 }.count, 1, "iteration \(iteration)")
+            let recovered = try await Ratify.recoverInterruptedClaim(store: store, claimId: claim.claimId)
+            XCTAssertEqual(recovered.receiptBody, body, "iteration \(iteration)")
+            let wire = try await store.publish(claimId: claim.claimId, receiptBody: body)
+            XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence, 1, "iteration \(iteration)")
+            let republished = try await store.publish(claimId: claim.claimId, receiptBody: body)
+            XCTAssertEqual(republished, wire, "iteration \(iteration)")
         }
     }
 

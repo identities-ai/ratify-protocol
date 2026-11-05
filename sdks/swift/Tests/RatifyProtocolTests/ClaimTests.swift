@@ -1052,7 +1052,12 @@ final class ClaimTests: XCTestCase {
             "late_worker_fenced_after_recovery", "rate_admission_at_finalization",
             "rate_admission_is_all_or_none", "rate_retry_and_changed_batch_count_once",
             "rate_clock_rollback_keeps_admissions_blocking", "rate_counts_only_allow",
-            "dual_root_both_released_executes_once"]
+            "dual_root_both_released_executes_once", "dual_root_one_root_missing",
+            "dual_root_other_root_missing", "dual_root_duplicate_root", "dual_root_replay",
+            "dual_root_mismatched_action", "dual_root_committed_unreleased",
+            "dual_root_expired_before_execution", "dual_root_cross_set_reuse",
+            "dual_root_same_set_different_action", "dual_root_swapped_verifier",
+            "dual_root_set_names_other_verifier", "dual_root_concurrent_completion"]
         let scenarios = (corpus.arr("scenarios") + corpus.arr("profile_scenarios"))
             .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
@@ -1113,7 +1118,13 @@ final class ClaimTests: XCTestCase {
             "late_worker_fenced_after_recovery": 4, "rate_admission_at_finalization": 5,
             "rate_admission_is_all_or_none": 5, "rate_retry_and_changed_batch_count_once": 5,
             "rate_clock_rollback_keeps_admissions_blocking": 9, "rate_counts_only_allow": 7,
-            "dual_root_both_released_executes_once": 12]
+            "dual_root_both_released_executes_once": 12, "dual_root_one_root_missing": 7,
+            "dual_root_other_root_missing": 6, "dual_root_duplicate_root": 11,
+            "dual_root_replay": 7, "dual_root_mismatched_action": 10,
+            "dual_root_committed_unreleased": 16, "dual_root_expired_before_execution": 11,
+            "dual_root_cross_set_reuse": 14, "dual_root_same_set_different_action": 10,
+            "dual_root_swapped_verifier": 10, "dual_root_set_names_other_verifier": 10,
+            "dual_root_concurrent_completion": 9]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1127,7 +1138,9 @@ final class ClaimTests: XCTestCase {
             "verify_concurrent": ["op", "requests", "expect"],
             "ledger_open": ["op", "approval_set", "expect"],
             "ledger_record": ["op", "request", "slot", "expect"],
-            "ledger_execute": ["op", "expect"]]
+            "ledger_execute": ["op", "expect"],
+            "ledger_record_concurrent": ["op", "requests", "expect"],
+            "ledger_execute_concurrent": ["op", "count", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -1158,6 +1171,9 @@ final class ClaimTests: XCTestCase {
                     expectedStepKeys.formUnion(["log_id", "replay_epoch"])
                 }
                 if op == "verify" && step["mode"] != nil { expectedStepKeys.formUnion(["mode", "time"]) }
+                if (op == "ledger_record" || op == "ledger_execute") && step["set"] != nil {
+                    expectedStepKeys.insert("set")
+                }
                 if op == "finalize" && step["allow_valid_until"] != nil { expectedStepKeys.insert("allow_valid_until") }
                 if op == "resume" && step["claim_record_b64"] != nil {
                     expectedStepKeys.formUnion(["claim_record_b64", "terminal_b64", "body_b64"])
@@ -1167,7 +1183,7 @@ final class ClaimTests: XCTestCase {
                 XCTAssertEqual(Set(step.keys), expectedStepKeys, at)
                 switch op {
                 case "ledger_open":
-                    XCTAssertTrue(want.isEmpty, at)
+                    XCTAssertEqual(Set(want.keys), want["ledger_error"] == nil ? [] : ["ledger_error"], at)
                     let set = step.obj("approval_set")
                     XCTAssertEqual(Set(set.keys), ["id", "verifier_id", "workspace_id", "session_id",
                         "agent_key", "required_scope", "request_hash_b64", "root_keys", "session_context_b64"], at)
@@ -1186,26 +1202,61 @@ final class ClaimTests: XCTestCase {
                         requiredScope: set.s("required_scope"), requestHash: set.b64("request_hash_b64"),
                         rootA: Fixture.shared.privateKey(roots[0]).publicKey,
                         rootB: Fixture.shared.privateKey(roots[1]).publicKey)
-                    XCTAssertNil(opened.failure, at)
+                    XCTAssertEqual(opened.failure, want["ledger_error"] == nil ? nil : want.s("ledger_error"), at)
                     XCTAssertNil(opened.complete, at)
-                    approvalSetId = set.s("id")
+                    if opened.failure == nil { approvalSetId = set.s("id") }
                 case "ledger_record":
-                    XCTAssertEqual(Set(want.keys), want["ledger_complete"] == nil ? [] : ["ledger_complete"], at)
+                    XCTAssertEqual(Set(want.keys), want["ledger_error"] != nil ? ["ledger_error"]
+                        : want["ledger_complete"] == nil ? [] : ["ledger_complete"], at)
                     let ledger = try XCTUnwrap(approvalLedger, at)
-                    let id = try XCTUnwrap(approvalSetId, at)
-                    let decision = try XCTUnwrap(released[requestName], at)
+                    let id = try XCTUnwrap(step["set"] as? String ?? approvalSetId, at)
+                    let decision = released[requestName]
                     let bundle = try request(requestName, corpusName: "lifecycle-scenarios.json").bundle
                     let reply = try ledger.record(id: id, slot: UInt32(step.int("slot")),
                         decision: decision, bundle: bundle)
-                    XCTAssertNil(reply.failure, at)
-                    XCTAssertEqual(reply.complete, want["ledger_complete"] == nil ? false : want.bool("ledger_complete"), at)
+                    XCTAssertEqual(reply.failure, want["ledger_error"] == nil ? nil : want.s("ledger_error"), at)
+                    XCTAssertEqual(reply.complete, want["ledger_error"] != nil ? nil
+                        : want["ledger_complete"] == nil ? false : want.bool("ledger_complete"), at)
                 case "ledger_execute":
                     XCTAssertEqual(Set(want.keys), want["ledger_error"] == nil ? [] : ["ledger_error"], at)
                     let ledger = try XCTUnwrap(approvalLedger, at)
-                    let id = try XCTUnwrap(approvalSetId, at)
+                    let id = try XCTUnwrap(step["set"] as? String ?? approvalSetId, at)
                     let reply = try ledger.execute(id: id, clock: store)
                     XCTAssertEqual(reply.failure, want["ledger_error"] == nil ? nil : want.s("ledger_error"), at)
                     XCTAssertNil(reply.complete, at)
+                case "ledger_record_concurrent":
+                    XCTAssertEqual(Set(want.keys), ["ledger_complete"], at)
+                    let ledger = try XCTUnwrap(approvalLedger, at)
+                    let id = try XCTUnwrap(approvalSetId, at)
+                    let names = step.strings("requests")
+                    XCTAssertEqual(names.count, 2, at)
+                    let first = try XCTUnwrap(released[names[0]], at)
+                    let second = try XCTUnwrap(released[names[1]], at)
+                    let firstBundle = try request(names[0], corpusName: "lifecycle-scenarios.json").bundle
+                    let secondBundle = try request(names[1], corpusName: "lifecycle-scenarios.json").bundle
+                    async let firstReply = ledger.record(id: id, slot: 0, decision: first, bundle: firstBundle)
+                    async let secondReply = ledger.record(id: id, slot: 1, decision: second, bundle: secondBundle)
+                    let replies = try await [firstReply, secondReply]
+                    XCTAssertTrue(replies.allSatisfy { $0.failure == nil }, at)
+                    XCTAssertEqual(replies.filter { $0.complete == true }.count,
+                        want.bool("ledger_complete") ? 1 : 0, at)
+                case "ledger_execute_concurrent":
+                    XCTAssertEqual(Set(want.keys), ["executed"], at)
+                    let ledger = try XCTUnwrap(approvalLedger, at)
+                    let id = try XCTUnwrap(approvalSetId, at)
+                    let count = step.int("count")
+                    XCTAssertEqual(count, 8, at)
+                    let clock = store
+                    let replies = try await withThrowingTaskGroup(of: ApprovalReply.self) { group in
+                        for _ in 0..<count { group.addTask { try ledger.execute(id: id, clock: clock) } }
+                        var results: [ApprovalReply] = []
+                        for try await reply in group { results.append(reply) }
+                        return results
+                    }
+                    XCTAssertEqual(replies.filter { $0.failure == nil }.count, want.int("executed"), at)
+                    XCTAssertTrue(replies.filter { $0.failure != nil }
+                        .allSatisfy { $0.failure == "already_executed" }, at)
+                    XCTAssertTrue(replies.allSatisfy { $0.complete == nil }, at)
                 case "set_time":
                     try store.setTime(Int64(step.int("time")))
                     rateTime = Int64(step.int("time"))

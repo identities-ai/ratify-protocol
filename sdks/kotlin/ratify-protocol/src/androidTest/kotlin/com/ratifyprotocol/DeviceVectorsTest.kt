@@ -33,9 +33,15 @@ class DeviceVectorsTest {
     @Test fun valuesAreImmutable() = PanicVectors.valuesAreImmutable()
     @Test fun evaluatorDeadlineWaitsForBlockedCallback() = ClaimTest().evaluatorDeadlineWaitsForBlockedCallback()
     @Test fun sealedPreflightVectors() = ClaimTest().sealedPreflightVectors()
+    @Test fun issuerScopedStatusJournalKeepsSharedCertIdsSeparate() =
+        ClaimTest().issuerScopedStatusJournalKeepsSharedCertIdsSeparate()
+    @Test fun referenceTrustRegistryOutcomesBeforeVerification() =
+        ClaimTest().referenceTrustRegistryOutcomesBeforeVerification()
     @Test fun referenceStoreClockAndClone() = ReferenceStoreVectors.clockAndClone()
     @Test fun referenceStoreClaimError() = ReferenceStoreVectors.invalidClaimId()
     @Test fun referenceStoreClaimReplayAndLease() = ReferenceStoreVectors.claimReplayAndLease()
+    @Test fun referenceStoreRateCountersKeepSharedCertIdsSeparateByIssuer() =
+        ReferenceStoreVectors.rateCountersKeepSharedCertIdsSeparateByIssuer()
     @Test fun referenceStoreCommittedReceiptCheckpointAndRelease() =
         ClaimTest().referenceStoreCommittedReceiptCheckpointAndRelease()
     @Test fun lifecycleBasicReleaseScenarios() = ClaimTest().lifecycleBasicReleaseScenarios()

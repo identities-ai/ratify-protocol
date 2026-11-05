@@ -680,6 +680,9 @@ ReferenceStoreBridge.recoverInterrupted(claimId:terminalResult:receiptBody:) [Fu
 ReferenceStoreBridge.setAcknowledgementWithheld(_:) [Func] -> (), Swift.Bool
 ReferenceStoreBridge.setSignerFailure(_:) [Func] -> (), Swift.Bool
 ReferenceStoreBridge.setTime(_:) [Func] -> (), Swift.Int64
+ReferenceTrustRegistryBridge [Class]
+ReferenceTrustRegistryBridge.init(records:) [Constructor] -> RatifyProtocol.ReferenceTrustRegistryBridge, [RatifyProtocol.HybridPublicKey]
+ReferenceTrustRegistryBridge.resolve(chain:) [Func] -> RatifyProtocol.TrustResolution, [RatifyProtocol.DelegationCert]
 ReleaseClaimStore [Protocol]
 ReleaseClaimStore.loadTerminal(claimId:) [Func] -> RatifyProtocol.TerminalClaimRecord, Swift.String
 ReleaseClaimStore.recordRelease(_:) [Func] -> (), RatifyProtocol.ReleaseRecord

@@ -5445,6 +5445,124 @@ func FfiConverterTypeFfiReferenceStore_lower(_ value: FfiReferenceStore) -> UInt
 
 
 
+protocol FfiReferenceTrustRegistryProtocol: AnyObject, Sendable {
+
+    func resolve(chain: [FfiDelegationCert]) throws  -> FfiTrustResolution
+
+}
+class FfiReferenceTrustRegistry: FfiReferenceTrustRegistryProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffireferencetrustregistry(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffireferencetrustregistry(handle, $0) }
+    }
+
+
+
+
+func resolve(chain: [FfiDelegationCert])throws  -> FfiTrustResolution  {
+    return try  FfiConverterTypeFfiTrustResolution_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffireferencetrustregistry_resolve(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeFfiDelegationCert.lower(chain),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiReferenceTrustRegistry: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiReferenceTrustRegistry
+
+    static func lift(_ handle: UInt64) throws -> FfiReferenceTrustRegistry {
+        return FfiReferenceTrustRegistry(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiReferenceTrustRegistry) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiReferenceTrustRegistry {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiReferenceTrustRegistry, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiReferenceTrustRegistry_lift(_ handle: UInt64) throws -> FfiReferenceTrustRegistry {
+    return try FfiConverterTypeFfiReferenceTrustRegistry.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiReferenceTrustRegistry_lower(_ value: FfiReferenceTrustRegistry) -> UInt64 {
+    return FfiConverterTypeFfiReferenceTrustRegistry.lower(value)
+}
+
+
+
+
+
+
 protocol FfiReleaseClaimStore: AnyObject, Sendable {
 
     func authoritativeTime(context: FfiStoreContext) throws  -> Int64
@@ -15049,6 +15167,31 @@ fileprivate struct FfiConverterSequenceTypeFfiDelegationCert: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFfiPublicKey: FfiConverterRustBuffer {
+    typealias SwiftType = [FfiPublicKey]
+
+    static func write(_ value: [FfiPublicKey], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFfiPublicKey.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FfiPublicKey] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FfiPublicKey]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFfiPublicKey.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFfiRateReservation: FfiConverterRustBuffer {
     typealias SwiftType = [FfiRateReservation]
 
@@ -15971,6 +16114,14 @@ func ffiDecodeWitnessEntry(data: Data)throws  -> FfiWitnessEntry  {
         uniffiCallStatus in
     uniffi_ratify_protocol_ffi_fn_func_ffi_decode_witness_entry(
         FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+func ffiReferenceTrustRegistry(records: [FfiPublicKey])throws  -> FfiReferenceTrustRegistry  {
+    return try  FfiConverterTypeFfiReferenceTrustRegistry_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_reference_trust_registry(
+        FfiConverterSequenceTypeFfiPublicKey.lower(records),uniffiCallStatus
     )
 })
 }
@@ -16989,6 +17140,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_witness_entry() != 43520) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_reference_trust_registry() != 36076) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_publish_receipt() != 38493) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17485,6 +17639,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencestore_set_time() != 19259) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffireferencetrustregistry_resolve() != 29439) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffireceiptcheckpoint_acknowledge() != 33789) {

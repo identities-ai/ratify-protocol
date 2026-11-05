@@ -11,6 +11,68 @@ private func callbackPanicRemaining() -> UInt32
 final class ClaimTests: XCTestCase {
     @objc func corpusHarness() {}
 
+    func testIssuerScopedStatusJournalKeepsSharedCertIdsSeparate() async throws {
+        let now: Int64 = 1_800_000_000
+        let policy = RevocationStatusPolicy(maxListLifetimeSeconds: 3600, maxStatusAgeSeconds: 600,
+            clockSkewSeconds: 5)
+        let journal = VectorJournal(try Ratify.emptySecurityJournalSnapshot())
+        let issuers = [Fixture.shared.privateKey("root").keyId,
+                       Fixture.shared.privateKey("intermediate").keyId]
+        let statusKeys = [Fixture.shared.privateKey("status_root"),
+                          Fixture.shared.privateKey("status_intermediate")]
+        var signedLists: [RevocationList] = []
+        XCTAssertNotEqual(issuers[0], issuers[1])
+        for i in 0..<2 {
+            _ = try await Ratify.configureStatusKeyEpoch(store: journal, issuerId: issuers[i],
+                epoch: 1, key: statusKeys[i].publicKey)
+            let list = RevocationList(version: 2, issuerId: issuers[i], updatedAt: now - 10,
+                nextUpdate: now + 600, sequence: 1, revoked: i == 0 ? ["shared-id"] : [],
+                signature: HybridSignature(ed25519: Data(), mlDsa65: Data()))
+            let signed = try Ratify.signRevocationList(list, boundIssuerId: issuers[i],
+                boundStatusKey: statusKeys[i].publicKey, key: statusKeys[i])
+            signedLists.append(signed)
+            _ = try await Ratify.applyRevocationListToJournal(store: journal, list: signed,
+                issuerId: issuers[i], epoch: 1, key: statusKeys[i].publicKey, policy: policy, now: now)
+        }
+        let first = try await Ratify.revocationStatusFromJournal(store: journal, issuerId: issuers[0],
+            certId: "shared-id", epoch: 1, key: statusKeys[0].publicKey, policy: policy, now: now)
+        let second = try await Ratify.revocationStatusFromJournal(store: journal, issuerId: issuers[1],
+            certId: "shared-id", epoch: 1, key: statusKeys[1].publicKey, policy: policy, now: now)
+        XCTAssertEqual(first.status, "revoked")
+        XCTAssertEqual(second.status, "not_revoked")
+        XCTAssertEqual(classOf { try Ratify.verifyRevocationListSignature(signedLists[0],
+            trustedIssuerId: issuers[1], statusKey: statusKeys[0].publicKey) },
+            "status_key_binding_mismatch")
+    }
+
+    func testReferenceTrustRegistryOutcomesBeforeVerification() async throws {
+        let vectors = Corpus.load("verifier-ordering.json").arr("vectors")
+        let cases: [(String, TrustOutcome)] = [
+            ("trust_registry_single_record", .trusted),
+            ("trust_registry_duplicate_record", .ambiguous),
+            ("trust_registry_two_candidates_sharing_component", .ambiguous),
+            ("trust_registry_component_only_candidate", .trusted),
+            ("trust_registry_no_candidate", .untrusted),
+        ]
+        for (name, expected) in cases {
+            let vector = try XCTUnwrap(vectors.first { $0.s("name") == name })
+            let records = vector.obj("trust").arr("registry").map {
+                HybridPublicKey(ed25519: $0.b64("ed25519"), mlDsa65: $0.b64("ml_dsa_65"))
+            }
+            let registry = try TrustRegistry(records: records)
+            let chain = try Ratify.decodeProofBundle(request(name).bundle).delegations
+            let answer = try await registry.resolve(chain: chain)
+            XCTAssertEqual(answer.outcome, expected, name)
+            if expected == .trusted {
+                XCTAssertEqual(answer.rootKey,
+                    records[name == "trust_registry_single_record" ? 1 : 0], name)
+            } else {
+                XCTAssertTrue(answer.rootKey.ed25519.isEmpty, name)
+                XCTAssertTrue(answer.rootKey.mlDsa65.isEmpty, name)
+            }
+        }
+    }
+
     func testDualRootLedgerStartsIncomplete() throws {
         let corpus = Corpus.load("lifecycle-scenarios.json")
         let scenario = try XCTUnwrap(corpus.arr("profile_scenarios").first {
@@ -342,28 +404,16 @@ final class ClaimTests: XCTestCase {
         let key: HybridPublicKey
         let outcome: TrustOutcome
         let fails: Bool
-        let registry: [HybridPublicKey]?
+        let registry: TrustRegistry?
         private(set) var calls = 0
         init(key: HybridPublicKey, outcome: TrustOutcome, fails: Bool = false,
-             registry: [HybridPublicKey]? = nil) {
+             registry: TrustRegistry? = nil) {
             self.key = key; self.outcome = outcome; self.fails = fails; self.registry = registry
         }
-        func resolve(chain: [DelegationCert]) throws -> TrustResolution {
+        func resolve(chain: [DelegationCert]) async throws -> TrustResolution {
             calls += 1
             if fails { throw StoreError.unavailable("scripted trust failure") }
-            if let registry {
-                guard let root = chain.last else { return TrustResolution(outcome: .untrusted, rootKey: key) }
-                var match: HybridPublicKey?
-                for candidate in registry {
-                    if try Ratify.keyId(candidate) != root.issuerId &&
-                        candidate.ed25519 != root.issuerPubKey.ed25519 &&
-                        candidate.mlDsa65 != root.issuerPubKey.mlDsa65 { continue }
-                    if match != nil { return TrustResolution(outcome: .ambiguous, rootKey: key) }
-                    match = candidate
-                }
-                return match.map { TrustResolution(outcome: .trusted, rootKey: $0) } ??
-                    TrustResolution(outcome: .untrusted, rootKey: key)
-            }
+            if let registry { return try await registry.resolve(chain: chain) }
             return TrustResolution(outcome: outcome, rootKey: key)
         }
     }
@@ -501,7 +551,8 @@ final class ClaimTests: XCTestCase {
         let trust = VectorTrust(key: root.map { HybridPublicKey(ed25519: $0.b64("ed25519"), mlDsa65: $0.b64("ml_dsa_65")) }
             ?? HybridPublicKey(ed25519: Data(), mlDsa65: Data()),
             outcome: TrustOutcome(rawValue: trustScript["outcome"] as? String ?? "") ?? .unavailable,
-            fails: trustScript["mode"] as? String == "error", registry: records)
+            fails: trustScript["mode"] as? String == "error",
+            registry: try records.map { try TrustRegistry(records: $0) })
         let evidence = vector.obj("status_evidence").mapValues { value -> [StatusEvidenceObject] in
             let script = value as! [String: Any]
             return script.arr("objects").map { StatusEvidenceObject(objectType: UInt16($0.int("object_type_code")), wire: $0.b64("wire_b64")) }

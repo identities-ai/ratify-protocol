@@ -144,6 +144,7 @@ def cmd_check():
 EXTRA_SWIFT = {
     "PreflightRequest": "SDK request grouping for core preflight's explicit arguments",
     "ReferenceStoreBridge": "internal SPI carrier for the separate TestSupport reference store",
+    "ReferenceTrustRegistryBridge": "internal SPI carrier for the separate TestSupport trust registry",
     "ApprovalLedgerBridge": "internal SPI carrier for the separate TestSupport dual-root ledger",
     "ApprovalReplyBridge": "internal SPI carrier for the dual-root ledger result",
     "OfflineDeviceBridge": "internal SPI carrier for the single-device reference checkpoint",
@@ -169,6 +170,7 @@ EXTRA_SWIFT = {
 EXTRA_KOTLIN = {
     "PreflightRequest": "SDK request grouping for core preflight's explicit arguments",
     "ReferenceStoreBridge": "internal-use carrier for the separate testing artifact",
+    "ReferenceTrustRegistryBridge": "internal-use carrier for the separate testing artifact",
     "ApprovalLedgerBridge": "internal-use carrier for the separate testing artifact",
     "ApprovalReplyBridge": "internal-use carrier for the dual-root ledger result",
     "OfflineDeviceBridge": "internal-use carrier for the single-device reference checkpoint",
@@ -210,6 +212,7 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "ReferenceTrustRegistryBridge.resolve": "test-only Rust reference trust resolver",
     "PreflightRequest.bundle": "SDK request field for core preflight's explicit argument",
     "PreflightRequest.expected": "SDK request field for core preflight's explicit argument",
     "PreflightRequest.contextPolicy": "SDK request field for core preflight's explicit argument",

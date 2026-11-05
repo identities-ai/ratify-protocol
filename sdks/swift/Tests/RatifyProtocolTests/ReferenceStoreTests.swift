@@ -4,6 +4,50 @@ import RatifyProtocolTestSupport
 import XCTest
 
 final class ReferenceStoreTests: XCTestCase {
+    func testRateCountersKeepSharedCertIdsSeparateByIssuer() async throws {
+        let vectors = Corpus.load("verifier-ordering.json").arr("vectors")
+        let collision = try XCTUnwrap(vectors.first { $0.s("name") == "issuer_scoped_cert_id_collision" })
+        let rates = collision.obj("expected").arr("rate_batch")
+        XCTAssertEqual(rates.count, 2)
+        XCTAssertEqual(rates.map { $0.s("cert_id") }, ["shared-id", "shared-id"])
+        let issuers = rates.map { $0.s("issuer_id") }
+        XCTAssertNotEqual(issuers[0], issuers[1])
+        let fixture = try XCTUnwrap(vectors.first { $0.s("name") == "allow_bound_context" })
+        let receiptBody = fixture.obj("expected").b64("receipt_body_b64")
+        let body = try JSONSerialization.jsonObject(with: receiptBody) as! [String: Any]
+        let terminal = Data(#"{"decision":"allow","decision_reason":"authorized","identity_status":"authorized_agent"}"#.utf8)
+        let store = try Store(now: 1_800_000_000, leaseSeconds: 30,
+            logId: String(repeating: "a", count: 32), verifierKey: Fixture.shared.privateKey("verifier"))
+        let rateStore = try store.withRateAtFinalization()
+
+        func admit(_ byte: UInt8, issuer: String) async throws -> Bool {
+            let challenge = Data(repeating: byte, count: 32)
+            let digest = "sha384:" + (try Ratify.challengeClaimDigest(challenge)).hex
+            let claim = ChallengeClaim(claimId: try Ratify.protocolClaimId(namespace: "ns", replayEpoch: 1,
+                challenge: challenge), namespace: "ns", replayEpoch: 1, challengeDigest: digest,
+                proofDigest: "proof-\(byte)", bundleHash: body.s("bundle_hash"),
+                issuerIds: body.strings("issuer_ids"), requiredScope: body.s("required_scope"),
+                contextPolicyDigest: body.s("context_policy_digest"), verifierId: body.s("verifier_id"),
+                agentId: body.s("agent_id"), requiresRate: true,
+                rateBatch: [RateReservation(issuerId: issuer, certId: "shared-id", windowSeconds: 60, limit: 1)],
+                issuedAt: 1_799_999_990, expiresAt: 1_800_000_290, maxAgeSeconds: 300,
+                clockSkewSeconds: 0, streamId: nil, streamSeq: nil, constraintEvaluators: [])
+            let created = try await rateStore.claim(claim)
+            XCTAssertEqual(created.disposition, .created)
+            return try await rateStore.finalize(claimId: claim.claimId, ownerToken: created.ownerToken,
+                terminalResult: terminal, receiptBody: receiptBody, allowValidUntil: 1_800_000_100)
+        }
+
+        let first = try await admit(1, issuer: issuers[0])
+        let second = try await admit(2, issuer: issuers[1])
+        XCTAssertTrue(first)
+        XCTAssertTrue(second)
+        do {
+            _ = try await admit(3, issuer: issuers[0])
+            XCTFail("an exhausted issuer counter was admitted")
+        } catch StoreError.rateLimitExceeded {}
+    }
+
     func testClockAndCloneHaveIndependentState() async throws {
         let key = try SoftwarePrivateKey(ed25519Seed: Data(repeating: 1, count: 32), mlDsa65Seed: Data(repeating: 2, count: 32))
         let store = try Store(now: 100, leaseSeconds: 5, logId: String(repeating: "a", count: 32), verifierKey: key)

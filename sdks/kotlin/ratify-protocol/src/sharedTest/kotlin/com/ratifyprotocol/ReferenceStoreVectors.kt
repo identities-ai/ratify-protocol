@@ -2,9 +2,47 @@ package com.ratifyprotocol
 
 import com.ratifyprotocol.testing.Store
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 
 /** The reference store's clone is independent while preserving the snapshot clock. */
 object ReferenceStoreVectors {
+    fun rateCountersKeepSharedCertIdsSeparateByIssuer() = runBlocking {
+        val vectors = Corpus.load("verifier-ordering.json").arr("vectors")
+        val collision = vectors.first { it.getString("name") == "issuer_scoped_cert_id_collision" }
+        val rates = collision.getJSONObject("expected").getJSONArray("rate_batch")
+        check(rates.length() == 2)
+        val issuers = (0..1).map { rates.getJSONObject(it).getString("issuer_id") }
+        check(issuers[0] != issuers[1])
+        check((0..1).all { rates.getJSONObject(it).getString("cert_id") == "shared-id" })
+        val fixture = vectors.first { it.getString("name") == "allow_bound_context" }
+        val receiptBody = fixture.getJSONObject("expected").b64("receipt_body_b64")
+        val body = JSONObject(String(receiptBody))
+        val terminal = """{"decision":"allow","decision_reason":"authorized","identity_status":"authorized_agent"}""".toByteArray()
+        val store = Store(1_800_000_000L, 30, "a".repeat(32), Fixture.privateKey("verifier"))
+        val rateStore = store.withRateAtFinalization()
+
+        suspend fun admit(byte: Byte, issuer: String): Boolean {
+            val challenge = ByteArray(32) { byte }
+            val digest = "sha384:" + challengeClaimDigest(challenge).hex()
+            val claim = ChallengeClaim(protocolClaimId("ns", 1, challenge), "ns", 1, digest,
+                "proof-$byte", body.getString("bundle_hash"), body.getJSONArray("issuer_ids").strings(),
+                body.getString("required_scope"), body.getString("context_policy_digest"),
+                body.getString("verifier_id"), body.getString("agent_id"), true,
+                listOf(RateReservation(issuer, "shared-id", 60, 1)), 1_799_999_990L,
+                1_800_000_290L, 300, 0, null, null, emptyList())
+            val created = rateStore.claim(claim)
+            check(created.disposition == ClaimDisposition.CREATED)
+            return rateStore.finalize(claim.claimId, created.ownerToken, terminal, receiptBody, 1_800_000_100L)
+        }
+
+        check(admit(1, issuers[0]))
+        check(admit(2, issuers[1]))
+        try {
+            admit(3, issuers[0])
+            error("an exhausted issuer counter was admitted")
+        } catch (_: StoreError.RateLimitExceeded) {}
+    }
+
     fun clockAndClone() {
         val key = SoftwarePrivateKey.fromSeeds(ByteArray(32) { 1 }, ByteArray(32) { 2 })
         val store = Store(100, 5, "a".repeat(32), key)

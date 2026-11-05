@@ -1,6 +1,7 @@
 package com.ratifyprotocol
 
 import com.ratifyprotocol.testing.Store as ReferenceStore
+import com.ratifyprotocol.testing.TrustRegistry as ReferenceTrustRegistry
 import com.ratifyprotocol.testing.ApprovalLedger as ReferenceApprovalLedger
 import com.ratifyprotocol.testing.OfflineDevice as ReferenceOfflineDevice
 import com.ratifyprotocol.testing.OfflineDeviceSnapshot as ReferenceOfflineDeviceSnapshot
@@ -33,6 +34,64 @@ import com.sun.jna.Native
 class ClaimTest {
     companion object {
         @BeforeClass @JvmStatic fun setUpCorpus() = CorpusSetup.configure()
+    }
+
+    @Test fun issuerScopedStatusJournalKeepsSharedCertIdsSeparate() = runBlocking {
+        val now = 1_800_000_000L
+        val policy = RevocationStatusPolicy(3600, 600, 5)
+        val journal = VectorJournal(emptySecurityJournalSnapshot())
+        val issuers = listOf(Fixture.privateKey("root").keyId,
+            Fixture.privateKey("intermediate").keyId)
+        val statusKeys = listOf(Fixture.privateKey("status_root"),
+            Fixture.privateKey("status_intermediate"))
+        val signedLists = mutableListOf<RevocationList>()
+        org.junit.Assert.assertNotEquals(issuers[0], issuers[1])
+        for (i in 0..1) {
+            configureStatusKeyEpoch(journal, issuers[i], 1u, statusKeys[i].publicKey)
+            val list = RevocationList(2, issuers[i], now - 10, now + 600, 1,
+                if (i == 0) listOf("shared-id") else emptyList(), HybridSignature(byteArrayOf(), byteArrayOf()))
+            val signed = signRevocationList(list, issuers[i], statusKeys[i].publicKey, statusKeys[i])
+            signedLists.add(signed)
+            applyRevocationListToJournal(journal, signed, issuers[i], 1u,
+                statusKeys[i].publicKey, policy, now)
+        }
+        val first = revocationStatusFromJournal(journal, issuers[0], "shared-id", 1u,
+            statusKeys[0].publicKey, policy, now)
+        val second = revocationStatusFromJournal(journal, issuers[1], "shared-id", 1u,
+            statusKeys[1].publicKey, policy, now)
+        assertEquals("revoked", first.status)
+        assertEquals("not_revoked", second.status)
+        try {
+            verifyRevocationListSignature(signedLists[0], issuers[1], statusKeys[0].publicKey)
+            fail("a list for one issuer authenticated under another issuer")
+        } catch (e: RatifyException.Protocol) {
+            assertEquals(ErrorClass.STATUS_KEY_BINDING_MISMATCH, e.errorClass)
+        }
+    }
+
+    @Test fun referenceTrustRegistryOutcomesBeforeVerification() = runBlocking {
+        val vectors = Corpus.load("verifier-ordering.json").arr("vectors")
+        val cases = listOf(
+            "trust_registry_single_record" to TrustOutcome.TRUSTED,
+            "trust_registry_duplicate_record" to TrustOutcome.AMBIGUOUS,
+            "trust_registry_two_candidates_sharing_component" to TrustOutcome.AMBIGUOUS,
+            "trust_registry_component_only_candidate" to TrustOutcome.TRUSTED,
+            "trust_registry_no_candidate" to TrustOutcome.UNTRUSTED,
+        )
+        for ((name, expected) in cases) {
+            val vector = vectors.first { it.getString("name") == name }
+            val script = vector.getJSONObject("trust").getJSONArray("registry")
+            val records = (0 until script.length()).map { publicKeyOf(script.getJSONObject(it)) }
+            val registry = ReferenceTrustRegistry(records)
+            val answer = registry.resolve(decodeProofBundle(request(name).bundle).delegations)
+            assertEquals(name, expected, answer.outcome)
+            if (expected == TrustOutcome.TRUSTED) {
+                assertEquals(name, records[if (name == "trust_registry_single_record") 1 else 0], answer.rootKey)
+            } else {
+                org.junit.Assert.assertTrue(name, answer.rootKey.ed25519.isEmpty())
+                org.junit.Assert.assertTrue(name, answer.rootKey.mlDsa65.isEmpty())
+            }
+        }
     }
 
     @Test fun dualRootLedgerStartsIncomplete() {
@@ -756,24 +815,12 @@ class ClaimTest {
     }
 
     private class VectorTrust(private val key: HybridPublicKey, private val outcome: TrustOutcome,
-        private val fails: Boolean = false, private val registry: List<HybridPublicKey>? = null) : TrustProvider {
+        private val fails: Boolean = false, private val registry: ReferenceTrustRegistry? = null) : TrustProvider {
         val calls = AtomicInteger()
         override suspend fun resolve(chain: List<DelegationCert>): TrustResolution {
             calls.incrementAndGet()
             if (fails) error("scripted trust failure")
-            if (registry != null) {
-                val root = chain.lastOrNull() ?: return TrustResolution(TrustOutcome.UNTRUSTED, key)
-                var match: HybridPublicKey? = null
-                for (candidate in registry) {
-                    if (keyId(candidate) != root.issuerId &&
-                        !candidate.ed25519.contentEquals(root.issuerPubKey.ed25519) &&
-                        !candidate.mlDsa65.contentEquals(root.issuerPubKey.mlDsa65)) continue
-                    if (match != null) return TrustResolution(TrustOutcome.AMBIGUOUS, key)
-                    match = candidate
-                }
-                return if (match == null) TrustResolution(TrustOutcome.UNTRUSTED, key)
-                    else TrustResolution(TrustOutcome.TRUSTED, match)
-            }
+            if (registry != null) return registry.resolve(chain)
             return TrustResolution(outcome, key)
         }
     }
@@ -817,7 +864,7 @@ class ClaimTest {
             TrustOutcome.fromSpelling(trustScript.optString("outcome")) ?: TrustOutcome.UNAVAILABLE,
             trustScript.optString("mode") == "error",
             trustScript.optJSONArray("registry")?.let { records ->
-                (0 until records.length()).map { publicKeyOf(records.getJSONObject(it)) }
+                ReferenceTrustRegistry((0 until records.length()).map { publicKeyOf(records.getJSONObject(it)) })
             })
         val evidenceObject = vector.getJSONObject("status_evidence")
         val evidence = evidenceObject.keys().asSequence().associateWith { issuer ->

@@ -859,6 +859,11 @@ public final class com/ratifyprotocol/ReferenceStoreBridge$Companion {
 	public final fun forgedCommittedOutcomeTestOnly ()Lcom/ratifyprotocol/CommittedOutcome;
 }
 
+public final class com/ratifyprotocol/ReferenceTrustRegistryBridge {
+	public fun <init> (Ljava/util/List;)V
+	public final fun resolve (Ljava/util/List;)Lcom/ratifyprotocol/TrustResolution;
+}
+
 public abstract interface class com/ratifyprotocol/ReleaseClaimStore : com/ratifyprotocol/AuthoritativeClock {
 	public abstract fun loadTerminal (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun recordRelease (Lcom/ratifyprotocol/ReleaseRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

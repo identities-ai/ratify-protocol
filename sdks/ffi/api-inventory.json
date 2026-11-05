@@ -1,73 +1,73 @@
 {
  "ApprovalErrorTestOnly": {
   "kind": "enum",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::ActionMismatch": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::AlreadyExecuted": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::Expired": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::Incomplete": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::InvalidSlot": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::NotReleased": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::Reused": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::RootMismatch": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::SetAlreadyExists": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::SetInvalid": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::SetUnknown": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::SlotFilled": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::as_str": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalErrorTestOnly::clone": {
   "kind": "fn",
@@ -86,8 +86,8 @@
  },
  "ApprovalLedgerTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalLedgerTestOnly::default": {
   "kind": "fn",
@@ -96,8 +96,8 @@
  },
  "ApprovalLedgerTestOnly::execute": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalLedgerTestOnly::fmt": {
   "kind": "fn",
@@ -106,33 +106,33 @@
  },
  "ApprovalLedgerTestOnly::new": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalLedgerTestOnly::open": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalLedgerTestOnly::record_approval": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalSetTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalSetTestOnly::agent_public_key": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalSetTestOnly::approval_set_id": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalSetTestOnly::clone": {
   "kind": "fn",
@@ -151,33 +151,33 @@
  },
  "ApprovalSetTestOnly::request_hash": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalSetTestOnly::required_scope": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalSetTestOnly::roots": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalSetTestOnly::session_id": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalSetTestOnly::verifier_id": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ApprovalSetTestOnly::workspace_id": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ArchivalProofBundleResultV2": {
   "kind": "struct",
@@ -950,8 +950,8 @@
  },
  "ConstraintV2::canonical_json": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust constraint serialization helper; mobile typed signing and canonical JSON APIs own encoding"
  },
  "ConstraintV2::clone": {
   "kind": "fn",
@@ -972,8 +972,8 @@
  },
  "ConstraintV2::decode": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust constraint parser; mobile object decoders parse constraints within their signed objects"
  },
  "ConstraintV2::default": {
   "kind": "fn",
@@ -2153,8 +2153,8 @@
  },
  "DeviceAcknowledgementTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceAcknowledgementTestOnly::clone": {
   "kind": "fn",
@@ -2163,8 +2163,8 @@
  },
  "DeviceAcknowledgementTestOnly::entry_hash": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceAcknowledgementTestOnly::eq": {
   "kind": "fn",
@@ -2178,43 +2178,43 @@
  },
  "DeviceAcknowledgementTestOnly::log_id": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceAcknowledgementTestOnly::sequence": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceAcknowledgementTestOnly::signature": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceAcknowledgementTestOnly::state_digest": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceAcknowledgementTestOnly::timestamp": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceCheckpointTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceCheckpointTestOnly::acknowledge": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceCheckpointTestOnly::acknowledge_v2_receipt": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceCheckpointTestOnly::fmt": {
   "kind": "fn",
@@ -2223,48 +2223,48 @@
  },
  "DeviceCheckpointTestOnly::get_v2_acknowledgement": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceCheckpointTestOnly::new": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceCheckpointTestOnly::provision": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceCheckpointTestOnly::resubmit": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceCheckpointTestOnly::startup": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceCheckpointTestOnly::submit_pending": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceComponentTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceComponentTestOnly::anchor_state": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceComponentTestOnly::commit": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceComponentTestOnly::fmt": {
   "kind": "fn",
@@ -2273,68 +2273,68 @@
  },
  "DeviceComponentTestOnly::get": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceComponentTestOnly::head": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceComponentTestOnly::new": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceComponentTestOnly::provision_state": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceComponentTestOnly::public_key": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceComponentTestOnly::set_power_loss": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceErrorTestOnly": {
   "kind": "enum",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceErrorTestOnly::Frozen": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceErrorTestOnly::NotAcknowledged": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceErrorTestOnly::PowerLoss": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceErrorTestOnly::StateMismatch": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceErrorTestOnly::StorageFull": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceErrorTestOnly::Store": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceErrorTestOnly::clone": {
   "kind": "fn",
@@ -2353,8 +2353,8 @@
  },
  "DeviceIssuanceTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceIssuanceTestOnly::fmt": {
   "kind": "fn",
@@ -2363,23 +2363,23 @@
  },
  "DeviceIssuanceTestOnly::load_v2_challenge": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceIssuanceTestOnly::persist_v2_challenge": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceJournalTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceJournalTestOnly::compare_and_swap": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceJournalTestOnly::fmt": {
   "kind": "fn",
@@ -2388,33 +2388,33 @@
  },
  "DeviceJournalTestOnly::head": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceJournalTestOnly::load": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePowerLoss": {
   "kind": "enum",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePowerLoss::AfterCommit": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePowerLoss::BeforeCommit": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePowerLoss::Ok": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePowerLoss::clone": {
   "kind": "fn",
@@ -2438,18 +2438,18 @@
  },
  "DevicePrimaryTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePrimaryTestOnly::clone_primary": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePrimaryTestOnly::complete_state_digest_test_only": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePrimaryTestOnly::fmt": {
   "kind": "fn",
@@ -2458,63 +2458,63 @@
  },
  "DevicePrimaryTestOnly::from_records_test_only": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePrimaryTestOnly::issuance": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePrimaryTestOnly::journal": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePrimaryTestOnly::new": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePrimaryTestOnly::projection_test_only": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DevicePrimaryTestOnly::store": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStartupStatus": {
   "kind": "enum",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStartupStatus::CheckpointFrozen": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStartupStatus::PrimaryBehind": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStartupStatus::Ready": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStartupStatus::StateDigestMismatch": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStartupStatus::as_str": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStartupStatus::clone": {
   "kind": "fn",
@@ -2533,13 +2533,13 @@
  },
  "DeviceStateProjectionTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStateProjectionTestOnly::claims": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStateProjectionTestOnly::clone": {
   "kind": "fn",
@@ -2548,8 +2548,8 @@
  },
  "DeviceStateProjectionTestOnly::complete_state_digest": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStateProjectionTestOnly::eq": {
   "kind": "fn",
@@ -2563,38 +2563,38 @@
  },
  "DeviceStateProjectionTestOnly::issuance_records": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStateProjectionTestOnly::projection": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStateProjectionTestOnly::rate_counters": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStateProjectionTestOnly::receipt_log": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceStateProjectionTestOnly::streams": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceUplinkTestOnly": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceUplinkTestOnly::collected": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceUplinkTestOnly::fmt": {
   "kind": "fn",
@@ -2603,38 +2603,38 @@
  },
  "DeviceUplinkTestOnly::new": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "DeviceUplinkTestOnly::upload": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "ERR_HEAD_OF_LINE_BLOCKED": {
   "kind": "const",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference-store diagnostic string; mobile TestSupport surfaces typed operation failures"
  },
  "ERR_LOG_FROZEN": {
   "kind": "const",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference-store diagnostic string; mobile TestSupport surfaces typed operation failures"
  },
  "ERR_NOT_ACKNOWLEDGED": {
   "kind": "const",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference-store diagnostic string; mobile TestSupport surfaces typed operation failures"
  },
  "ERR_PERSIST_FAILED": {
   "kind": "const",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference-store diagnostic string; mobile TestSupport surfaces typed operation failures"
  },
  "ERR_SIGNER_UNAVAILABLE": {
   "kind": "const",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference-store diagnostic string; mobile TestSupport surfaces typed operation failures"
  },
  "ExpectedChallengeV2": {
   "kind": "struct",
@@ -2858,13 +2858,13 @@
  },
  "JournalStore": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "JournalStore::compare_and_swap": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "JournalStore::fmt": {
   "kind": "fn",
@@ -2873,23 +2873,23 @@
  },
  "JournalStore::head": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "JournalStore::load": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "JournalStore::new": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "KeyRoleBindingV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "KeyRoleBindingV2::clone": {
   "kind": "fn",
@@ -2903,8 +2903,8 @@
  },
  "KeyRoleBindingV2::ed25519_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "KeyRoleBindingV2::eq": {
   "kind": "fn",
@@ -2923,18 +2923,18 @@
  },
  "KeyRoleBindingV2::key_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "KeyRoleBindingV2::ml_dsa_65_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "KeyRoleBindingV2::role": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "KeyRotationStatementV2": {
   "kind": "struct",
@@ -3284,8 +3284,9 @@
  },
  "MAX_TRANSACTION_PARTIES": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.maxTransactionParties",
+  "kotlin": "MAX_TRANSACTION_PARTIES_V2"
  },
  "MAX_TRANSACTION_PARTIES_V2": {
   "kind": "const",
@@ -3295,8 +3296,9 @@
  },
  "MAX_TRANSACTION_RECEIPT_BYTES": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.maxTransactionReceiptBytes",
+  "kotlin": "MAX_TRANSACTION_RECEIPT_BYTES_V2"
  },
  "MAX_TRANSACTION_RECEIPT_BYTES_V2": {
   "kind": "const",
@@ -3465,23 +3467,23 @@
  },
  "PersistFault": {
   "kind": "enum",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference store fault-injection mode; mobile TestSupport exposes fault controls through typed store methods"
  },
  "PersistFault::FailAfterCommit": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference store fault-injection mode; mobile TestSupport exposes fault controls through typed store methods"
  },
  "PersistFault::FailBeforeCommit": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference store fault-injection mode; mobile TestSupport exposes fault controls through typed store methods"
  },
  "PersistFault::Ok": {
   "kind": "member",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference store fault-injection mode; mobile TestSupport exposes fault controls through typed store methods"
  },
  "PersistFault::clone": {
   "kind": "fn",
@@ -3593,28 +3595,28 @@
  },
  "RateAtFinalizationStore": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::admits_v2_rate_at_finalization": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::authoritative_time_v2": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::claim_v2": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::finalize_v2_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::fmt": {
   "kind": "fn",
@@ -3623,43 +3625,43 @@
  },
  "RateAtFinalizationStore::load_v2_committed_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::load_v2_interrupted_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::load_v2_terminal_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::rate_at_finalization_view": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::record_v2_evaluation_progress": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::record_v2_release": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::recover_interrupted_v2_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "RateAtFinalizationStore::reserve_v2_rate_batch": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "ReceiptV2Head": {
   "kind": "struct",
@@ -4017,8 +4019,8 @@
  },
  "RevocationStatusResultV2::unavailable": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust convenience constructor; mobile RevocationStatusResult is returned by status evaluation"
  },
  "RevocationStatusStateV2": {
   "kind": "struct",
@@ -4220,18 +4222,20 @@
  },
  "SecurityJournalStoreErrorV2": {
   "kind": "enum",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "SecurityJournalStoreError",
+  "kotlin": "SecurityJournalStoreError"
  },
  "SecurityJournalStoreErrorV2::Conflict": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "SecurityJournalStoreError.conflict",
+  "kotlin": "SecurityJournalStoreError.Conflict"
  },
  "SecurityJournalStoreErrorV2::Failed": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust variant wrapping V2Error; mobile callback bridges turn arbitrary host Error or Exception into a failed store operation"
  },
  "SecurityJournalStoreErrorV2::clone": {
   "kind": "fn",
@@ -4250,8 +4254,8 @@
  },
  "SecurityJournalStoreErrorV2::from": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust From trait conversion; host languages use thrown errors"
  },
  "SecurityJournalStoreV2": {
   "kind": "trait",
@@ -4273,8 +4277,8 @@
  },
  "SecurityJournalV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded model; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "SecurityJournalV2::clone": {
   "kind": "fn",
@@ -4288,8 +4292,8 @@
  },
  "SecurityJournalV2::digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded model; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "SecurityJournalV2::fmt": {
   "kind": "fn",
@@ -4298,33 +4302,33 @@
  },
  "SecurityJournalV2::generation": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded model; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "SecurityJournalV2::key_role_history": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded model; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "SecurityJournalV2::previous_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded model; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "SecurityJournalV2::status_by_issuer": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded model; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "SecurityJournalV2::status_key_history": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded model; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "SecurityJournalV2::version": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded model; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "SessionContextV2Inputs": {
   "kind": "struct",
@@ -4598,8 +4602,8 @@
  },
  "StatusKeyBindingV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "StatusKeyBindingV2::clone": {
   "kind": "fn",
@@ -4613,13 +4617,13 @@
  },
  "StatusKeyBindingV2::ed25519_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "StatusKeyBindingV2::epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "StatusKeyBindingV2::eq": {
   "kind": "fn",
@@ -4638,58 +4642,58 @@
  },
  "StatusKeyBindingV2::issuer_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "StatusKeyBindingV2::ml_dsa_65_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "StatusKeyBindingV2::status_key_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust security-journal decoded record; mobile SDKs expose canonical snapshot bytes and an independently anchored head"
  },
  "Store": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::abandon_pending_receipts": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::acknowledge_v2_receipt": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::authoritative_time_v2": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::claim_v2": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::clone_store": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::corrupt_sealed_state_test_only": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::finalize_v2_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::fmt": {
   "kind": "fn",
@@ -4698,88 +4702,88 @@
  },
  "Store::get_v2_acknowledgement": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::load_v2_committed_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::load_v2_interrupted_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::load_v2_terminal_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::log_length": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::new": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::now": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::plant_release_test_only": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::publish_v2_receipt": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::rate_at_finalization_view": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::record_v2_evaluation_progress": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::record_v2_release": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::recover_interrupted_v2_claim": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::set_acknowledgement_withheld": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::set_signer_failure": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::set_time": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "Store::with_rate_at_finalization": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "TZDB_VERSION_V2": {
   "kind": "const",
@@ -4789,8 +4793,8 @@
  },
  "TestOnlyChallengeIssuanceStore": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "TestOnlyChallengeIssuanceStore::default": {
   "kind": "fn",
@@ -4799,8 +4803,8 @@
  },
  "TestOnlyChallengeIssuanceStore::fail_next_persist": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "TestOnlyChallengeIssuanceStore::fmt": {
   "kind": "fn",
@@ -4809,28 +4813,28 @@
  },
  "TestOnlyChallengeIssuanceStore::is_empty": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "TestOnlyChallengeIssuanceStore::len": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "TestOnlyChallengeIssuanceStore::load_v2_challenge": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "TestOnlyChallengeIssuanceStore::new": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "TestOnlyChallengeIssuanceStore::persist_v2_challenge": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "TransactionPartyVerificationV2": {
   "kind": "struct",
@@ -5241,8 +5245,8 @@
  },
  "TrustRegistry": {
   "kind": "struct",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "TrustRegistry::clone": {
   "kind": "fn",
@@ -5256,18 +5260,18 @@
  },
  "TrustRegistry::new": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "TrustRegistry::resolve": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
  "V2AudienceAssessment": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2AudienceAssessment::clone": {
   "kind": "fn",
@@ -5286,8 +5290,8 @@
  },
  "V2AudienceAssessment::evidence_digests": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2AudienceAssessment::fmt": {
   "kind": "fn",
@@ -5296,13 +5300,13 @@
  },
  "V2AudienceAssessment::fresh_until": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2AudienceAssessment::status": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2AudienceMembership": {
   "kind": "struct",
@@ -5392,13 +5396,13 @@
  },
  "V2CancelHandle": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cancellation handle; Swift Task and Kotlin Job own cancellation"
  },
  "V2CancelHandle::cancel": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cancellation handle; Swift Task and Kotlin Job own cancellation"
  },
  "V2CancelHandle::clone": {
   "kind": "fn",
@@ -5936,13 +5940,13 @@
  },
  "V2Context": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cancellation and deadline carrier; Swift Task cancellation and Kotlin coroutines provide the host-language contract"
  },
  "V2Context::background": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cancellation and deadline carrier; Swift Task cancellation and Kotlin coroutines provide the host-language contract"
  },
  "V2Context::clone": {
   "kind": "fn",
@@ -5961,18 +5965,18 @@
  },
  "V2Context::is_done": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cancellation and deadline carrier; Swift Task cancellation and Kotlin coroutines provide the host-language contract"
  },
  "V2Context::with_cancel": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cancellation and deadline carrier; Swift Task cancellation and Kotlin coroutines provide the host-language contract"
  },
  "V2Context::with_timeout": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cancellation and deadline carrier; Swift Task cancellation and Kotlin coroutines provide the host-language contract"
  },
  "V2ContextPolicy": {
   "kind": "struct",
@@ -6033,13 +6037,13 @@
  },
  "V2ContextPolicyAssessment": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2ContextPolicyAssessment::assessment": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2ContextPolicyAssessment::clone": {
   "kind": "fn",
@@ -6053,8 +6057,8 @@
  },
  "V2ContextPolicyAssessment::detail": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2ContextPolicyAssessment::eq": {
   "kind": "fn",
@@ -6068,18 +6072,18 @@
  },
  "V2ContextPolicyAssessment::policy_digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2ContextPolicyAssessment::reason": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2ContextPolicyAssessment::status": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2DeferredConstraint": {
   "kind": "struct",
@@ -6157,8 +6161,8 @@
  },
  "V2Error::classify": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust diagnostic constructor and classifier; mobile RatifyError and RatifyException expose typed protocol errors"
  },
  "V2Error::clone": {
   "kind": "fn",
@@ -6167,8 +6171,8 @@
  },
  "V2Error::context": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust diagnostic constructor and classifier; mobile RatifyError and RatifyException expose typed protocol errors"
  },
  "V2Error::eq": {
   "kind": "fn",
@@ -6188,8 +6192,8 @@
  },
  "V2Error::new": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust diagnostic constructor and classifier; mobile RatifyError and RatifyException expose typed protocol errors"
  },
  "V2ErrorClass": {
   "kind": "enum",
@@ -7066,8 +7070,8 @@
  },
  "V2ProviderError": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust callback error wrapper; Swift Error and Kotlin Exception carry provider failures across the FFI bridge"
  },
  "V2ProviderError::clone": {
   "kind": "fn",
@@ -7086,13 +7090,13 @@
  },
  "V2ProviderError::message": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust callback error wrapper; Swift Error and Kotlin Exception carry provider failures across the FFI bridge"
  },
  "V2ProviderError::new": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust callback error wrapper; Swift Error and Kotlin Exception carry provider failures across the FFI bridge"
  },
  "V2RandomSource": {
   "kind": "type",
@@ -7616,13 +7620,13 @@
  },
  "V2StatusAssessment": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2StatusAssessment::assessment": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2StatusAssessment::clone": {
   "kind": "fn",
@@ -7636,8 +7640,8 @@
  },
  "V2StatusAssessment::evidence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2StatusAssessment::fmt": {
   "kind": "fn",
@@ -7646,13 +7650,13 @@
  },
  "V2StatusAssessment::fresh_until": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2StatusAssessment::reason": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate verifier assessment; mobile live verifier returns the sealed committed outcome"
  },
  "V2StatusEvidenceBatch": {
   "kind": "struct",
@@ -7805,8 +7809,8 @@
  },
  "V2StatusProviderError": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust status callback error wrapper; Swift Error and Kotlin Exception carry provider failures across the FFI bridge"
  },
  "V2StatusProviderError::clone": {
   "kind": "fn",
@@ -7825,13 +7829,13 @@
  },
  "V2StatusProviderError::message": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust status callback error wrapper; Swift Error and Kotlin Exception carry provider failures across the FFI bridge"
  },
  "V2StatusProviderError::new": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust status callback error wrapper; Swift Error and Kotlin Exception carry provider failures across the FFI bridge"
  },
  "V2StatusPublication": {
   "kind": "struct",
@@ -7966,8 +7970,8 @@
  },
  "V2StatusRoleBindings": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate status role set; mobile journal methods accept authenticated keys and return canonical snapshots"
  },
  "V2StatusRoleBindings::clone": {
   "kind": "fn",
@@ -7976,8 +7980,8 @@
  },
  "V2StatusRoleBindings::current_status_key_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate status role set; mobile journal methods accept authenticated keys and return canonical snapshots"
  },
  "V2StatusRoleBindings::default": {
   "kind": "fn",
@@ -7991,13 +7995,13 @@
  },
  "V2StatusRoleBindings::reserved_key_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate status role set; mobile journal methods accept authenticated keys and return canonical snapshots"
  },
  "V2StatusRoleBindings::status_key_issuers": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust intermediate status role set; mobile journal methods accept authenticated keys and return canonical snapshots"
  },
  "V2StoreError": {
   "kind": "enum",
@@ -8258,8 +8262,8 @@
  },
  "V2VerifyCallbacks": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust callback aggregate; Swift and Kotlin pass typed provider and store protocols directly to the verifier"
  },
  "V2VerifyCallbacks::audience": {
   "kind": "member",
@@ -8269,8 +8273,8 @@
  },
  "V2VerifyCallbacks::claim_store": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust callback aggregate; Swift and Kotlin pass typed provider and store protocols directly to the verifier"
  },
  "V2VerifyCallbacks::clone": {
   "kind": "fn",
@@ -8289,8 +8293,8 @@
  },
  "V2VerifyCallbacks::rate": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust callback aggregate; Swift and Kotlin pass typed provider and store protocols directly to the verifier"
  },
  "V2VerifyCallbacks::receiver_binding": {
   "kind": "member",
@@ -8306,8 +8310,8 @@
  },
  "V2VerifyCallbacks::status_journal": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust callback aggregate; Swift and Kotlin pass typed provider and store protocols directly to the verifier"
  },
  "V2VerifyCallbacks::trust": {
   "kind": "member",
@@ -8922,8 +8926,8 @@
  },
  "bind_verification_receipt_body_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust verifier internal receipt binding step; mobile live verifier seals the outbox body"
  },
  "build_session_context_v2": {
   "kind": "fn",
@@ -8933,8 +8937,8 @@
  },
  "build_v2_rate_reservation_batch": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust verifier internal batch builder; mobile live verifier and claim store handle the atomic rate batch"
  },
  "bundle_hash_v2": {
   "kind": "fn",
@@ -8956,13 +8960,13 @@
  },
  "challenge_claim_time_current_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust verifier internal challenge clock predicate; mobile preflight and live verifier enforce it"
  },
  "check_v2_stream_sequence": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust verifier internal stream predicate; mobile claim store checks the stream transition atomically"
  },
  "check_verification_receipt_v2_bundle_binding": {
   "kind": "fn",
@@ -9026,8 +9030,8 @@
  },
  "decode_security_journal_json_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust journal JSON parser; mobile SDK validates and imports canonical journal snapshots"
  },
  "decode_transaction_receipt_v2": {
   "kind": "fn",
@@ -9073,8 +9077,8 @@
  },
  "delegation_digest_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust proof-bundle construction helper; mobile typed proof signing computes and verifies the digest"
  },
  "empty_security_journal_v2": {
   "kind": "fn",
@@ -9114,8 +9118,8 @@
  },
  "encode_security_journal_json_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust journal JSON serializer; mobile SDK exports canonical journal snapshots"
  },
  "encode_transaction_receipt_v2": {
   "kind": "fn",
@@ -9131,8 +9135,8 @@
  },
  "encode_v2_status_evidence_batch": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust status batch encoder; mobile live verifier accepts typed status evidence objects"
  },
  "encode_verification_receipt_v2": {
   "kind": "fn",
@@ -9160,8 +9164,8 @@
  },
  "evaluate_proof_bundle_v2_context_policy": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust verifier intermediate policy step; mobile preflight and live verifier expose its result"
  },
  "evaluate_proof_bundle_v2_local_authorization": {
   "kind": "fn",
@@ -9171,8 +9175,8 @@
  },
  "evaluate_receiver_audience_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust verifier intermediate audience step; mobile live verifier invokes the typed AudienceProvider"
  },
  "expand_scopes": {
   "kind": "fn",
@@ -9182,8 +9186,8 @@
  },
  "export_security_journal_snapshot_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust in-memory journal exporter; mobile journal methods return canonical SecurityJournalSnapshot"
  },
  "external_mu_v2": {
   "kind": "fn",
@@ -9216,13 +9220,13 @@
  },
  "import_security_journal_snapshot_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust in-memory journal importer; mobile snapshot validation and store callbacks own import"
  },
  "initial_v2_evaluation_progress": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust claim-store progress initializer; mobile verifier emits typed EvaluationProgress to the store"
  },
  "intersect_scopes": {
   "kind": "fn",
@@ -9232,13 +9236,13 @@
  },
  "is_registered_constraint_type_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust constraint dispatch predicate; mobile typed constraint validation occurs during signing and verification"
  },
  "is_security_journal_conflict_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust error classification helper; mobile SecurityJournalStoreError.conflict and Conflict are typed cases"
  },
  "is_sensitive": {
   "kind": "fn",
@@ -9296,8 +9300,8 @@
  },
  "operation_context_v2_bytes": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust operation-context encoder; mobile SDK exposes the resulting operationContextHash"
  },
  "operation_context_v2_hash": {
   "kind": "fn",
@@ -9362,13 +9366,15 @@
  },
  "register_key_role_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.recordSecurityKeyRole",
+  "kotlin": "recordSecurityKeyRole"
  },
  "register_status_key_epoch_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.configureStatusKeyEpoch",
+  "kotlin": "configureStatusKeyEpoch"
  },
  "release_v2_decision": {
   "kind": "fn",
@@ -9547,13 +9553,15 @@
  },
  "standard_allowed_values_evaluator_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.evaluateAllowedValues",
+  "kotlin": "evaluateAllowedValues"
  },
  "standard_max_count_evaluator_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "mapped",
+  "swift": "Ratify.evaluateMaxCount",
+  "kotlin": "evaluateMaxCount"
  },
  "statement_body_digest_v2": {
   "kind": "fn",
@@ -9605,13 +9613,13 @@
  },
  "v2_error_class_of": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust error classification helper; mobile RatifyError and RatifyException expose errorClass"
  },
  "v2_evaluation_interrupted_result": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust claim-store recovery result constructor; mobile live verifier returns a typed VerifyOutcome"
  },
  "v2_mldsa_context": {
   "kind": "fn",
@@ -9627,13 +9635,13 @@
  },
  "valid_extension_type_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust extension-name predicate; mobile constraint evaluator registry validates extension type on registration"
  },
  "valid_profile_id_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust profile-name predicate; mobile constraint evaluator registry validates profile ID on registration"
  },
  "valid_v2_id": {
   "kind": "fn",
@@ -9650,18 +9658,18 @@
  },
  "valid_v2_timestamp": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust wire timestamp predicate; mobile decoders, signing and verification enforce v2 bounds"
  },
  "validate_proof_bundle_v2_preflight": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust internal preflight validation; mobile preflightProofBundle owns the public operation"
  },
  "validate_required_scope_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust verifier internal scope validation; mobile preflight and live verifier enforce it"
  },
  "validate_scopes_v2": {
   "kind": "fn",
@@ -9677,18 +9685,18 @@
  },
  "validate_security_journal_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust decoded journal validator; mobile validateSecurityJournalSnapshot checks canonical bytes and anchored head"
  },
  "validate_v2_evaluation_progress": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust claim-store progress validator; mobile verifier validates typed EvaluationProgress before commit"
  },
  "validate_v2_finalization_payload": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust claim-store finalization validator; mobile ClaimStore.finalize enforces sealed payload rules"
  },
  "validate_v2_request_context": {
   "kind": "fn",
@@ -9775,8 +9783,8 @@
  },
  "verify_device_acknowledgement_test_only": {
   "kind": "fn",
-  "milestone": "M3",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
  },
  "verify_key_rotation_statement_v2": {
   "kind": "fn",
@@ -9823,8 +9831,8 @@
  },
  "verify_v2_message": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust low-level signature primitive over an already framed message; mobile verifyStatement accepts typed object code and signable bytes"
  },
  "verify_v2_statement": {
   "kind": "fn",
@@ -9834,8 +9842,8 @@
  },
  "verify_v2_statement_code": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust low-level signature primitive with raw code; mobile verifyStatement accepts the ObjectType enum"
  },
  "verify_verification_receipt_v2": {
   "kind": "fn",

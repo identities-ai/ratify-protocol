@@ -36,7 +36,7 @@ cp sdks/kotlin/ratify-protocol-testing/build/outputs/aar/ratify-protocol-testing
 bash scripts/smoke-swift-staging.sh
 
 python3 - "$out" <<'PY'
-import hashlib, json, pathlib, subprocess, sys
+import hashlib, json, os, pathlib, subprocess, sys
 out = pathlib.Path(sys.argv[1])
 source = hashlib.sha256()
 for entry in subprocess.check_output(["git", "ls-tree", "-r", "-z", "HEAD"]).split(b"\0"):
@@ -46,6 +46,7 @@ manifest = {
     "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
     "tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip(),
     "source_except_package_sha256": source.hexdigest(),
+    "workflow_run": os.environ.get("GITHUB_RUN_ID"),
     "artifacts": {},
 }
 for path in sorted(out.iterdir()):

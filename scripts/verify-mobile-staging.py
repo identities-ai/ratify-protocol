@@ -18,6 +18,8 @@ if len(sys.argv) != 3:
 tag, directory = sys.argv[1:]
 files = pathlib.Path(directory)
 manifest = json.loads((files / "manifest.json").read_text())
+if not str(manifest.get("workflow_run") or "").isdigit():
+    fail("candidate must come from a CI workflow run")
 for name, info in manifest["artifacts"].items():
     data = (files / name).read_bytes()
     if len(data) != info["bytes"] or hashlib.sha256(data).hexdigest() != info["sha256"]:

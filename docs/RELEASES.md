@@ -246,6 +246,24 @@ Any failure in either phase aborts. `release-tag` refuses to run if main's versi
 
 6b. **Regenerate the v2 cross-SDK fixtures (v2 line only).** After the version bump, each SDK writes its `testvectors/v2/cross-sdk/<sdk>.json` from fresh keys at the new version, and every SDK verifies all five: `go run ./cmd/ratify-v2-cross-sdk -sdk-version <version>`; `npm run generate:cross-sdk` in `sdks/typescript`; `python tests_v2/gen_cross_sdk_fixture.py` in `sdks/python` with the `protocol-v2` extra and the native extension installed; `cargo run --example v2_cross_sdk_fixture` in `sdks/rust`; `RATIFY_WRITE_CROSS_SDK=1 cargo test --test v2c_cross_sdk` in `sdks/c`. The release-sync check refuses a fixture whose `sdk_version` is not the release being prepared.
 
+**Mobile v2 staging, before the release PR merges:** Run `mobile-v2.yml` by
+workflow dispatch on the release branch's version-bump commit X. Download its
+`mobile-v2-candidates-<X>` artifact, which contains the XCFramework archive,
+both AARs, Maven staging archive, and `manifest.json`. The manifest records X,
+its tree, the source fingerprint excluding `Package.swift`, the workflow run,
+sizes, and SHA-256 checksums. Create a **draft** GitHub release for the target
+version with these exact files; confirm no public tag was created. Download the
+draft assets again and compare their checksums with the manifest. On the same
+release branch, run `scripts/stage-mobile-package.py` with the tag, downloaded
+manifest, and downloaded XCFramework archive. Commit only `Package.swift` as
+X+1 and push the branch. The mobile PR
+gate builds from source with `RATIFY_SWIFT_LOCAL_BINARY=1`; the tagged release
+gate instead downloads the draft assets, checks the CI run and source
+fingerprint, and checks the SwiftPM URL and checksum. `release-tag` repeats that
+check before creating any tag. Do not merge the PR while the draft or staged
+manifest is missing. After publication, resolve SwiftPM from the final tag and
+release URL, and resolve both AARs from Maven staging before releasing them.
+
 **Phase 2: `make release-tag` (after the PR merges):**
 
 7. **Preflight.** On clean, up-to-date main; main's versions match the target (refuses otherwise); release-sync check passes; tags still absent.

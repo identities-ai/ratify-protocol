@@ -323,6 +323,10 @@ jobs:
           mkdir -p dist/mobile
           gh release download "$RELEASE_TAG" -D dist/mobile
           python3 scripts/verify-mobile-staging.py "$RELEASE_TAG" dist/mobile
+          run_id=$(python3 -c 'import json; print(json.load(open("dist/mobile/manifest.json"))["workflow_run"])')
+          commit=$(python3 -c 'import json; print(json.load(open("dist/mobile/manifest.json"))["commit"])')
+          test "$(gh run view "$run_id" --json headSha --jq .headSha)" = "$commit"
+          test "$(gh run view "$run_id" --json conclusion --jq .conclusion)" = success
       - uses: actions/upload-artifact@v7
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run
         with:

@@ -20,6 +20,8 @@ tag, manifest_path, archive_path = sys.argv[1:]
 if not re.fullmatch(r"v2\.\d+\.\d+-(?:alpha|beta|rc)\.\d+", tag):
     fail("expected a v2 prerelease tag")
 manifest = json.loads(pathlib.Path(manifest_path).read_text())
+if not str(manifest.get("workflow_run") or "").isdigit():
+    fail("candidate must come from a CI workflow run")
 archive = pathlib.Path(archive_path)
 name = "RatifyProtocolFFI.xcframework.zip"
 if archive.name != name:

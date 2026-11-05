@@ -573,14 +573,23 @@ PY
 
   if command -v gh >/dev/null 2>&1; then
     echo "==> Opening release PR"
+    local pr_body="Coordinated version bump for $VERSION across all SDK manifests. Full cross-SDK gate passed locally; CI re-runs it here."
+    if [[ "$RELEASE_LINE" == "v2" ]]; then
+      pr_body+=" Stage the CI-built mobile assets and Package.swift on this PR before merge."
+    fi
+    pr_body+=" After merge, run: make release-tag VERSION=$VERSION."
     gh pr create --base main \
       --title "chore: release $VERSION" \
-      --body "Coordinated version bump for $VERSION across all SDK manifests. Full cross-SDK gate passed locally; CI re-runs it here. After merge, run: \`make release-tag VERSION=$VERSION\`."
+      --body "$pr_body"
   else
     echo "==> gh not found — open the PR manually for branch $branch"
   fi
 
-  echo "release-prepare: ok ($VERSION) — merge the PR, then run: make release-tag VERSION=$VERSION"
+  if [[ "$RELEASE_LINE" == "v2" ]]; then
+    echo "release-prepare: stage the CI-built mobile assets and Package.swift on this PR before merge"
+  else
+    echo "release-prepare: ok ($VERSION) — merge the PR, then run: make release-tag VERSION=$VERSION"
+  fi
 }
 
 # Break-glass manual publish: for when the tag exists but the CI release
@@ -641,6 +650,10 @@ tag_release() {
       trap 'rm -rf "$stage_dir"' EXIT
       gh release download "$VERSION" -D "$stage_dir"
       python3 scripts/verify-mobile-staging.py "$VERSION" "$stage_dir"
+      run_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["workflow_run"])' "$stage_dir/manifest.json")"
+      commit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$stage_dir/manifest.json")"
+      [[ "$(gh run view "$run_id" --json headSha --jq .headSha)" == "$commit" ]]
+      [[ "$(gh run view "$run_id" --json conclusion --jq .conclusion)" == success ]]
     )
   fi
 

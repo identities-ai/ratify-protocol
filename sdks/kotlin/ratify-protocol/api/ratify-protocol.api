@@ -595,6 +595,7 @@ public final class com/ratifyprotocol/KeystoreKey$Custody : java/lang/Enum {
 }
 
 public final class com/ratifyprotocol/LiveVerifyKt {
+	public static final fun preflightProofBundle (Lcom/ratifyprotocol/PreflightRequest;)Lcom/ratifyprotocol/PreflightResult;
 	public static final fun verifyProofBundle-7-Fau3A (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RateReservationStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun verifyProofBundle-7-Fau3A$default (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RateReservationStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static final fun verifyProofBundle-D5qb1SI (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/RateAtFinalizationClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -724,6 +725,23 @@ public final class com/ratifyprotocol/ParamsValue$Str : com/ratifyprotocol/Param
 	public final fun getValue ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/PreflightRequest {
+	public fun <init> ([BLcom/ratifyprotocol/ExpectedChallenge;Lcom/ratifyprotocol/ContextPolicy;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;JJJ)V
+	public final fun getBundle ()[B
+	public final fun getContextPolicy ()Lcom/ratifyprotocol/ContextPolicy;
+	public final fun getExpected ()Lcom/ratifyprotocol/ExpectedChallenge;
+	public final fun getFutureSkewSeconds ()J
+	public final fun getMaxChallengeAgeSeconds ()J
+	public final fun getNow ()J
+	public final fun getReplayEpoch ()J
+	public final fun getRequiredScope ()Ljava/lang/String;
+	public final fun getVerifierId ()Ljava/lang/String;
+	public final fun getVerifierNamespace ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/PreflightResult {
 }
 
 public final class com/ratifyprotocol/ProofBundle {

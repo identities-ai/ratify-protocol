@@ -1019,6 +1019,53 @@ class ClaimTest {
         }
     }
 
+    private fun stagedPreflightRequest(name: String): PreflightRequest {
+        val req = request(name)
+        return PreflightRequest(req.bundle, req.expected, req.contextPolicy, req.requiredScope,
+            req.verifierNamespace, req.replayEpoch, req.verifierId, req.now,
+            req.maxChallengeAgeSeconds, req.futureSkewSeconds)
+    }
+
+    @Test fun sealedPreflightVectors() {
+        preflightProofBundle(stagedPreflightRequest("allow_bound_context"))
+        val vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
+            it.getJSONObject("expected").getString("stage") == "preflight"
+        }
+        assertEquals(149, vectors.size)
+        // The composed verifier also checks request context, status config, hooks and claim storage.
+        val stagedSuccess = setOf(
+            "config_status_lifetime_above_bound", "request_amount_negative", "request_amount_above_safe_integer",
+            "request_currency_lowercase", "request_currency_two_letters", "request_amount_without_has_amount",
+            "overflow_status_age_max_safe_integer", "overflow_status_lifetime_max_safe_integer",
+            "receiver_binding_hook_rejects", "claim_proof_conflict", "claim_store_unavailable",
+            "extension_context_negative_count", "extension_context_bad_name", "extension_context_value_too_long",
+            "pre_claim_store_absent", "status_skew_verifier0_status300", "status_skew_verifier300_status0",
+            "pre_hook_reject_with_in_progress", "pre_hook_reject_and_claim_absent",
+            "config_status_skew_one_above_future_skew",
+        )
+        val stagedMissingExpected = setOf(
+            "pre_config_invalid_and_expected_missing", "pre_reqctx_invalid_and_expected_missing",
+            "config_verifier_id_absent_before_expected_challenge", "config_namespace_empty_before_expected_challenge",
+        )
+        org.junit.Assert.assertTrue((stagedSuccess + stagedMissingExpected +
+            "pre_claim_store_absent_before_bad_signature").all { name -> vectors.any { it.getString("name") == name } })
+        for (vector in vectors) {
+            val name = vector.getString("name")
+            val expected = when {
+                name in stagedSuccess -> "ok"
+                name in stagedMissingExpected -> "expected_challenge_unavailable"
+                name == "pre_claim_store_absent_before_bad_signature" -> "invalid_signature"
+                else -> vector.getJSONObject("expected").getString("error_class")
+            }
+            if (name in stagedSuccess || name in stagedMissingExpected ||
+                name == "pre_claim_store_absent_before_bad_signature") {
+                org.junit.Assert.assertNotEquals(name, expected, vector.getJSONObject("expected").getString("error_class"))
+            }
+            assertEquals(name, expected,
+                classOf { preflightProofBundle(stagedPreflightRequest(name)) })
+        }
+    }
+
     @Test fun evaluatorDeadlineWaitsForBlockedCallback() = runBlocking {
         val vector = Corpus.load("verifier-ordering.json").arr("vectors").first {
             it.getString("name") == "extension_evaluator_timeout"

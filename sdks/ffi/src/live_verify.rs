@@ -100,6 +100,53 @@ impl From<core::V2VerifyOutcome> for FfiLiveVerifyOutcome {
     }
 }
 
+/// Sealed successful preflight state. Only the core can construct it.
+#[derive(uniffi::Object)]
+pub struct FfiPreflightResult {
+    // The staged claim entry point consumes this in the next M3 slice.
+    #[allow(dead_code)]
+    pub(crate) inner: core::V2PreflightResult,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiPreflightRequest {
+    pub bundle: Vec<u8>,
+    pub expected: Option<FfiExpectedChallenge>,
+    pub context_policy: Option<Arc<FfiContextPolicy>>,
+    pub required_scope: String,
+    pub verifier_namespace: String,
+    pub replay_epoch: i64,
+    pub verifier_id: String,
+    pub now: i64,
+    pub max_challenge_age_seconds: i64,
+    pub future_skew_seconds: i64,
+}
+
+#[uniffi::export]
+pub fn ffi_preflight_proof_bundle(request: FfiPreflightRequest) -> FfiResult<Arc<FfiPreflightResult>> {
+    call(|| {
+        if request.context_policy.as_ref().is_some_and(|p| p.poison.is_set()) {
+            return Err(protocol(core::V2ErrorClass::ConfigurationInvalid, "context policy handle is poisoned"));
+        }
+        let expected = request.expected.map(TryInto::try_into).transpose()
+            .map_err(|_| protocol(core::V2ErrorClass::ConfigurationInvalid, "expected challenge is invalid"))?;
+        let bundle = core::decode_proof_bundle_v2(&request.bundle)?;
+        let inner = core::preflight_proof_bundle_v2(
+            &bundle,
+            expected.as_ref(),
+            request.context_policy.as_ref().map(|p| &p.inner),
+            &request.required_scope,
+            &request.verifier_namespace,
+            request.replay_epoch,
+            &request.verifier_id,
+            request.now,
+            request.max_challenge_age_seconds,
+            request.future_skew_seconds,
+        )?;
+        Ok(Arc::new(FfiPreflightResult { inner }))
+    })
+}
+
 #[uniffi::export]
 pub fn ffi_live_verify_proof_bundle(
     request: FfiLiveVerifyRequest,

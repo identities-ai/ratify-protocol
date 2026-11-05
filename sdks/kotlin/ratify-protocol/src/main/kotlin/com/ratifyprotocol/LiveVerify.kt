@@ -3,6 +3,9 @@ package com.ratifyprotocol
 import com.ratifyprotocol.internal.ffi.FfiLiveVerifyOutcome
 import com.ratifyprotocol.internal.ffi.FfiLiveVerifyRequest
 import com.ratifyprotocol.internal.ffi.FfiStatusKeyConfig
+import com.ratifyprotocol.internal.ffi.FfiPreflightResult
+import com.ratifyprotocol.internal.ffi.FfiPreflightRequest
+import com.ratifyprotocol.internal.ffi.ffiPreflightProofBundle
 import com.ratifyprotocol.internal.ffi.ffiLiveVerifyProofBundle
 import com.ratifyprotocol.internal.ffi.ffiLiveVerifyProofBundleBarrier
 import kotlin.time.Duration
@@ -41,6 +44,26 @@ public class VerifyRequest(
 public enum class VerifyStage(public val spelling: String) {
     PREFLIGHT("preflight"), REPLAY("replay"), EVALUATING("evaluating"), COMMITTED("committed")
 }
+
+/** Inputs for staged preflight. This checks no receiver hook or extension evaluator. */
+public class PreflightRequest(bundle: ByteArray,
+    public val expected: ExpectedChallenge?, public val contextPolicy: ContextPolicy?,
+    public val requiredScope: String, public val verifierNamespace: String,
+    public val replayEpoch: Long, public val verifierId: String, public val now: Long,
+    public val maxChallengeAgeSeconds: Long, public val futureSkewSeconds: Long) {
+    private val bytes = bundle.copyOf()
+    public val bundle: ByteArray get() = bytes.copyOf()
+    internal fun toFfi() = FfiPreflightRequest(bytes.copyOf(), expected?.toFfi(), contextPolicy?.handle,
+        requiredScope, verifierNamespace, replayEpoch, verifierId, now,
+        maxChallengeAgeSeconds, futureSkewSeconds)
+}
+
+/** Sealed successful preflight state for a later staged claim. */
+public class PreflightResult internal constructor(internal val handle: FfiPreflightResult)
+
+/** Checks proof and challenge bindings without creating a claim. */
+public fun preflightProofBundle(request: PreflightRequest): PreflightResult =
+    PreflightResult(ffi { ffiPreflightProofBundle(request.toFfi()) })
 
 /** A committed result remains non-actionable until release. */
 public class VerifyOutcome internal constructor(f: FfiLiveVerifyOutcome) {

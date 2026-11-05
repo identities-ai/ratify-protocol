@@ -447,6 +447,19 @@ ParamsValue.string [EnumElement] -> (RatifyProtocol.ParamsValue.Type) -> (Swift.
 PlatformKey [Struct]
 PlatformKey.init(_:) [Constructor] -> RatifyProtocol.PlatformKey, RatifyProtocol.SecureEnclaveKey @26.0
 PlatformKey.keyId [Var] -> Swift.String
+PreflightRequest [Struct]
+PreflightRequest.bundle [Var] -> Foundation.Data
+PreflightRequest.contextPolicy [Var] -> RatifyProtocol.ContextPolicy?
+PreflightRequest.expected [Var] -> RatifyProtocol.ExpectedChallenge?
+PreflightRequest.futureSkewSeconds [Var] -> Swift.Int64
+PreflightRequest.init(bundle:expected:contextPolicy:requiredScope:verifierNamespace:replayEpoch:verifierId:now:maxChallengeAgeSeconds:futureSkewSeconds:) [Constructor] -> RatifyProtocol.PreflightRequest, Foundation.Data, RatifyProtocol.ExpectedChallenge?, RatifyProtocol.ContextPolicy?, Swift.String, Swift.String, Swift.Int64, Swift.String, Swift.Int64, Swift.Int64, Swift.Int64
+PreflightRequest.maxChallengeAgeSeconds [Var] -> Swift.Int64
+PreflightRequest.now [Var] -> Swift.Int64
+PreflightRequest.replayEpoch [Var] -> Swift.Int64
+PreflightRequest.requiredScope [Var] -> Swift.String
+PreflightRequest.verifierId [Var] -> Swift.String
+PreflightRequest.verifierNamespace [Var] -> Swift.String
+PreflightResult [Class]
 ProofBundle [Struct]
 ProofBundle.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ProofBundle, RatifyProtocol.ProofBundle
 ProofBundle.agentId [Var] -> Swift.String
@@ -530,6 +543,7 @@ Ratify.newKeyRotationJournal(authorityId:recoveryEpoch:role:genesisKey:) [Func] 
 Ratify.newStatusPublisher(store:issuerKey:statusKey:lifetimeSeconds:timeout:) [Func] -> RatifyProtocol.StatusPublisher, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.HybridPublicKey, RatifyProtocol.SoftwarePrivateKey, Swift.Int64, Swift.Duration?
 Ratify.newStatusPublisher(store:issuerKey:statusSigner:lifetimeSeconds:timeout:) [Func] -> RatifyProtocol.StatusPublisher, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.HybridPublicKey, any RatifyProtocol.ExternalSigner, Swift.Int64, Swift.Duration?
 Ratify.operationContextHash(_:) [Func] -> Foundation.Data, RatifyProtocol.OperationContext
+Ratify.preflightProofBundle(_:) [Func] -> RatifyProtocol.PreflightResult, RatifyProtocol.PreflightRequest
 Ratify.presentationSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.ProofBundle
 Ratify.protocolClaimId(namespace:replayEpoch:challenge:) [Func] -> Swift.String, Swift.String, Swift.Int64, Foundation.Data
 Ratify.protocolClaimId(namespace:replayEpoch:digest:) [Func] -> Swift.String, Swift.String, Swift.Int64, Foundation.Data

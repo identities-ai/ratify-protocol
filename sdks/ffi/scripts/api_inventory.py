@@ -142,6 +142,7 @@ def cmd_check():
 # Public declarations that no inventory item maps, each with its reason.
 # Everything else public must be named by a mapped inventory entry.
 EXTRA_SWIFT = {
+    "PreflightRequest": "SDK request grouping for core preflight's explicit arguments",
     "ReferenceStoreBridge": "internal SPI carrier for the separate TestSupport reference store",
     "ApprovalLedgerBridge": "internal SPI carrier for the separate TestSupport dual-root ledger",
     "ApprovalReplyBridge": "internal SPI carrier for the dual-root ledger result",
@@ -166,6 +167,7 @@ EXTRA_SWIFT = {
     "Ratify.errorClassSpellings": "the core's §2.7 class list, which pins ErrorClass in tests",
 }
 EXTRA_KOTLIN = {
+    "PreflightRequest": "SDK request grouping for core preflight's explicit arguments",
     "ReferenceStoreBridge": "internal-use carrier for the separate testing artifact",
     "ApprovalLedgerBridge": "internal-use carrier for the separate testing artifact",
     "ApprovalReplyBridge": "internal-use carrier for the dual-root ledger result",
@@ -208,6 +210,16 @@ KOTLIN_THROWABLE = {"message", "cause"}
 KOTLIN_DATA = {"copy", "copy$default"}  # plus componentN
 # Public members that no inventory item maps, each with its reason.
 EXTRA_MEMBERS = {
+    "PreflightRequest.bundle": "SDK request field for core preflight's explicit argument",
+    "PreflightRequest.expected": "SDK request field for core preflight's explicit argument",
+    "PreflightRequest.contextPolicy": "SDK request field for core preflight's explicit argument",
+    "PreflightRequest.requiredScope": "SDK request field for core preflight's explicit argument",
+    "PreflightRequest.verifierNamespace": "SDK request field for core preflight's explicit argument",
+    "PreflightRequest.replayEpoch": "SDK request field for core preflight's explicit argument",
+    "PreflightRequest.verifierId": "SDK request field for core preflight's explicit argument",
+    "PreflightRequest.now": "SDK request field for core preflight's explicit argument",
+    "PreflightRequest.maxChallengeAgeSeconds": "SDK request field for core preflight's explicit argument",
+    "PreflightRequest.futureSkewSeconds": "SDK request field for core preflight's explicit argument",
     "ReferenceStoreBridge.forgedCommittedOutcomeTestOnly": "test-build-only invalid handoff for release conformance",
     "CommittedClaim.claimRecord": "optional exact canonical sealed-claim bytes at the mobile callback boundary",
     "ReferenceStoreBridge.cloneStore": "test-only reference store clone",

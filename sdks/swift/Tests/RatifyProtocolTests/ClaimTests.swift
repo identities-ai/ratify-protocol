@@ -682,6 +682,52 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    private func stagedPreflightRequest(_ name: String) throws -> PreflightRequest {
+        let req = try request(name)
+        return PreflightRequest(bundle: req.bundle, expected: req.expected, contextPolicy: req.contextPolicy,
+            requiredScope: req.requiredScope, verifierNamespace: req.verifierNamespace,
+            replayEpoch: req.replayEpoch, verifierId: req.verifierId, now: req.now,
+            maxChallengeAgeSeconds: req.maxChallengeAgeSeconds, futureSkewSeconds: req.futureSkewSeconds)
+    }
+
+    func testSealedPreflightVectors() throws {
+        _ = try Ratify.preflightProofBundle(stagedPreflightRequest("allow_bound_context"))
+        let vectors = Corpus.load("verifier-ordering.json").arr("vectors").filter {
+            $0.obj("expected").s("stage") == "preflight"
+        }
+        XCTAssertEqual(vectors.count, 149)
+        // The composed verifier also checks request context, status config, hooks and claim storage.
+        let stagedSuccess: Set<String> = [
+            "config_status_lifetime_above_bound", "request_amount_negative", "request_amount_above_safe_integer",
+            "request_currency_lowercase", "request_currency_two_letters", "request_amount_without_has_amount",
+            "overflow_status_age_max_safe_integer", "overflow_status_lifetime_max_safe_integer",
+            "receiver_binding_hook_rejects", "claim_proof_conflict", "claim_store_unavailable",
+            "extension_context_negative_count", "extension_context_bad_name", "extension_context_value_too_long",
+            "pre_claim_store_absent", "status_skew_verifier0_status300", "status_skew_verifier300_status0",
+            "pre_hook_reject_with_in_progress", "pre_hook_reject_and_claim_absent",
+            "config_status_skew_one_above_future_skew",
+        ]
+        let stagedMissingExpected: Set<String> = [
+            "pre_config_invalid_and_expected_missing", "pre_reqctx_invalid_and_expected_missing",
+            "config_verifier_id_absent_before_expected_challenge", "config_namespace_empty_before_expected_challenge",
+        ]
+        XCTAssertTrue(stagedSuccess.union(stagedMissingExpected).union([
+            "pre_claim_store_absent_before_bad_signature"]).isSubset(of: Set(vectors.map { $0.s("name") })))
+        for vector in vectors {
+            let name = vector.s("name")
+            let actual = classOf { _ = try Ratify.preflightProofBundle(stagedPreflightRequest(name)) }
+            let expected = stagedSuccess.contains(name) ? "ok" :
+                stagedMissingExpected.contains(name) ? "expected_challenge_unavailable" :
+                name == "pre_claim_store_absent_before_bad_signature" ? "invalid_signature" :
+                vector.obj("expected").s("error_class")
+            if stagedSuccess.contains(name) || stagedMissingExpected.contains(name) ||
+                name == "pre_claim_store_absent_before_bad_signature" {
+                XCTAssertNotEqual(expected, vector.obj("expected").s("error_class"), name)
+            }
+            XCTAssertEqual(actual, expected, name)
+        }
+    }
+
     func testEvaluatorDeadlineWaitsForBlockedCallback() async throws {
         let vector = Corpus.load("verifier-ordering.json").arr("vectors").first {
             $0.s("name") == "extension_evaluator_timeout"

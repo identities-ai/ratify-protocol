@@ -6965,17 +6965,18 @@
  },
  "V2PreflightResult": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "PreflightResult",
+  "status": "mapped",
+  "swift": "PreflightResult"
  },
  "V2PreflightResult::clone": {
   "kind": "fn",
-  "reason": "Clone impl; Swift structs are values, Kotlin values are immutable copies",
+  "reason": "Rust clone aliases the sealed state; Swift and Kotlin reference wrappers alias the same handle",
   "status": "rust-idiom"
  },
  "V2PreflightResult::fmt": {
   "kind": "fn",
-  "reason": "Debug/Display impl; Swift CustomStringConvertible, Kotlin toString",
+  "reason": "Rust diagnostic Debug formatting is not a protocol operation",
   "status": "rust-idiom"
  },
  "V2ProviderError": {
@@ -9207,8 +9208,9 @@
  },
  "preflight_proof_bundle_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "preflightProofBundle",
+  "status": "mapped",
+  "swift": "Ratify.preflightProofBundle"
  },
  "presentation_v2_signable_bytes": {
   "kind": "fn",

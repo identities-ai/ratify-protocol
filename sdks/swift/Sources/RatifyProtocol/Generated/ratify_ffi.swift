@@ -3860,6 +3860,118 @@ func FfiConverterTypeFfiOfflineDevice_lower(_ value: FfiOfflineDevice) -> UInt64
 
 
 
+/**
+ * Sealed successful preflight state. Only the core can construct it.
+ */
+protocol FfiPreflightResultProtocol: AnyObject, Sendable {
+
+}
+/**
+ * Sealed successful preflight state. Only the core can construct it.
+ */
+class FfiPreflightResult: FfiPreflightResultProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffipreflightresult(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffipreflightresult(handle, $0) }
+    }
+
+
+
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiPreflightResult: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiPreflightResult
+
+    static func lift(_ handle: UInt64) throws -> FfiPreflightResult {
+        return FfiPreflightResult(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiPreflightResult) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiPreflightResult {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiPreflightResult, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiPreflightResult_lift(_ handle: UInt64) throws -> FfiPreflightResult {
+    return try FfiConverterTypeFfiPreflightResult.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiPreflightResult_lower(_ value: FfiPreflightResult) -> UInt64 {
+    return FfiConverterTypeFfiPreflightResult.lower(value)
+}
+
+
+
+
+
+
 protocol FfiRandomSource: AnyObject, Sendable {
 
     func fill(count: UInt32, context: FfiStoreContext) throws  -> Data
@@ -9644,6 +9756,92 @@ func FfiConverterTypeFfiOperationContext_lift(_ buf: RustBuffer) throws -> FfiOp
 #endif
 func FfiConverterTypeFfiOperationContext_lower(_ value: FfiOperationContext) -> RustBuffer {
     return FfiConverterTypeFfiOperationContext.lower(value)
+}
+
+
+struct FfiPreflightRequest {
+    var bundle: Data
+    var expected: FfiExpectedChallenge?
+    var contextPolicy: FfiContextPolicy?
+    var requiredScope: String
+    var verifierNamespace: String
+    var replayEpoch: Int64
+    var verifierId: String
+    var now: Int64
+    var maxChallengeAgeSeconds: Int64
+    var futureSkewSeconds: Int64
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(bundle: Data, expected: FfiExpectedChallenge?, contextPolicy: FfiContextPolicy?, requiredScope: String, verifierNamespace: String, replayEpoch: Int64, verifierId: String, now: Int64, maxChallengeAgeSeconds: Int64, futureSkewSeconds: Int64) {
+        self.bundle = bundle
+        self.expected = expected
+        self.contextPolicy = contextPolicy
+        self.requiredScope = requiredScope
+        self.verifierNamespace = verifierNamespace
+        self.replayEpoch = replayEpoch
+        self.verifierId = verifierId
+        self.now = now
+        self.maxChallengeAgeSeconds = maxChallengeAgeSeconds
+        self.futureSkewSeconds = futureSkewSeconds
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiPreflightRequest: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiPreflightRequest: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiPreflightRequest {
+        return
+            try FfiPreflightRequest(
+                bundle: FfiConverterData.read(from: &buf),
+                expected: FfiConverterOptionTypeFfiExpectedChallenge.read(from: &buf),
+                contextPolicy: FfiConverterOptionTypeFfiContextPolicy.read(from: &buf),
+                requiredScope: FfiConverterString.read(from: &buf),
+                verifierNamespace: FfiConverterString.read(from: &buf),
+                replayEpoch: FfiConverterInt64.read(from: &buf),
+                verifierId: FfiConverterString.read(from: &buf),
+                now: FfiConverterInt64.read(from: &buf),
+                maxChallengeAgeSeconds: FfiConverterInt64.read(from: &buf),
+                futureSkewSeconds: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiPreflightRequest, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.bundle, into: &buf)
+        FfiConverterOptionTypeFfiExpectedChallenge.write(value.expected, into: &buf)
+        FfiConverterOptionTypeFfiContextPolicy.write(value.contextPolicy, into: &buf)
+        FfiConverterString.write(value.requiredScope, into: &buf)
+        FfiConverterString.write(value.verifierNamespace, into: &buf)
+        FfiConverterInt64.write(value.replayEpoch, into: &buf)
+        FfiConverterString.write(value.verifierId, into: &buf)
+        FfiConverterInt64.write(value.now, into: &buf)
+        FfiConverterInt64.write(value.maxChallengeAgeSeconds, into: &buf)
+        FfiConverterInt64.write(value.futureSkewSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiPreflightRequest_lift(_ buf: RustBuffer) throws -> FfiPreflightRequest {
+    return try FfiConverterTypeFfiPreflightRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiPreflightRequest_lower(_ value: FfiPreflightRequest) -> RustBuffer {
+    return FfiConverterTypeFfiPreflightRequest.lower(value)
 }
 
 
@@ -15688,6 +15886,14 @@ func ffiLiveVerifyProofBundleBarrier(request: FfiLiveVerifyRequest, claimStore: 
     )
 })
 }
+func ffiPreflightProofBundle(request: FfiPreflightRequest)throws  -> FfiPreflightResult  {
+    return try  FfiConverterTypeFfiPreflightResult_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_preflight_proof_bundle(
+        FfiConverterTypeFfiPreflightRequest_lower(request),uniffiCallStatus
+    )
+})
+}
 func ffiDecodeDelegationCert(data: Data)throws  -> FfiDelegationCert  {
     return try  FfiConverterTypeFfiDelegationCert_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -16748,6 +16954,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_live_verify_proof_bundle_barrier() != 1120) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_preflight_proof_bundle() != 39054) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_decode_delegation_cert() != 57238) {

@@ -83,7 +83,8 @@ jobs:
           cd sdks/swift/HostApp
           xcodegen generate
           xcodebuild test -project RatifyHost.xcodeproj -scheme RatifyHost \
-            -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual
       - name: iOS 17 simulator suite
         env:
           RATIFY_FUZZ_SECONDS: '1'
@@ -93,7 +94,8 @@ jobs:
           device=$(xcrun simctl create 'Ratify iOS 17' 'com.apple.CoreSimulator.SimDeviceType.iPhone-15' "$runtime")
           cd sdks/swift/HostApp
           xcodebuild test -project RatifyHost.xcodeproj -scheme RatifyHost \
-            -destination "platform=iOS Simulator,id=$device" CODE_SIGNING_ALLOWED=NO
+            -destination "platform=iOS Simulator,id=$device" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual
 
   kotlin:
     name: Kotlin host and Android API ${{ matrix.api-level }}

@@ -31,6 +31,8 @@ rewritten as a v2 result.
 | Python native SDK | `sdks/python-native` (v1), `sdks/python-native-v2` (v2) | Build and test the exact matching wheel; check package-version lockstep and ensure stale wheels fail clearly. | The v2 extension (`ratify-protocol-native-v2`, `2.0.0-beta.1`) is pinned exactly by the `protocol-v2` extra of `ratify-protocol` and performs every v2 private-key operation: key generation and Ed25519 + ML-DSA-65 signing. There is no pure-Python signing path. Hybrid signature verification also runs in the extension by default, through the Rust core's strict v2 verifier; a pure-Python verifier remains as a fallback for verify-only installs (`RATIFY_V2_PURE_VERIFY=1` selects it), and the suite requires identical verdicts and error classes from both. Measured throughput is in [`sdks/python/README.md`](../sdks/python/README.md#protocol-v2-performance). It is version-locked to `ratify-protocol`, whose `ratify_protocol.v2` refuses to import a mismatched extension. The v1 extension (`ratify-protocol-native`, `1.0.0-alpha.21`) provides deterministic key generation only and builds against the published v1 crate pinned exactly at `1.0.0-alpha.21`, not the v2 source tree. Counts measured on in-tree builds. |
 | Rust SDK | `sdks/rust` (`2.0.0-beta.1`) | Same; run vectors, parser negatives, cargo tests | Full v2 verifier including `verify_proof_bundle_v2`. `cargo test` (232 tests, 0 failed, 0 ignored, measured 2026-10-27) runs every file in `testvectors/v2`: `tests/v2_conformance.rs` asserts per-file minimum counts and `tests/v2_corpus_inventory.rs` fails on an unconsumed entry. It includes proptest decoder properties and concurrency tests against the reference store, and `fuzz/` holds `cargo fuzz` decoder targets. `cargo clippy --all-targets -- -D warnings` is clean. Counts measured on in-tree builds. |
 | C SDK | `sdks/c` (`2.0.0-beta.1`) | Same; validate constrained/edge build, memory and parser bounds, vectors, hardware-independent tests | Full v2 C ABI at parity with the Rust SDK it wraps. `cargo test` (208 tests, 0 failed, 0 ignored, measured 2026-10-27) drives every file in `testvectors/v2` through `ratify_v2_*` exports only (`tests/v2c_inventory.rs` fails on an unconsumed entry), and every fallible export must return a SPEC-v2 §2.7 class (`tests/v2c_public_error_classes.rs`). `scripts/test-v2-c-abi.sh` compiles a plain C program against `include/ratify.h` and runs keys, objects, negatives, hedged signatures, limits, every verifier-ordering vector with C-implemented providers, a release lifecycle with a C-implemented store, and every cross-SDK fixture, and feeds every ordering vector trust outcomes and claim dispositions outside their enums (7152 checks, 0 failures), also clean with `SANITIZE=1`. The same program cross-compiled for armv7 passed on a Raspberry Pi 2 Model B running Linux: 7152 checks, 0 failures, in 1560 s (commit c3f08db, `2.0.0-beta.1`, 2026-10-27). Earlier runs passed 7149, 7145, 7132 checks at f758842, 1345 at bb55039, 1331 at f87afbe, 1330 at c1e3afd, 945 at 505dabe and 929 at b6aed4d. Other embedded targets are untested. Counts measured on in-tree builds. |
+| Swift SDK | `sdks/swift` (`2.0.0-beta.1` candidate) | Build the XCFramework and test macOS 14+, iOS 17 and current iOS simulators; verify API inventory, corpus, cross-SDK, concurrency, sanitizer, and provider evidence | In-tree source candidate. The full corpus and all seven cross-SDK fixtures passed locally on 2026-11-05. CI and release artifact gates remain tracked by the mobile workflow; no SwiftPM release is published. |
+| Kotlin SDK | `sdks/kotlin` (`2.0.0-beta.1` candidate) | Build all Android ABIs and test API 28 and current API emulators; verify API inventory, corpus, cross-SDK, concurrency, and provider evidence | In-tree source candidate. The full host corpus and all seven cross-SDK fixtures passed locally on 2026-11-05; API 28 and API 36 CI passed on the earlier candidate; the final mobile workflow and release artifact gates remain pending; no Maven Central release is published. |
 | Google ADK | `references/google-adk` | Upgrade integration and pinned dependencies; preserve ADK-specific multi-agent, ceiling, delegation, and scale cases; run reference gate on v2 | v2 tested, in-tree SDK: 58/58 (2026-10-27, in-tree `2.0.0b1`); see [reference matrix](#reference-v2-gate-matrix). v1 history in `references/google-adk/v1/` |
 | LangChain | `references/langchain` | Upgrade its exact SDK pin; preserve MCP boundary and independent receiver verification; run documented gate | v2 tested, in-tree SDK: 34/34 (2026-10-27, in-tree `2.0.0b1`); see [reference matrix](#reference-v2-gate-matrix). v1 history in `references/langchain/v1/` |
 | A2A delegated authority | `references/a2a` | Give the draft its own v2 receiver instead of the Google ADK package; keep task and context binding, pending-task handling, the HTTPS path and the independent Node.js wire client; run the documented gate | v2 tested, in-tree SDK, one-directional: 8/8 (2026-10-29, in-tree `ratify-protocol` `2.0.0b1` with the `protocol-v2` extra); see [reference matrix](#reference-v2-gate-matrix). Mutual presentation, the receiver-to-caller proof and `verification_result` stay v1-only until Protocol 2.1. v1 history in `references/a2a/EVIDENCE.md` |
@@ -66,41 +68,43 @@ that fails if `testvectors/v2` holds an entry no runner consumes: TypeScript
 `test/v2/corpus_files.test.ts`, Python `tests/test_corpus_files.py`, Rust
 `tests/v2_corpus_inventory.rs`, and C `tests/v2c_inventory.rs`; the Go
 reference generates the corpus, and `internal/v2vectors` fails if a committed
-vector differs from its generator. Python native
-has no verifier of its own; the Python v2 suite runs with it required. The C
-ABI column counts only runners that call `ratify_v2_*` exports.
+vector differs from its generator. Swift `CorpusTests` and Kotlin
+`CorpusRunners` also fail on an unconsumed entry and passed the full corpus
+locally on 2026-11-05. Python native has no verifier of its own; the Python
+v2 suite runs with it required. The C ABI column counts only runners that
+call `ratify_v2_*` exports.
 
-| `testvectors/v2` entry | Go reference | TypeScript | Python v2 | Rust | C ABI |
-|---|---|---|---|---|---|
-| `annex-a.json` (Annex A clauses, canonical JSON, strict decode, scopes) | Yes | Yes | Yes | Yes | Yes |
-| `archival.json` (19 cases, every object kind) | Yes | Yes | Yes | Yes | Yes |
-| `challenge-claim.json` (claim ID inputs) | Yes | Yes | Yes | Yes | Yes |
-| `challenge-issuance.json` (11 scenarios) | Yes | Yes | Yes | Yes | Yes |
-| `concurrency-scenarios.json` (18 scenarios) | Yes | Yes | Yes | Yes | Yes |
-| `cross-sdk/` (7 fixtures, one per SDK, 4 verifier and release scenarios each) | Yes | Yes | Yes | Yes | Yes |
-| `digest-functions.json` (25 cases) | Yes | Yes | Yes | Yes | Yes |
-| `delegation-signature.json` (signature primitive and negatives) | Yes | Yes | Yes | Yes | Yes |
-| `device-state.json` (6 complete-state projections) | Yes | Yes | Yes | Yes | Yes |
-| `evaluator-profiles.json` (70 profile cases, 13 context bounds) | Yes | Yes | Yes | Yes | Yes |
-| `external-signer.json` (17 cases) | Yes | Yes | Yes | Yes | Yes |
-| `hedged-signatures.json` (10 objects) | Yes | Yes | Yes | Yes | Yes |
-| `issuer-duties.json` (11 vectors) | Yes | Yes | Yes | Yes | Yes |
-| `key-rotation-signature.json` (genesis and continuation) | Yes | Yes | Yes | Yes | Yes |
-| `keys.json` (18 keys, 6 invalid IDs) | Yes | Yes | Yes | Yes | Yes |
-| `lifecycle-scenarios.json` (108 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes |
-| `limits.json` (80 vectors) | Yes | Yes | Yes | Yes | Yes |
-| `log-sequences.json` (2 scenarios) | Yes | Yes | Yes | Yes | Yes |
-| `object-negatives.json` (476 negatives) | Yes | Yes | Yes | Yes | Yes |
-| `objects.json` (13 objects) | Yes | Yes | Yes | Yes | Yes |
-| `operation-session-context.json` (context known answers) | Yes | Yes | Yes | Yes | Yes |
-| `rotation-sequences.json` (4 scenarios) | Yes | Yes | Yes | Yes | Yes |
-| `security-journal.json` (2 scenarios, 8 migrations, 20 import negatives, 6 transition negatives) | Yes | Yes | Yes | Yes | Yes |
-| `status-publisher.json` (13 scenarios) | Yes | Yes | Yes | Yes | Yes |
-| `status-sequences.json` (22 scenarios, 63 body digest checks) | Yes | Yes | Yes | Yes | Yes |
-| `transaction-verification.json` (13 vectors) | Yes | Yes | Yes | Yes | Yes |
-| `verifier-ordering.json` (515 cases) | Yes | Yes | Yes | Yes | Yes |
+| `testvectors/v2` entry | Go reference | TypeScript | Python v2 | Rust | C ABI | Swift | Kotlin |
+|---|---|---|---|---|---|---|---|
+| `annex-a.json` (Annex A clauses, canonical JSON, strict decode, scopes) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `archival.json` (19 cases, every object kind) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `challenge-claim.json` (claim ID inputs) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `challenge-issuance.json` (11 scenarios) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `concurrency-scenarios.json` (18 scenarios) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `cross-sdk/` (7 fixtures, one per SDK, 4 verifier and release scenarios each) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `digest-functions.json` (25 cases) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `delegation-signature.json` (signature primitive and negatives) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `device-state.json` (6 complete-state projections) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `evaluator-profiles.json` (70 profile cases, 13 context bounds) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `external-signer.json` (17 cases) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `hedged-signatures.json` (10 objects) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `issuer-duties.json` (11 vectors) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `key-rotation-signature.json` (genesis and continuation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `keys.json` (18 keys, 6 invalid IDs) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `lifecycle-scenarios.json` (108 Part B scripts, 29 profile scripts) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `limits.json` (80 vectors) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `log-sequences.json` (2 scenarios) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `object-negatives.json` (476 negatives) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `objects.json` (13 objects) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `operation-session-context.json` (context known answers) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `rotation-sequences.json` (4 scenarios) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `security-journal.json` (2 scenarios, 8 migrations, 20 import negatives, 6 transition negatives) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `status-publisher.json` (13 scenarios) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `status-sequences.json` (22 scenarios, 63 body digest checks) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `transaction-verification.json` (13 vectors) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `verifier-ordering.json` (515 cases) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 
-Go, TypeScript, Python v2, Rust, and the C ABI all run the full stateful
+Go, TypeScript, Python v2, Rust, C, Swift, and Kotlin all run the full stateful
 verifier against the ordering vectors, including stage, error class, terminal
 tuple, exact receipt body, allow horizon, rate batch, and callback counts. Each
 SDK's public error class table mirrors Go `TestV2PublicAPIErrorsAreClassified`

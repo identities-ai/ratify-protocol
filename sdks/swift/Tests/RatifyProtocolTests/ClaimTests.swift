@@ -3,11 +3,6 @@ import XCTest
 import RatifyProtocol
 import RatifyProtocolTestSupport
 
-@_silgen_name("ratify_ffi_test_arm_callback_panic")
-private func armCallbackPanic(_ kind: UInt32)
-@_silgen_name("ratify_ffi_test_callback_panic_remaining")
-private func callbackPanicRemaining() -> UInt32
-
 final class ClaimTests: XCTestCase {
     @objc func corpusHarness() {}
 
@@ -650,12 +645,12 @@ final class ClaimTests: XCTestCase {
             if panicKind == 5 { XCTAssertTrue(vector.arr("constraint_evaluators").contains { $0.s("implementation") == "fault:panic" }, name) }
             // A Swift trap cannot unwind. The test-only Rust hook panics after
             // the foreign call, preserving its count while exercising core containment.
-            if panicKind != 0 { armCallbackPanic(panicKind) }
-            defer { armCallbackPanic(0) }
+            if panicKind != 0 { TestHooks.armCallbackPanic(panicKind) }
+            defer { TestHooks.armCallbackPanic(0) }
             let outcome = try await Ratify.verifyProofBundle(req, claimStore: baseStore,
                 receiverBinding: receiver, trust: trust, audience: audience, statusEvidence: status,
                 statusJournal: journalStore, rate: rate)
-            XCTAssertEqual(callbackPanicRemaining(), 0, name + ": callback panic hook was not reached")
+            XCTAssertEqual(TestHooks.callbackPanicRemaining(), 0, name + ": callback panic hook was not reached")
             XCTAssertEqual(outcome.stage, .committed, name + ": " + (outcome.errorDetail ?? ""))
             XCTAssertEqual(outcome.committed?.receiptBody,
                 Data(base64Encoded: vector.obj("expected").s("receipt_body_b64"))!, name)

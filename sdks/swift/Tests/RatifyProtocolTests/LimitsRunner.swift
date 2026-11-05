@@ -69,6 +69,26 @@ enum LimitsRunner {
     static func run() throws {
         let f = Corpus.load("limits.json")
         let table = f.obj("limits")
+        let exported: [String: Int64] = [
+            "MAX_DELEGATION_CERT_BYTES_V2": Int64(Ratify.maxDelegationCertBytes),
+            "MAX_KEY_ROTATION_STATEMENT_BYTES_V2": Int64(Ratify.maxKeyRotationStatementBytes),
+            "MAX_PROOF_BUNDLE_BYTES_V2": Int64(Ratify.maxProofBundleBytes),
+            "MAX_REVOCATION_LIST_BYTES_V2": Int64(Ratify.maxRevocationListBytes),
+            "MAX_REVOCATION_LIST_REFS_V2": Int64(Ratify.maxRevocationListRefs),
+            "MAX_REVOCATION_PUSH_BYTES_V2": Int64(Ratify.maxRevocationPushBytes),
+            "MAX_REVOCATION_PUSH_REFS_V2": Int64(Ratify.maxRevocationPushRefs),
+            "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2": Int64(Ratify.maxStatusEvidenceBatchBytes),
+            "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2": Int64(Ratify.maxStatusEvidenceBatchObjects),
+            "MAX_TIMESTAMP_SECONDS_V2": Ratify.maxTimestampSeconds,
+            "MAX_TRANSACTION_RECEIPT_BYTES_V2": Int64(Ratify.maxTransactionReceiptBytes),
+            "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2": Int64(Ratify.maxVerificationReceiptBodyBytes),
+            "MAX_VERIFICATION_RECEIPT_BYTES_V2": Int64(Ratify.maxVerificationReceiptBytes),
+            "MAX_WITNESS_ENTRY_BYTES_V2": Int64(Ratify.maxWitnessEntryBytes),
+            "MAX_WITNESS_ENTRY_DATA_BYTES_V2": Int64(Ratify.maxWitnessEntryDataBytes),
+        ]
+        for (name, value) in exported {
+            XCTAssertEqual(value, (table[name] as? NSNumber)?.int64Value, "public limit \(name)")
+        }
         let t = Tally("limits.json")
         let vectors = f.arr("vectors")
         for v in vectors {

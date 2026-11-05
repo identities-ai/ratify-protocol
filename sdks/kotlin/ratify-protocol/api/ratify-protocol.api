@@ -604,6 +604,33 @@ public final class com/ratifyprotocol/KeystoreKey$Custody : java/lang/Enum {
 	public static fun values ()[Lcom/ratifyprotocol/KeystoreKey$Custody;
 }
 
+public final class com/ratifyprotocol/LimitsKt {
+	public static final field MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2 I
+	public static final field MAX_DELEGATION_CERT_BYTES_V2 I
+	public static final field MAX_KEY_ROTATION_STATEMENT_BYTES_V2 I
+	public static final field MAX_PROOF_BUNDLE_BYTES_V2 I
+	public static final field MAX_REVOCATION_LIST_BYTES_V2 I
+	public static final field MAX_REVOCATION_LIST_REFS_V2 I
+	public static final field MAX_REVOCATION_PUSH_BYTES_V2 I
+	public static final field MAX_REVOCATION_PUSH_REFS_V2 I
+	public static final field MAX_STATUS_EVIDENCE_BATCH_BYTES_V2 I
+	public static final field MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2 I
+	public static final field MAX_TRANSACTION_PARTIES_V2 I
+	public static final field MAX_TRANSACTION_RECEIPT_BYTES_V2 I
+	public static final field MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2 I
+	public static final field MAX_VERIFICATION_RECEIPT_BYTES_V2 I
+	public static final field MAX_WITNESS_ENTRY_BYTES_V2 I
+	public static final field MAX_WITNESS_ENTRY_DATA_BYTES_V2 I
+	public static final field V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS J
+	public static final field V2_MAX_CHALLENGE_AGE_SECONDS J
+	public static final field V2_MAX_DELEGATION_LIFETIME_SECONDS J
+	public static final field V2_MAX_FUTURE_SKEW_SECONDS J
+	public static final field V2_MAX_RATE_WINDOW_SECONDS J
+	public static final field V2_MAX_SAFE_INTEGER J
+	public static final field V2_MAX_STATUS_LIFETIME_SECONDS J
+	public static final field V2_MAX_TIMESTAMP_SECONDS J
+}
+
 public final class com/ratifyprotocol/LiveVerifyKt {
 	public static final fun preflightProofBundle (Lcom/ratifyprotocol/PreflightRequest;)Lcom/ratifyprotocol/PreflightResult;
 	public static final fun verifyProofBundle-7-Fau3A (Lcom/ratifyprotocol/VerifyRequest;Lcom/ratifyprotocol/ClaimStore;Lcom/ratifyprotocol/ReceiverBindingHook;Lcom/ratifyprotocol/TrustProvider;Lcom/ratifyprotocol/AudienceProvider;Lcom/ratifyprotocol/StatusEvidenceProvider;Lcom/ratifyprotocol/SecurityJournalStore;Lcom/ratifyprotocol/RateReservationStore;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

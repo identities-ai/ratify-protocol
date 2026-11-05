@@ -69,6 +69,24 @@ object LimitsVectors {
     fun corpus() {
         val f = Corpus.load("limits.json")
         val table = f.getJSONObject("limits")
+        val exported = mapOf(
+            "MAX_DELEGATION_CERT_BYTES_V2" to MAX_DELEGATION_CERT_BYTES_V2.toLong(),
+            "MAX_KEY_ROTATION_STATEMENT_BYTES_V2" to MAX_KEY_ROTATION_STATEMENT_BYTES_V2.toLong(),
+            "MAX_PROOF_BUNDLE_BYTES_V2" to MAX_PROOF_BUNDLE_BYTES_V2.toLong(),
+            "MAX_REVOCATION_LIST_BYTES_V2" to MAX_REVOCATION_LIST_BYTES_V2.toLong(),
+            "MAX_REVOCATION_LIST_REFS_V2" to MAX_REVOCATION_LIST_REFS_V2.toLong(),
+            "MAX_REVOCATION_PUSH_BYTES_V2" to MAX_REVOCATION_PUSH_BYTES_V2.toLong(),
+            "MAX_REVOCATION_PUSH_REFS_V2" to MAX_REVOCATION_PUSH_REFS_V2.toLong(),
+            "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2" to MAX_STATUS_EVIDENCE_BATCH_BYTES_V2.toLong(),
+            "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2" to MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2.toLong(),
+            "MAX_TIMESTAMP_SECONDS_V2" to V2_MAX_TIMESTAMP_SECONDS,
+            "MAX_TRANSACTION_RECEIPT_BYTES_V2" to MAX_TRANSACTION_RECEIPT_BYTES_V2.toLong(),
+            "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2" to MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2.toLong(),
+            "MAX_VERIFICATION_RECEIPT_BYTES_V2" to MAX_VERIFICATION_RECEIPT_BYTES_V2.toLong(),
+            "MAX_WITNESS_ENTRY_BYTES_V2" to MAX_WITNESS_ENTRY_BYTES_V2.toLong(),
+            "MAX_WITNESS_ENTRY_DATA_BYTES_V2" to MAX_WITNESS_ENTRY_DATA_BYTES_V2.toLong(),
+        )
+        for ((name, value) in exported) assertEquals("public limit $name", table.getLong(name), value)
         val t = Tally("limits.json")
         val vectors = f.arr("vectors")
         for (v in vectors) {

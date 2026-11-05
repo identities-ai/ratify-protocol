@@ -54,6 +54,7 @@ targets:
     dependencies:
       - target: RatifyHost
       - package: RatifyProtocol
+        product: RatifyProtocolTestSupport
 schemes:
   RatifyHost:
     build:

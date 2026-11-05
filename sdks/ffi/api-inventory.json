@@ -3166,8 +3166,9 @@
  },
  "MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxCheckpointAcknowledgementBytes"
  },
  "MAX_CONSTRAINT_EVALUATORS_V2": {
   "kind": "const",
@@ -3181,8 +3182,9 @@
  },
  "MAX_DELEGATION_CERT_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_DELEGATION_CERT_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxDelegationCertBytes"
  },
  "MAX_EXTENSION_CONTEXT_ENTRIES_V2": {
   "kind": "const",
@@ -3206,8 +3208,9 @@
  },
  "MAX_KEY_ROTATION_STATEMENT_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_KEY_ROTATION_STATEMENT_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxKeyRotationStatementBytes"
  },
  "MAX_PROFILE_ID_BYTES_V2": {
   "kind": "const",
@@ -3216,28 +3219,33 @@
  },
  "MAX_PROOF_BUNDLE_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_PROOF_BUNDLE_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxProofBundleBytes"
  },
  "MAX_REVOCATION_LIST_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_REVOCATION_LIST_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxRevocationListBytes"
  },
  "MAX_REVOCATION_LIST_REFS_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_REVOCATION_LIST_REFS_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxRevocationListRefs"
  },
  "MAX_REVOCATION_PUSH_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_REVOCATION_PUSH_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxRevocationPushBytes"
  },
  "MAX_REVOCATION_PUSH_REFS_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_REVOCATION_PUSH_REFS_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxRevocationPushRefs"
  },
  "MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES": {
   "kind": "const",
@@ -3246,13 +3254,15 @@
  },
  "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxStatusEvidenceBatchBytes"
  },
  "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_STATUS_EVIDENCE_BATCH_OBJECTS_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxStatusEvidenceBatchObjects"
  },
  "MAX_TRANSACTION_PARTIES": {
   "kind": "const",
@@ -3261,8 +3271,9 @@
  },
  "MAX_TRANSACTION_PARTIES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_TRANSACTION_PARTIES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxTransactionParties"
  },
  "MAX_TRANSACTION_RECEIPT_BYTES": {
   "kind": "const",
@@ -3271,28 +3282,33 @@
  },
  "MAX_TRANSACTION_RECEIPT_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_TRANSACTION_RECEIPT_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxTransactionReceiptBytes"
  },
  "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_VERIFICATION_RECEIPT_BODY_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxVerificationReceiptBodyBytes"
  },
  "MAX_VERIFICATION_RECEIPT_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_VERIFICATION_RECEIPT_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxVerificationReceiptBytes"
  },
  "MAX_WITNESS_ENTRY_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_WITNESS_ENTRY_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxWitnessEntryBytes"
  },
  "MAX_WITNESS_ENTRY_DATA_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_WITNESS_ENTRY_DATA_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxWitnessEntryDataBytes"
  },
  "OperationContextV2": {
   "kind": "struct",
@@ -8493,43 +8509,51 @@
  },
  "V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "V2_MAX_AUDIENCE_MEMBERSHIP_AGE_SECONDS",
+  "status": "mapped",
+  "swift": "Ratify.maxAudienceMembershipAgeSeconds"
  },
  "V2_MAX_CHALLENGE_AGE_SECONDS": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "V2_MAX_CHALLENGE_AGE_SECONDS",
+  "status": "mapped",
+  "swift": "Ratify.maxChallengeAgeSeconds"
  },
  "V2_MAX_DELEGATION_LIFETIME_SECONDS": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "V2_MAX_DELEGATION_LIFETIME_SECONDS",
+  "status": "mapped",
+  "swift": "Ratify.maxDelegationLifetimeSeconds"
  },
  "V2_MAX_FUTURE_SKEW_SECONDS": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "V2_MAX_FUTURE_SKEW_SECONDS",
+  "status": "mapped",
+  "swift": "Ratify.maxFutureSkewSeconds"
  },
  "V2_MAX_RATE_WINDOW_SECONDS": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "V2_MAX_RATE_WINDOW_SECONDS",
+  "status": "mapped",
+  "swift": "Ratify.maxRateWindowSeconds"
  },
  "V2_MAX_SAFE_INTEGER": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "V2_MAX_SAFE_INTEGER",
+  "status": "mapped",
+  "swift": "Ratify.maxSafeInteger"
  },
  "V2_MAX_STATUS_LIFETIME_SECONDS": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "V2_MAX_STATUS_LIFETIME_SECONDS",
+  "status": "mapped",
+  "swift": "Ratify.maxStatusLifetimeSeconds"
  },
  "V2_MAX_TIMESTAMP_SECONDS": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "V2_MAX_TIMESTAMP_SECONDS",
+  "status": "mapped",
+  "swift": "Ratify.maxTimestampSeconds"
  },
  "V2_SIGNING_MESSAGE_SIZE": {
   "kind": "const",

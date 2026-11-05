@@ -591,6 +591,30 @@ Ratify.keyId(_:) [Func] -> Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.keyRotationStatementDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
 Ratify.keyRotationStatementSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
 Ratify.loadExpectedChallenge(store:namespace:replayEpoch:challenge:timeout:) [Func] -> RatifyProtocol.ExpectedChallenge, any RatifyProtocol.ChallengeIssuanceStore, Swift.String, Swift.Int64, Foundation.Data, Swift.Duration?
+Ratify.maxAudienceMembershipAgeSeconds [Var] -> Swift.Int64
+Ratify.maxChallengeAgeSeconds [Var] -> Swift.Int64
+Ratify.maxCheckpointAcknowledgementBytes [Var] -> Swift.Int
+Ratify.maxDelegationCertBytes [Var] -> Swift.Int
+Ratify.maxDelegationLifetimeSeconds [Var] -> Swift.Int64
+Ratify.maxFutureSkewSeconds [Var] -> Swift.Int64
+Ratify.maxKeyRotationStatementBytes [Var] -> Swift.Int
+Ratify.maxProofBundleBytes [Var] -> Swift.Int
+Ratify.maxRateWindowSeconds [Var] -> Swift.Int64
+Ratify.maxRevocationListBytes [Var] -> Swift.Int
+Ratify.maxRevocationListRefs [Var] -> Swift.Int
+Ratify.maxRevocationPushBytes [Var] -> Swift.Int
+Ratify.maxRevocationPushRefs [Var] -> Swift.Int
+Ratify.maxSafeInteger [Var] -> Swift.Int64
+Ratify.maxStatusEvidenceBatchBytes [Var] -> Swift.Int
+Ratify.maxStatusEvidenceBatchObjects [Var] -> Swift.Int
+Ratify.maxStatusLifetimeSeconds [Var] -> Swift.Int64
+Ratify.maxTimestampSeconds [Var] -> Swift.Int64
+Ratify.maxTransactionParties [Var] -> Swift.Int
+Ratify.maxTransactionReceiptBytes [Var] -> Swift.Int
+Ratify.maxVerificationReceiptBodyBytes [Var] -> Swift.Int
+Ratify.maxVerificationReceiptBytes [Var] -> Swift.Int
+Ratify.maxWitnessEntryBytes [Var] -> Swift.Int
+Ratify.maxWitnessEntryDataBytes [Var] -> Swift.Int
 Ratify.migrateSecurityJournalJSON(_:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, Foundation.Data
 Ratify.mldsaContext(_:) [Func] -> Foundation.Data, RatifyProtocol.ObjectType
 Ratify.newKeyRotationJournal(authorityId:recoveryEpoch:role:genesisKey:) [Func] -> RatifyProtocol.RotationJournal, Swift.String, Swift.Int64, Swift.String, RatifyProtocol.HybridPublicKey

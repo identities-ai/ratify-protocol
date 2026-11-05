@@ -451,8 +451,8 @@ def resolve(model, name, lang):
     if name.startswith("[") or name.startswith("List<"):
         name = name.strip("[]")[5:-1] if name.startswith("List<") else name.strip("[]")
     parts = name.split(".")
-    if lang == "kotlin" and len(parts) == 1 and parts[0][:1].islower():
-        return parts[0] in model.get("", set())
+    if lang == "kotlin" and len(parts) == 1 and parts[0] in model.get("", set()):
+        return True
     for cut in range(len(parts), 0, -1):  # longest type path first
         owner = ".".join(parts[:cut])
         if owner in model:

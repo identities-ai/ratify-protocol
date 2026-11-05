@@ -175,8 +175,10 @@ public abstract interface class com/ratifyprotocol/ClaimStore : com/ratifyprotoc
 
 public final class com/ratifyprotocol/CommittedClaim {
 	public fun <init> (Lcom/ratifyprotocol/ChallengeClaim;[B[BJ)V
+	public fun <init> (Lcom/ratifyprotocol/ChallengeClaim;[B[B[BJ)V
 	public final fun getAllowHorizon ()J
 	public final fun getClaim ()Lcom/ratifyprotocol/ChallengeClaim;
+	public final fun getClaimRecord ()[B
 	public final fun getReceiptBody ()[B
 	public final fun getTerminalResult ()[B
 }

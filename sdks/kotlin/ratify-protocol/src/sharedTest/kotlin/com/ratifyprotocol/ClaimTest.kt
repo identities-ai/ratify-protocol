@@ -1155,7 +1155,8 @@ class ClaimTest {
             record.getLong("max_age_seconds"), record.getLong("clock_skew_seconds"),
             if (record.isNull("stream_id")) null else Base64.getDecoder().decode(record.get("stream_id") as String),
             if (record.isNull("stream_seq")) null else (record.get("stream_seq") as Number).toLong(), evaluators)
-        return CommittedClaim(claim, Base64.getDecoder().decode(step.getString("terminal_b64")),
+        return CommittedClaim(claim, Base64.getDecoder().decode(step.getString("claim_record_b64")),
+            Base64.getDecoder().decode(step.getString("terminal_b64")),
             Base64.getDecoder().decode(step.getString("body_b64")),
             if (step.has("allow_valid_until")) step.getLong("allow_valid_until") else 0)
     }
@@ -1353,6 +1354,7 @@ class ClaimTest {
             "resume_rejects_record_body_for_another_scope", "resume_rejects_record_body_with_another_context_policy_digest",
             "resume_rejects_record_body_with_unsealed_constraint_evaluators", "resume_rejects_record_claim_without_context_policy",
             "resume_rejects_record_negative_allow_horizon", "resume_rejects_record_negative_allow_horizon_on_non_allow",
+            "resume_rejects_record_non_canonical_claim_record",
             "resume_accepts_interrupted_record", "resume_substituted_record_rejected_at_release",
             "resume_accepts_allow_horizon_at_timestamp_domain_end", "resume_forged_record_longer_allow_horizon",
             "resume_forged_record_later_challenge_expiry", "resume_forged_record_allow_for_unheld_claim",
@@ -1410,6 +1412,7 @@ class ClaimTest {
             "resume_rejects_record_body_for_another_scope" to 5, "resume_rejects_record_body_with_another_context_policy_digest" to 5,
             "resume_rejects_record_body_with_unsealed_constraint_evaluators" to 5, "resume_rejects_record_claim_without_context_policy" to 5,
             "resume_rejects_record_negative_allow_horizon" to 5, "resume_rejects_record_negative_allow_horizon_on_non_allow" to 5,
+            "resume_rejects_record_non_canonical_claim_record" to 5,
             "resume_accepts_interrupted_record" to 1, "resume_substituted_record_rejected_at_release" to 6,
             "resume_accepts_allow_horizon_at_timestamp_domain_end" to 1, "resume_forged_record_longer_allow_horizon" to 6,
             "resume_forged_record_later_challenge_expiry" to 6, "resume_forged_record_allow_for_unheld_claim" to 3,
@@ -1461,6 +1464,7 @@ class ClaimTest {
                 val requestName = step.optString("request")
                 val want = step.getJSONObject("expect")
                 val at = "$name step $index $op"
+                if (op == "resume" && step.has("mode")) assertEquals(at, "record_bytes", step.getString("mode"))
                 val expectedStepKeys = stepKeys[op].orEmpty() +
                     (if (op == "release" && step.has("receipt_of")) setOf("receipt_of") else emptySet()) +
                     (if (op == "release" && step.has("mode")) setOf("mode") else emptySet()) +
@@ -1471,7 +1475,8 @@ class ClaimTest {
                     (if (op == "resume" && step.has("claim_record_b64"))
                         setOf("claim_record_b64", "terminal_b64", "body_b64") +
                             (if (step.has("allow_valid_until")) setOf("allow_valid_until") else emptySet()) +
-                            (if (step.has("claim_id")) setOf("claim_id") else emptySet())
+                            (if (step.has("claim_id")) setOf("claim_id") else emptySet()) +
+                            (if (step.has("mode")) setOf("mode") else emptySet())
                         else emptySet())
                 assertEquals(at, expectedStepKeys, step.keys().asSequence().toSet())
                 when (op) {

@@ -15462,6 +15462,11 @@ internal object FfiConverterTypeFfiClaimResult: FfiConverterRustBuffer<FfiClaimR
 internal data class FfiCommittedClaim (
     var `claim`: FfiChallengeClaim
     ,
+    /**
+     * Exact persisted claim bytes when the store retains a wire record.
+     */
+    var `claimRecord`: kotlin.ByteArray?
+    ,
     var `terminalResult`: kotlin.ByteArray
     ,
     var `receiptBody`: kotlin.ByteArray
@@ -15484,6 +15489,7 @@ internal object FfiConverterTypeFfiCommittedClaim: FfiConverterRustBuffer<FfiCom
     override fun read(buf: ByteBuffer): FfiCommittedClaim {
         return FfiCommittedClaim(
             FfiConverterTypeFfiChallengeClaim.read(buf),
+            FfiConverterOptionalByteArray.read(buf),
             FfiConverterByteArray.read(buf),
             FfiConverterByteArray.read(buf),
             FfiConverterLong.read(buf),
@@ -15492,6 +15498,7 @@ internal object FfiConverterTypeFfiCommittedClaim: FfiConverterRustBuffer<FfiCom
 
     override fun allocationSize(value: FfiCommittedClaim) = (
             FfiConverterTypeFfiChallengeClaim.allocationSize(value.`claim`) +
+            FfiConverterOptionalByteArray.allocationSize(value.`claimRecord`) +
             FfiConverterByteArray.allocationSize(value.`terminalResult`) +
             FfiConverterByteArray.allocationSize(value.`receiptBody`) +
             FfiConverterLong.allocationSize(value.`allowHorizon`)
@@ -15499,6 +15506,7 @@ internal object FfiConverterTypeFfiCommittedClaim: FfiConverterRustBuffer<FfiCom
 
     override fun write(value: FfiCommittedClaim, buf: ByteBuffer) {
             FfiConverterTypeFfiChallengeClaim.write(value.`claim`, buf)
+            FfiConverterOptionalByteArray.write(value.`claimRecord`, buf)
             FfiConverterByteArray.write(value.`terminalResult`, buf)
             FfiConverterByteArray.write(value.`receiptBody`, buf)
             FfiConverterLong.write(value.`allowHorizon`, buf)

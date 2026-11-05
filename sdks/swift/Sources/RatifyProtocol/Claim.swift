@@ -147,17 +147,25 @@ public struct InterruptedClaim: Sendable {
 
 public struct CommittedClaim: Sendable {
     public let claim: ChallengeClaim
+    public let claimRecord: Data?
     public let terminalResult: Data
     public let receiptBody: Data
     public let allowHorizon: Int64
     public init(claim: ChallengeClaim, terminalResult: Data, receiptBody: Data, allowHorizon: Int64) {
-        self.claim = claim; self.terminalResult = terminalResult; self.receiptBody = receiptBody; self.allowHorizon = allowHorizon
+        self.init(claim: claim, claimRecord: nil, terminalResult: terminalResult,
+            receiptBody: receiptBody, allowHorizon: allowHorizon)
+    }
+    public init(claim: ChallengeClaim, claimRecord: Data?, terminalResult: Data,
+                receiptBody: Data, allowHorizon: Int64) {
+        self.claim = claim; self.claimRecord = claimRecord; self.terminalResult = terminalResult
+        self.receiptBody = receiptBody; self.allowHorizon = allowHorizon
     }
     init(_ f: FfiCommittedClaim) {
-        self.init(claim: ChallengeClaim(f.claim), terminalResult: f.terminalResult,
+        self.init(claim: ChallengeClaim(f.claim), claimRecord: f.claimRecord, terminalResult: f.terminalResult,
             receiptBody: f.receiptBody, allowHorizon: f.allowHorizon)
     }
-    var ffi: FfiCommittedClaim { FfiCommittedClaim(claim: claim.ffi, terminalResult: terminalResult,
+    var ffi: FfiCommittedClaim { FfiCommittedClaim(claim: claim.ffi, claimRecord: claimRecord,
+        terminalResult: terminalResult,
         receiptBody: receiptBody, allowHorizon: allowHorizon) }
 }
 

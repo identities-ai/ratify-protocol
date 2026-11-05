@@ -33,12 +33,12 @@ zeroize = "1.8"
 # of a mixed rotation, both inside typed signing only (build plan §4.2).
 fips204 = "0.4.6"
 ed25519-dalek = "2.1"
+serde_json = "1"
+base64 = "0.22"
 
 [dev-dependencies]
 ed25519-dalek = "2.1"
-serde_json = "1"
 hex = "0.4"
-base64 = "0.22"
 sha2 = "0.10"
 # Parses this crate's sources in tests/guarded.rs.
 syn = { version = "2", features = ["full"] }

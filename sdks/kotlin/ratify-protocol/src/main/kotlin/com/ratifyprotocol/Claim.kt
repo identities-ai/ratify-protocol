@@ -116,12 +116,20 @@ public class InterruptedClaim(public val claim: ChallengeClaim, public val claim
 
 public class CommittedClaim(public val claim: ChallengeClaim, terminalResult: ByteArray,
     receiptBody: ByteArray, public val allowHorizon: Long) {
+    public constructor(claim: ChallengeClaim, claimRecord: ByteArray?, terminalResult: ByteArray,
+        receiptBody: ByteArray, allowHorizon: Long) : this(claim, terminalResult, receiptBody, allowHorizon) {
+        record = claimRecord?.copyOf()
+    }
+    private var record: ByteArray? = null
+    public val claimRecord: ByteArray? get() = record?.copyOf()
     private val terminal = terminalResult.copyOf()
     private val body = receiptBody.copyOf()
     public val terminalResult: ByteArray get() = terminal.copyOf()
     public val receiptBody: ByteArray get() = body.copyOf()
-    internal constructor(f: FfiCommittedClaim) : this(ChallengeClaim(f.claim), f.terminalResult, f.receiptBody, f.allowHorizon)
-    internal fun toFfi() = FfiCommittedClaim(claim.toFfi(), terminal.copyOf(), body.copyOf(), allowHorizon)
+    internal constructor(f: FfiCommittedClaim) : this(ChallengeClaim(f.claim), f.terminalResult, f.receiptBody, f.allowHorizon) {
+        record = f.claimRecord?.copyOf()
+    }
+    internal fun toFfi() = FfiCommittedClaim(claim.toFfi(), record?.copyOf(), terminal.copyOf(), body.copyOf(), allowHorizon)
 }
 
 /** One durable clock and atomic store for claim, progress, finalization and recovery. */

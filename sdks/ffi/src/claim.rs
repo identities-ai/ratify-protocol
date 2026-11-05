@@ -1,6 +1,8 @@
 //! Owned Part B claim records and the atomic foreign store boundary.
 
 use std::sync::Arc;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use serde_json::{json, Value};
 
 use ratify_protocol::v2::{
     self as core, ClaimStoreV2, CommittedV2Outcome, ConstraintEvaluatorRefV2,
@@ -268,14 +270,52 @@ impl From<FfiInterruptedClaim> for V2InterruptedClaim {
 #[derive(uniffi::Record, Clone)]
 pub struct FfiCommittedClaim {
     pub claim: FfiChallengeClaim,
+    /// Exact persisted claim bytes when the store retains a wire record.
+    pub claim_record: Option<Vec<u8>>,
     pub terminal_result: Vec<u8>,
     pub receipt_body: Vec<u8>,
     pub allow_horizon: i64,
+}
+
+fn canonical_claim_record(claim: &FfiChallengeClaim) -> Vec<u8> {
+    // Match the sealed claim record written by the C ABI (SPEC-v2 §7.13).
+    let value = json!({
+        "claim_id": claim.claim_id,
+        "namespace": claim.namespace,
+        "replay_epoch": claim.replay_epoch,
+        "challenge_digest": claim.challenge_digest,
+        "proof_digest": claim.proof_digest,
+        "bundle_hash": claim.bundle_hash,
+        "issuer_ids": claim.issuer_ids,
+        "required_scope": claim.required_scope,
+        "context_policy_digest": if claim.context_policy_digest.is_empty() {
+            Value::Null
+        } else {
+            json!(claim.context_policy_digest)
+        },
+        "verifier_id": claim.verifier_id,
+        "agent_id": claim.agent_id,
+        "requires_rate": claim.requires_rate,
+        "rate_batch": claim.rate_batch.iter().map(|r| json!({
+            "issuer_id": r.issuer_id, "cert_id": r.cert_id, "window_s": r.window_s, "limit": r.limit,
+        })).collect::<Vec<_>>(),
+        "issued_at": claim.issued_at,
+        "expires_at": claim.expires_at,
+        "max_age_seconds": claim.max_age_seconds,
+        "clock_skew_seconds": claim.clock_skew_seconds,
+        "stream_id": claim.stream_id.as_ref().map(|s| STANDARD.encode(s)),
+        "stream_seq": claim.stream_seq,
+        "constraint_evaluators": claim.constraint_evaluators.iter().map(|e| json!({
+            "type": e.kind, "profile_digest": e.profile_digest,
+        })).collect::<Vec<_>>(),
+    });
+    serde_json::to_vec(&value).expect("sealed claim record is serializable")
 }
 impl From<V2CommittedClaim> for FfiCommittedClaim {
     fn from(r: V2CommittedClaim) -> Self {
         Self {
             claim: r.claim.into(),
+            claim_record: None,
             terminal_result: r.terminal_result,
             receipt_body: r.receipt_body,
             allow_horizon: r.allow_horizon,
@@ -517,10 +557,14 @@ impl V2CommittedClaimStore for ForeignCommittedClaimStore {
         ctx: &V2Context,
         claim_id: &str,
     ) -> Result<V2CommittedClaim, V2StoreError> {
-        self.0
-            .load_committed(claim_id.into(), FfiStoreContext::new(ctx))
-            .map(Into::into)
-            .map_err(Into::into)
+        let record = self.0.load_committed(claim_id.into(), FfiStoreContext::new(ctx))
+            .map_err(V2StoreError::from)?;
+        if let Some(bytes) = &record.claim_record {
+            if canonical_claim_record(&record.claim) != *bytes {
+                return Err(V2StoreError::Unavailable("committed claim record does not match its canonical sealed claim".into()));
+            }
+        }
+        Ok(record.into())
     }
 }
 
@@ -682,6 +726,35 @@ mod tests {
             self.0.lock().unwrap().push("committed");
             Ok(V2CommittedClaim::default().into())
         }
+    }
+
+    struct RawCommittedStore(Vec<u8>);
+
+    impl FfiCommittedClaimStore for RawCommittedStore {
+        fn load_committed(&self, _: String, _: Arc<FfiStoreContext>) -> Result<FfiCommittedClaim, FfiStoreError> {
+            let mut record: FfiCommittedClaim = V2CommittedClaim::default().into();
+            record.claim_record = Some(self.0.clone());
+            Ok(record)
+        }
+    }
+
+    #[test]
+    fn committed_claim_record_bytes_must_be_canonical() {
+        let ctx = V2Context::background();
+        let claim: FfiChallengeClaim = V2ChallengeClaim::default().into();
+        let canonical_bytes = canonical_claim_record(&claim);
+        let mut noncanonical_bytes = b"{ ".to_vec();
+        noncanonical_bytes.extend_from_slice(&canonical_bytes[1..]);
+        let noncanonical = ForeignCommittedClaimStore(Arc::new(RawCommittedStore(noncanonical_bytes)));
+        assert!(matches!(noncanonical.load_v2_committed_claim(&ctx, "claim"),
+            Err(V2StoreError::Unavailable(_))));
+        let mut other_claim = claim.clone();
+        other_claim.agent_id = "different".into();
+        let mismatch = ForeignCommittedClaimStore(Arc::new(RawCommittedStore(canonical_claim_record(&other_claim))));
+        assert!(matches!(mismatch.load_v2_committed_claim(&ctx, "claim"),
+            Err(V2StoreError::Unavailable(_))));
+        let canonical = ForeignCommittedClaimStore(Arc::new(RawCommittedStore(canonical_bytes)));
+        assert!(canonical.load_v2_committed_claim(&ctx, "claim").is_ok());
     }
 
     impl FfiRateReservationStore for TestStore {

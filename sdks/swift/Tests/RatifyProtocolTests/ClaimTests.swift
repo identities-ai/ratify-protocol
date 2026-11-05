@@ -815,7 +815,7 @@ final class ClaimTests: XCTestCase {
             clockSkewSeconds: Int64(record.int("clock_skew_seconds")),
             streamId: streamId, streamSeq: streamSeq,
             constraintEvaluators: evaluators)
-        return CommittedClaim(claim: claim, terminalResult: step.b64("terminal_b64"),
+        return CommittedClaim(claim: claim, claimRecord: bytes, terminalResult: step.b64("terminal_b64"),
             receiptBody: step.b64("body_b64"), allowHorizon: step["allow_valid_until"] == nil
                 ? 0 : Int64(step.int("allow_valid_until")))
     }
@@ -1039,6 +1039,7 @@ final class ClaimTests: XCTestCase {
             "resume_rejects_record_body_for_another_scope", "resume_rejects_record_body_with_another_context_policy_digest",
             "resume_rejects_record_body_with_unsealed_constraint_evaluators", "resume_rejects_record_claim_without_context_policy",
             "resume_rejects_record_negative_allow_horizon", "resume_rejects_record_negative_allow_horizon_on_non_allow",
+            "resume_rejects_record_non_canonical_claim_record",
             "resume_accepts_interrupted_record", "resume_substituted_record_rejected_at_release",
             "resume_accepts_allow_horizon_at_timestamp_domain_end", "resume_forged_record_longer_allow_horizon",
             "resume_forged_record_later_challenge_expiry", "resume_forged_record_allow_for_unheld_claim",
@@ -1112,6 +1113,7 @@ final class ClaimTests: XCTestCase {
             "resume_rejects_record_body_for_another_scope": 5, "resume_rejects_record_body_with_another_context_policy_digest": 5,
             "resume_rejects_record_body_with_unsealed_constraint_evaluators": 5, "resume_rejects_record_claim_without_context_policy": 5,
             "resume_rejects_record_negative_allow_horizon": 5, "resume_rejects_record_negative_allow_horizon_on_non_allow": 5,
+            "resume_rejects_record_non_canonical_claim_record": 5,
             "resume_accepts_interrupted_record": 1, "resume_substituted_record_rejected_at_release": 6,
             "resume_accepts_allow_horizon_at_timestamp_domain_end": 1, "resume_forged_record_longer_allow_horizon": 6,
             "resume_forged_record_later_challenge_expiry": 6, "resume_forged_record_allow_for_unheld_claim": 3,
@@ -1212,6 +1214,10 @@ final class ClaimTests: XCTestCase {
                 if op == "finalize" && step["allow_valid_until"] != nil { expectedStepKeys.insert("allow_valid_until") }
                 if op == "resume" && step["claim_record_b64"] != nil {
                     expectedStepKeys.formUnion(["claim_record_b64", "terminal_b64", "body_b64"])
+                    if step["mode"] != nil {
+                        XCTAssertEqual(step.s("mode"), "record_bytes", at)
+                        expectedStepKeys.insert("mode")
+                    }
                     if step["allow_valid_until"] != nil { expectedStepKeys.insert("allow_valid_until") }
                     if step["claim_id"] != nil { expectedStepKeys.insert("claim_id") }
                 }

@@ -110,6 +110,8 @@ ClaimStore.recoverInterrupted(claimId:terminalResult:receiptBody:) [Func] -> Swi
 CommittedClaim [Struct]
 CommittedClaim.allowHorizon [Var] -> Swift.Int64
 CommittedClaim.claim [Var] -> RatifyProtocol.ChallengeClaim
+CommittedClaim.claimRecord [Var] -> Foundation.Data?
+CommittedClaim.init(claim:claimRecord:terminalResult:receiptBody:allowHorizon:) [Constructor] -> RatifyProtocol.CommittedClaim, RatifyProtocol.ChallengeClaim, Foundation.Data?, Foundation.Data, Foundation.Data, Swift.Int64
 CommittedClaim.init(claim:terminalResult:receiptBody:allowHorizon:) [Constructor] -> RatifyProtocol.CommittedClaim, RatifyProtocol.ChallengeClaim, Foundation.Data, Foundation.Data, Swift.Int64
 CommittedClaim.receiptBody [Var] -> Foundation.Data
 CommittedClaim.terminalResult [Var] -> Foundation.Data

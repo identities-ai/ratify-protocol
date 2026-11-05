@@ -8187,14 +8187,22 @@ func FfiConverterTypeFfiClaimResult_lower(_ value: FfiClaimResult) -> RustBuffer
 
 struct FfiCommittedClaim: Equatable, Hashable {
     var claim: FfiChallengeClaim
+    /**
+     * Exact persisted claim bytes when the store retains a wire record.
+     */
+    var claimRecord: Data?
     var terminalResult: Data
     var receiptBody: Data
     var allowHorizon: Int64
 
     // Default memberwise initializers are never by default, so we
     // declare one manually.
-    init(claim: FfiChallengeClaim, terminalResult: Data, receiptBody: Data, allowHorizon: Int64) {
+    init(claim: FfiChallengeClaim,
+        /**
+         * Exact persisted claim bytes when the store retains a wire record.
+         */claimRecord: Data?, terminalResult: Data, receiptBody: Data, allowHorizon: Int64) {
         self.claim = claim
+        self.claimRecord = claimRecord
         self.terminalResult = terminalResult
         self.receiptBody = receiptBody
         self.allowHorizon = allowHorizon
@@ -8217,6 +8225,7 @@ struct FfiConverterTypeFfiCommittedClaim: FfiConverterRustBuffer {
         return
             try FfiCommittedClaim(
                 claim: FfiConverterTypeFfiChallengeClaim.read(from: &buf),
+                claimRecord: FfiConverterOptionData.read(from: &buf),
                 terminalResult: FfiConverterData.read(from: &buf),
                 receiptBody: FfiConverterData.read(from: &buf),
                 allowHorizon: FfiConverterInt64.read(from: &buf)
@@ -8225,6 +8234,7 @@ struct FfiConverterTypeFfiCommittedClaim: FfiConverterRustBuffer {
 
     static func write(_ value: FfiCommittedClaim, into buf: inout [UInt8]) {
         FfiConverterTypeFfiChallengeClaim.write(value.claim, into: &buf)
+        FfiConverterOptionData.write(value.claimRecord, into: &buf)
         FfiConverterData.write(value.terminalResult, into: &buf)
         FfiConverterData.write(value.receiptBody, into: &buf)
         FfiConverterInt64.write(value.allowHorizon, into: &buf)

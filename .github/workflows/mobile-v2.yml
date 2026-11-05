@@ -42,7 +42,7 @@ jobs:
   swift:
     name: Swift macOS and iOS simulator
     runs-on: macos-26-intel
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       RATIFY_SWIFT_LOCAL_BINARY: '1'
     steps:
@@ -84,6 +84,16 @@ jobs:
           xcodegen generate
           xcodebuild test -project RatifyHost.xcodeproj -scheme RatifyHost \
             -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
+      - name: iOS 17 simulator suite
+        env:
+          RATIFY_FUZZ_SECONDS: '1'
+        run: |
+          xcodebuild -downloadPlatform iOS -buildVersion 17.5
+          runtime=$(xcrun simctl list runtimes --json | python3 -c 'import json,sys; print(next(r["identifier"] for r in json.load(sys.stdin)["runtimes"] if r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-17-")))')
+          device=$(xcrun simctl create 'Ratify iOS 17' 'com.apple.CoreSimulator.SimDeviceType.iPhone-15' "$runtime")
+          cd sdks/swift/HostApp
+          xcodebuild test -project RatifyHost.xcodeproj -scheme RatifyHost \
+            -destination "platform=iOS Simulator,id=$device" CODE_SIGNING_ALLOWED=NO
 
   kotlin:
     name: Kotlin host and Android API ${{ matrix.api-level }}

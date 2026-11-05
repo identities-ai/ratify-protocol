@@ -1983,6 +1983,73 @@ class ClaimTest {
         }
     }
 
+    @Test fun concurrentLateOwnerCannotReplaceRecovery() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first { it.getString("name") == "late_worker_finalize_after_recovery" }
+        val participants = scenario.arr("participants")
+        assertEquals(listOf("finalize", "recover"), participants.map { it.getString("op") })
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val expected = checkNotNull(req.expected)
+        val bundle = decodeProofBundle(req.bundle)
+        val hash = bundleHash(bundle)
+        val claim = ChallengeClaim(protocolClaimId(expected.verifierNamespace, expected.replayEpoch, expected.value),
+            expected.verifierNamespace, expected.replayEpoch, "sha384:" + challengeClaimDigest(expected.value).hex(),
+            hash, hash, bundle.delegations.map { it.issuerId }.distinct().sorted(), req.requiredScope,
+            req.contextPolicy?.digest ?: "", expected.verifierId, bundle.agentId, false, emptyList(),
+            expected.issuedAt, expected.expiresAt, req.maxChallengeAgeSeconds, req.futureSkewSeconds,
+            bundle.streamId, bundle.streamSeq, emptyList())
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val terminal = participants[0].b64("terminal_b64")
+        val body = participants[0].b64("body_b64")
+        val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("A"), req)
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+                inputs.getString("log_id"), key)
+            val claimed = store.claim(claim)
+            assertEquals("iteration $iteration", ClaimDisposition.CREATED, claimed.disposition)
+            store.setTime(scenario.arr("setup")[1].getLong("time"))
+            val owners = List(participants[0].getInt("count")) {
+                async(Dispatchers.Default) {
+                    try {
+                        store.finalize(claim.claimId, claimed.ownerToken, terminal, body, 0)
+                        "owner/unexpected" to null
+                    } catch (e: StoreError.Classified) {
+                        "owner/error/${e.errorClass.spelling}" to null
+                    }
+                }
+            }
+            val recoverers = List(participants[1].getInt("count")) {
+                async(Dispatchers.Default) {
+                    try {
+                        val value = recoverInterruptedClaim(store, claim.claimId)
+                        "recover/committed" to value.receiptBody
+                    } catch (e: RatifyException.Protocol) { "recover/error/${e.errorClass.spelling}" to null }
+                }
+            }
+            val results = (owners + recoverers).map { it.await() }
+            assertEquals("iteration $iteration", 5, results.size)
+            org.junit.Assert.assertTrue("iteration $iteration: $results", results.filter { it.first.startsWith("owner/") }
+                .all { it.first in setOf("owner/error/claim_lease_lost", "owner/error/claim_already_terminal") })
+            val recovered = results.filter { it.first.startsWith("recover/") }
+            assertEquals("iteration $iteration", 3, recovered.size)
+            org.junit.Assert.assertTrue("iteration $iteration", recovered.all { it.first == "recover/committed" })
+            recovered.forEach { org.junit.Assert.assertArrayEquals(recovered[0].second, it.second) }
+            val resumed = resumeCommittedClaim(store, claim.claimId)
+            org.junit.Assert.assertArrayEquals(recovered[0].second, resumed.receiptBody)
+            val replay = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+            assertEquals("iteration $iteration", ClaimDisposition.TERMINAL_REPLAY, replay.disposition)
+            val wire = store.publish(claim.claimId, resumed.receiptBody)
+            assertEquals("iteration $iteration", 1L, decodeVerificationReceipt(wire).sequence)
+            val release = releaseDecision(resumed, wire, key.publicKey, inputs.getString("log_id"), store, store)
+            assertEquals("iteration $iteration", ReleaseStatus.RELEASED, release.status)
+            assertEquals("iteration $iteration", "indeterminate", release.decision?.decision)
+        }
+    }
+
     @Test fun concurrentResumeSeesOwnerFinalizeOrLiveLease() = runBlocking {
         val corpus = Corpus.load("concurrency-scenarios.json")
         val scenario = corpus.arr("scenarios").first { it.getString("name") == "resume_races_owner_finalize" }

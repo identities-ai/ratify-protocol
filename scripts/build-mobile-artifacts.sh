@@ -4,6 +4,10 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+if [ -n "$(git status --porcelain)" ]; then
+  echo "mobile artifact build requires a clean source tree" >&2
+  exit 1
+fi
 unset FEATURES
 SLICES="macos ios ios-sim" sdks/swift/scripts/build-xcframework.sh
 ABIS="arm64-v8a armeabi-v7a x86_64" sdks/kotlin/scripts/build-rust.sh
@@ -15,6 +19,10 @@ python3 scripts/check-mobile-artifacts.py
 bash scripts/smoke-kotlin-staging.sh
 git diff --exit-code -- sdks/swift/Sources/RatifyProtocol/Generated/ratify_ffi.swift \
   sdks/kotlin/ratify-protocol/src/main/kotlin/com/ratifyprotocol/internal/ffi/ratify_ffi.kt
+if [ -n "$(git status --porcelain)" ]; then
+  echo "mobile artifact build changed the source tree" >&2
+  exit 1
+fi
 
 out="$root/dist/mobile"
 rm -rf "$out"
@@ -24,6 +32,7 @@ ditto -c -k --sequesterRsrc --keepParent \
 cp sdks/kotlin/ratify-protocol/build/outputs/aar/ratify-protocol-release.aar "$out/"
 cp sdks/kotlin/ratify-protocol-testing/build/outputs/aar/ratify-protocol-testing-release.aar "$out/"
 (cd sdks/kotlin/build && zip -q -r "$out/kotlin-maven-staging.zip" mobile-staging)
+bash scripts/smoke-swift-staging.sh
 
 python3 - "$out" <<'PY'
 import hashlib, json, pathlib, subprocess, sys

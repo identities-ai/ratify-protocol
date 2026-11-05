@@ -49,6 +49,7 @@ sdks/python-native-v2/dist/
 /sdks/ffi/target/
 /sdks/swift/build/
 /sdks/kotlin/.gradle/
+/sdks/kotlin/.kotlin/
 /sdks/kotlin/**/build/
 /sdks/kotlin/local.properties
 /sdks/swift/HostApp/RatifyHost.xcodeproj/

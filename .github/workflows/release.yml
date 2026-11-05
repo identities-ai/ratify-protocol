@@ -282,6 +282,41 @@ jobs:
           echo "✓ tag $tag matches all $LINE SDK versions"
 
   # ──────────────────────────────────────────────────────────────────────────
+  # A v2 dry run builds the same mobile candidates that the tag will need.
+  # This job has read-only permissions and never publishes either package.
+  mobile-candidates:
+    name: Mobile SDK release candidates
+    if: needs.gate-tests.outputs.line == 'v2'
+    needs: gate-tests
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios,aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - name: Install Android build components and cargo-ndk
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          cargo install cargo-ndk --version 4.1.2 --locked
+      - name: Build and verify mobile release candidates
+        run: bash scripts/build-mobile-artifacts.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-v2-candidates
+          path: dist/mobile/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
   # PyPI — Trusted Publisher (OIDC). No long-lived secret. Requires that the
   # 'pypi-publish' environment exist on the repo and that PyPI is configured
   # with this repo + workflow as a trusted publisher for the project. See
@@ -1120,7 +1155,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   github-release:
     name: Create GitHub Release
-    needs: [gate-tests, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-pypi-v2, build-pypi-native-v2, verify-pypi-native-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
+    needs: [gate-tests, mobile-candidates, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-pypi-v2, build-pypi-native-v2, verify-pypi-native-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
     if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     permissions:

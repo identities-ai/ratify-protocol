@@ -343,28 +343,28 @@
  },
  "CROSS_SDK_KEY_NAMES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CROSS_SDK_KINDS_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CROSS_SDK_NAMES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CROSS_SDK_NOW_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CROSS_SDK_SCENARIO_NAMES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CertificateRefV2": {
   "kind": "struct",
@@ -1046,8 +1046,8 @@
  },
  "CrossSdkContextPolicyV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkContextPolicyV2::clone": {
   "kind": "fn",
@@ -1061,8 +1061,8 @@
  },
  "CrossSdkContextPolicyV2::digest": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkContextPolicyV2::eq": {
   "kind": "fn",
@@ -1071,8 +1071,8 @@
  },
  "CrossSdkContextPolicyV2::expected_session_context_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkContextPolicyV2::fmt": {
   "kind": "fn",
@@ -1081,18 +1081,18 @@
  },
  "CrossSdkContextPolicyV2::profile": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkContextPolicyV2::require_bound": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkContextPolicyV2::required_fields": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkContextPolicyV2::serialize": {
   "kind": "fn",
@@ -1101,8 +1101,8 @@
  },
  "CrossSdkEvidenceObjectV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkEvidenceObjectV2::clone": {
   "kind": "fn",
@@ -1126,8 +1126,8 @@
  },
  "CrossSdkEvidenceObjectV2::object_type_code": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkEvidenceObjectV2::serialize": {
   "kind": "fn",
@@ -1136,13 +1136,13 @@
  },
  "CrossSdkEvidenceObjectV2::wire_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::clone": {
   "kind": "fn",
@@ -1161,28 +1161,28 @@
  },
  "CrossSdkExpectedChallengeV2::expected_agent_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::expected_agent_public_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::expected_receiver_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::expected_session_context_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::expires_at": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::fmt": {
   "kind": "fn",
@@ -1191,13 +1191,13 @@
  },
  "CrossSdkExpectedChallengeV2::issued_at": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::replay_epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::serialize": {
   "kind": "fn",
@@ -1206,23 +1206,23 @@
  },
  "CrossSdkExpectedChallengeV2::value_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::verifier_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkExpectedChallengeV2::verifier_namespace": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::clone": {
   "kind": "fn",
@@ -1231,8 +1231,8 @@
  },
  "CrossSdkFixtureV2::description": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::deserialize": {
   "kind": "fn",
@@ -1251,43 +1251,43 @@
  },
  "CrossSdkFixtureV2::generator": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::keys": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::kind_object_type_codes": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::objects": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::scenario_configuration": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::scenarios": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::sdk": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::sdk_version": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkFixtureV2::serialize": {
   "kind": "fn",
@@ -1296,18 +1296,18 @@
  },
  "CrossSdkFixtureV2::version": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkHeadV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkHeadV2::accepted_digests_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkHeadV2::clone": {
   "kind": "fn",
@@ -1331,23 +1331,23 @@
  },
  "CrossSdkHeadV2::frozen": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkHeadV2::head_hash_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkHeadV2::log_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkHeadV2::sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkHeadV2::serialize": {
   "kind": "fn",
@@ -1356,13 +1356,13 @@
  },
  "CrossSdkHeadV2::verifier_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkKeyV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkKeyV2::clone": {
   "kind": "fn",
@@ -1376,8 +1376,8 @@
  },
  "CrossSdkKeyV2::ed25519_seed_hex": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkKeyV2::eq": {
   "kind": "fn",
@@ -1391,23 +1391,23 @@
  },
  "CrossSdkKeyV2::key_id_v2": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkKeyV2::ml_dsa_65_seed_hex": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkKeyV2::name": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkKeyV2::public_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkKeyV2::serialize": {
   "kind": "fn",
@@ -1416,18 +1416,18 @@
  },
  "CrossSdkKeyV2::v1_key_id_128": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkObjectV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkObjectV2::bundle_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkObjectV2::clone": {
   "kind": "fn",
@@ -1436,8 +1436,8 @@
  },
  "CrossSdkObjectV2::description": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkObjectV2::deserialize": {
   "kind": "fn",
@@ -1446,8 +1446,8 @@
  },
  "CrossSdkObjectV2::digests": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkObjectV2::eq": {
   "kind": "fn",
@@ -1461,13 +1461,13 @@
  },
  "CrossSdkObjectV2::kind": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkObjectV2::name": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkObjectV2::serialize": {
   "kind": "fn",
@@ -1476,23 +1476,23 @@
  },
  "CrossSdkObjectV2::signatures": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkObjectV2::verify": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkObjectV2::wire_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkReleaseV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkReleaseV2::clone": {
   "kind": "fn",
@@ -1501,8 +1501,8 @@
  },
  "CrossSdkReleaseV2::decision": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkReleaseV2::deserialize": {
   "kind": "fn",
@@ -1521,13 +1521,13 @@
  },
  "CrossSdkReleaseV2::reason": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkReleaseV2::release_time": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkReleaseV2::serialize": {
   "kind": "fn",
@@ -1536,18 +1536,18 @@
  },
  "CrossSdkReleaseV2::status": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkRotationStateV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkRotationStateV2::authority_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkRotationStateV2::clone": {
   "kind": "fn",
@@ -1556,8 +1556,8 @@
  },
  "CrossSdkRotationStateV2::current_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkRotationStateV2::deserialize": {
   "kind": "fn",
@@ -1576,23 +1576,23 @@
  },
  "CrossSdkRotationStateV2::head_hash_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkRotationStateV2::recovery_epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkRotationStateV2::role": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkRotationStateV2::sequence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkRotationStateV2::serialize": {
   "kind": "fn",
@@ -1601,13 +1601,13 @@
  },
  "CrossSdkRotationStateV2::used_key_ids": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2::clone": {
   "kind": "fn",
@@ -1631,28 +1631,28 @@
  },
  "CrossSdkScenarioConfigV2::future_skew_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2::lease_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2::max_challenge_age_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2::receipt_log_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2::replay_epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2::serialize": {
   "kind": "fn",
@@ -1661,33 +1661,33 @@
  },
  "CrossSdkScenarioConfigV2::status_policy": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2::tzdb_version": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2::verifier_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioConfigV2::verifier_namespace": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioExpectV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioExpectV2::allow_horizon": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioExpectV2::clone": {
   "kind": "fn",
@@ -1711,13 +1711,13 @@
  },
  "CrossSdkScenarioExpectV2::receipt_body_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioExpectV2::release": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioExpectV2::serialize": {
   "kind": "fn",
@@ -1726,18 +1726,18 @@
  },
  "CrossSdkScenarioExpectV2::signed_receipt_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::bundle_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::clone": {
   "kind": "fn",
@@ -1746,13 +1746,13 @@
  },
  "CrossSdkScenarioV2::context_policy": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::description": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::deserialize": {
   "kind": "fn",
@@ -1766,13 +1766,13 @@
  },
  "CrossSdkScenarioV2::expected": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::expected_challenge": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::fmt": {
   "kind": "fn",
@@ -1781,23 +1781,23 @@
  },
  "CrossSdkScenarioV2::name": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::publish_time": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::release_time": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::required_scope": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::serialize": {
   "kind": "fn",
@@ -1806,28 +1806,28 @@
  },
  "CrossSdkScenarioV2::status_evidence": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::status_keys": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::trust_root_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkScenarioV2::verify_time": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::clone": {
   "kind": "fn",
@@ -1846,8 +1846,8 @@
  },
  "CrossSdkSignatureV2::field": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::fmt": {
   "kind": "fn",
@@ -1856,28 +1856,28 @@
  },
  "CrossSdkSignatureV2::message_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::mldsa_context": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::mldsa_mu_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::mldsa_tr_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::object_type_code": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::serialize": {
   "kind": "fn",
@@ -1886,33 +1886,33 @@
  },
  "CrossSdkSignatureV2::signable_b64": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::signable_sha384_hex": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::signature": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::signer": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkSignatureV2::signer_key_id_v2": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkStatusKeyV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkStatusKeyV2::clone": {
   "kind": "fn",
@@ -1926,8 +1926,8 @@
  },
  "CrossSdkStatusKeyV2::epoch": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkStatusKeyV2::eq": {
   "kind": "fn",
@@ -1941,8 +1941,8 @@
  },
  "CrossSdkStatusKeyV2::key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkStatusKeyV2::serialize": {
   "kind": "fn",
@@ -1951,13 +1951,13 @@
  },
  "CrossSdkStatusPolicyV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkStatusPolicyV2::clock_skew_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkStatusPolicyV2::clone": {
   "kind": "fn",
@@ -1981,13 +1981,13 @@
  },
  "CrossSdkStatusPolicyV2::max_list_lifetime_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkStatusPolicyV2::max_status_age_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkStatusPolicyV2::serialize": {
   "kind": "fn",
@@ -1996,13 +1996,13 @@
  },
  "CrossSdkVerifyV2": {
   "kind": "struct",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkVerifyV2::bound_issuer_id": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkVerifyV2::clone": {
   "kind": "fn",
@@ -2031,23 +2031,23 @@
  },
  "CrossSdkVerifyV2::future_skew_seconds": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkVerifyV2::head": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkVerifyV2::now": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkVerifyV2::rotation_state": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkVerifyV2::serialize": {
   "kind": "fn",
@@ -2056,18 +2056,18 @@
  },
  "CrossSdkVerifyV2::status_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkVerifyV2::verifier_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "CrossSdkVerifyV2::witness_key": {
   "kind": "member",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "DelegationCertV2": {
   "kind": "struct",
@@ -9199,8 +9199,8 @@
  },
  "generate_cross_sdk_fixture_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "generate_hybrid_keypair": {
   "kind": "fn",
@@ -9764,8 +9764,8 @@
  },
  "verify_cross_sdk_fixture_v2": {
   "kind": "fn",
-  "milestone": "M2",
-  "status": "pending"
+  "status": "rust-idiom",
+  "reason": "Rust cross-SDK fixture schema or generator; mobile SDKs use the shared JSON corpus through test runners, not public fixture model types"
  },
  "verify_delegation_cert_v2_signature": {
   "kind": "fn",

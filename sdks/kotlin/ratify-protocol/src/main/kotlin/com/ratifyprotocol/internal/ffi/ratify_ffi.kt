@@ -1291,6 +1291,20 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_witness_entry_with_split_key(
     ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_claim_proof_bundle(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_evaluate_local_authorization(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_finalize_claim_proof_bundle(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_finalize_claim_proof_bundle_barrier(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_resolve_claim_after_audience(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_resolve_claim_after_rate(
+    ): Int
+    external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_resolve_claim_after_rate_barrier(
+    ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list(
     ): Int
     external fun uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_push(
@@ -2076,6 +2090,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_method_ffisplitkey_storage_record(`ptr`: Long,`keystoreAlias`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_clone_ffievaluationtoken(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_ratify_protocol_ffi_fn_free_ffievaluationtoken(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_ratify_protocol_ffi_fn_clone_ffistatuspublisher(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_ratify_protocol_ffi_fn_free_ffistatuspublisher(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2271,6 +2289,20 @@ internal object UniffiLib {
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_sign_verification_receipt_with_split_key(`cancel`: Long,`receipt`: RustBuffer.ByValue,`key`: Long,`ed25519`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_sign_witness_entry_with_split_key(`cancel`: Long,`entry`: RustBuffer.ByValue,`key`: Long,`ed25519`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_claim_proof_bundle(`bundle`: RustBuffer.ByValue,`preflight`: Long,`configuredNamespace`: RustBuffer.ByValue,`configuredReplayEpoch`: Long,`now`: Long,`store`: Long,`token`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_evaluate_local_authorization(`bundle`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_finalize_claim_proof_bundle(`token`: Long,`store`: Long,`cancel`: Long,`terminalResult`: RustBuffer.ByValue,`receiptBody`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_finalize_claim_proof_bundle_barrier(`token`: Long,`store`: Long,`cancel`: Long,`terminalResult`: RustBuffer.ByValue,`receiptBody`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_resolve_claim_after_audience(`token`: Long,`memberships`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_resolve_claim_after_rate(`token`: Long,`store`: RustBuffer.ByValue,`cancel`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_ratify_protocol_ffi_fn_func_ffi_resolve_claim_after_rate_barrier(`token`: Long,`store`: Long,`cancel`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_ratify_protocol_ffi_fn_func_ffi_apply_revocation_list(`state`: RustBuffer.ByValue,`list`: RustBuffer.ByValue,`boundIssuerId`: RustBuffer.ByValue,`statusKeyEpoch`: Long,`statusKey`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`now`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -2747,6 +2779,27 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_witness_entry_with_split_key() and 0xFFFF) != 18973) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_claim_proof_bundle() and 0xFFFF) != 53293) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_evaluate_local_authorization() and 0xFFFF) != 30647) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_finalize_claim_proof_bundle() and 0xFFFF) != 29887) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_finalize_claim_proof_bundle_barrier() and 0xFFFF) != 58245) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_resolve_claim_after_audience() and 0xFFFF) != 4381) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_resolve_claim_after_rate() and 0xFFFF) != 46529) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_resolve_claim_after_rate_barrier() and 0xFFFF) != 49422) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list() and 0xFFFF) != 33860) {
@@ -7952,6 +8005,246 @@ internal object FfiConverterTypeFfiEd25519Signer: FfiConverter<FfiEd25519Signer,
     override fun allocationSize(value: FfiEd25519Signer) = 8UL
 
     override fun write(value: FfiEd25519Signer, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+internal interface FfiEvaluationTokenInterface {
+
+    companion object
+}
+
+internal open class FfiEvaluationToken: Disposable, AutoCloseable, FfiEvaluationTokenInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_ratify_protocol_ffi_fn_free_ffievaluationtoken(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_ratify_protocol_ffi_fn_clone_ffievaluationtoken(handle, status)
+        }
+    }
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiEvaluationToken: FfiConverter<FfiEvaluationToken, Long> {
+    override fun lower(value: FfiEvaluationToken): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): FfiEvaluationToken {
+        return FfiEvaluationToken(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): FfiEvaluationToken {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: FfiEvaluationToken) = 8UL
+
+    override fun write(value: FfiEvaluationToken, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -15711,6 +16004,54 @@ internal object FfiConverterTypeFfiCertificateRef: FfiConverterRustBuffer<FfiCer
 
 
 
+internal data class FfiCertificateStatusCheck (
+    var `delegationIndex`: kotlin.ULong
+    ,
+    var `issuerId`: kotlin.String
+    ,
+    var `subjectId`: kotlin.String
+    ,
+    var `certId`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiCertificateStatusCheck: FfiConverterRustBuffer<FfiCertificateStatusCheck> {
+    override fun read(buf: ByteBuffer): FfiCertificateStatusCheck {
+        return FfiCertificateStatusCheck(
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiCertificateStatusCheck) = (
+            FfiConverterULong.allocationSize(value.`delegationIndex`) +
+            FfiConverterString.allocationSize(value.`issuerId`) +
+            FfiConverterString.allocationSize(value.`subjectId`) +
+            FfiConverterString.allocationSize(value.`certId`)
+    )
+
+    override fun write(value: FfiCertificateStatusCheck, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`delegationIndex`, buf)
+            FfiConverterString.write(value.`issuerId`, buf)
+            FfiConverterString.write(value.`subjectId`, buf)
+            FfiConverterString.write(value.`certId`, buf)
+    }
+}
+
+
+
 internal data class FfiChallengeClaim (
     var `claimId`: kotlin.String
     ,
@@ -16828,6 +17169,44 @@ internal object FfiConverterTypeFfiExpectedChallenge: FfiConverterRustBuffer<Ffi
 
 
 
+internal data class FfiFinalizeReply (
+    var `finalized`: kotlin.Boolean?
+    ,
+    var `failure`: FfiReferenceStoreFailure?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiFinalizeReply: FfiConverterRustBuffer<FfiFinalizeReply> {
+    override fun read(buf: ByteBuffer): FfiFinalizeReply {
+        return FfiFinalizeReply(
+            FfiConverterOptionalBoolean.read(buf),
+            FfiConverterOptionalTypeFfiReferenceStoreFailure.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiFinalizeReply) = (
+            FfiConverterOptionalBoolean.allocationSize(value.`finalized`) +
+            FfiConverterOptionalTypeFfiReferenceStoreFailure.allocationSize(value.`failure`)
+    )
+
+    override fun write(value: FfiFinalizeReply, buf: ByteBuffer) {
+            FfiConverterOptionalBoolean.write(value.`finalized`, buf)
+            FfiConverterOptionalTypeFfiReferenceStoreFailure.write(value.`failure`, buf)
+    }
+}
+
+
+
 internal data class FfiInterruptedClaim (
     var `claim`: FfiChallengeClaim
     ,
@@ -17236,6 +17615,297 @@ internal object FfiConverterTypeFfiLiveVerifyRequest: FfiConverterRustBuffer<Ffi
             FfiConverterMapStringTypeFfiStatusKeyConfig.write(value.`statusKeys`, buf)
             FfiConverterTypeFfiStatusPolicy.write(value.`statusPolicy`, buf)
             FfiConverterOptionalTypeFfiConstraintEvaluatorRegistry.write(value.`constraintEvaluators`, buf)
+    }
+}
+
+
+
+internal data class FfiLocalAuthorizationAssessment (
+    var `bundleHash`: kotlin.String
+    ,
+    var `issuerIds`: List<kotlin.String>
+    ,
+    var `agentId`: kotlin.String
+    ,
+    var `rootId`: kotlin.String
+    ,
+    var `requiredScope`: kotlin.String
+    ,
+    var `delegationDigest`: kotlin.ByteArray
+    ,
+    var `effectiveScope`: List<kotlin.String>
+    ,
+    var `contextAssessment`: kotlin.String
+    ,
+    var `contextPolicyDigest`: kotlin.String?
+    ,
+    var `statusAssessment`: kotlin.String
+    ,
+    var `delegationValidUntil`: kotlin.Long
+    ,
+    var `localTimeValidUntil`: kotlin.Long
+    ,
+    var `extensionValidUntil`: kotlin.Long
+    ,
+    var `statusFreshUntil`: kotlin.Long
+    ,
+    var `audienceFreshUntil`: kotlin.Long
+    ,
+    var `statusEvidence`: List<FfiStatusEvidenceEntry>
+    ,
+    var `audienceEvidenceDigests`: List<kotlin.String>
+    ,
+    var `rateStoreUnavailable`: kotlin.Boolean
+    ,
+    var `rateAdmissionDeferred`: kotlin.Boolean
+    ,
+    var `statusChecks`: List<FfiCertificateStatusCheck>
+    ,
+    var `deferred`: List<FfiDeferredConstraint>
+    ,
+    var `localPolicyFailure`: FfiLocalPolicyFailure?
+    ,
+    var `status`: kotlin.String
+    ,
+    var `reason`: kotlin.String
+    ,
+    var `detail`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiLocalAuthorizationAssessment: FfiConverterRustBuffer<FfiLocalAuthorizationAssessment> {
+    override fun read(buf: ByteBuffer): FfiLocalAuthorizationAssessment {
+        return FfiLocalAuthorizationAssessment(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterLong.read(buf),
+            FfiConverterSequenceTypeFfiStatusEvidenceEntry.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterSequenceTypeFfiCertificateStatusCheck.read(buf),
+            FfiConverterSequenceTypeFfiDeferredConstraint.read(buf),
+            FfiConverterOptionalTypeFfiLocalPolicyFailure.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiLocalAuthorizationAssessment) = (
+            FfiConverterString.allocationSize(value.`bundleHash`) +
+            FfiConverterSequenceString.allocationSize(value.`issuerIds`) +
+            FfiConverterString.allocationSize(value.`agentId`) +
+            FfiConverterString.allocationSize(value.`rootId`) +
+            FfiConverterString.allocationSize(value.`requiredScope`) +
+            FfiConverterByteArray.allocationSize(value.`delegationDigest`) +
+            FfiConverterSequenceString.allocationSize(value.`effectiveScope`) +
+            FfiConverterString.allocationSize(value.`contextAssessment`) +
+            FfiConverterOptionalString.allocationSize(value.`contextPolicyDigest`) +
+            FfiConverterString.allocationSize(value.`statusAssessment`) +
+            FfiConverterLong.allocationSize(value.`delegationValidUntil`) +
+            FfiConverterLong.allocationSize(value.`localTimeValidUntil`) +
+            FfiConverterLong.allocationSize(value.`extensionValidUntil`) +
+            FfiConverterLong.allocationSize(value.`statusFreshUntil`) +
+            FfiConverterLong.allocationSize(value.`audienceFreshUntil`) +
+            FfiConverterSequenceTypeFfiStatusEvidenceEntry.allocationSize(value.`statusEvidence`) +
+            FfiConverterSequenceString.allocationSize(value.`audienceEvidenceDigests`) +
+            FfiConverterBoolean.allocationSize(value.`rateStoreUnavailable`) +
+            FfiConverterBoolean.allocationSize(value.`rateAdmissionDeferred`) +
+            FfiConverterSequenceTypeFfiCertificateStatusCheck.allocationSize(value.`statusChecks`) +
+            FfiConverterSequenceTypeFfiDeferredConstraint.allocationSize(value.`deferred`) +
+            FfiConverterOptionalTypeFfiLocalPolicyFailure.allocationSize(value.`localPolicyFailure`) +
+            FfiConverterString.allocationSize(value.`status`) +
+            FfiConverterString.allocationSize(value.`reason`) +
+            FfiConverterString.allocationSize(value.`detail`)
+    )
+
+    override fun write(value: FfiLocalAuthorizationAssessment, buf: ByteBuffer) {
+            FfiConverterString.write(value.`bundleHash`, buf)
+            FfiConverterSequenceString.write(value.`issuerIds`, buf)
+            FfiConverterString.write(value.`agentId`, buf)
+            FfiConverterString.write(value.`rootId`, buf)
+            FfiConverterString.write(value.`requiredScope`, buf)
+            FfiConverterByteArray.write(value.`delegationDigest`, buf)
+            FfiConverterSequenceString.write(value.`effectiveScope`, buf)
+            FfiConverterString.write(value.`contextAssessment`, buf)
+            FfiConverterOptionalString.write(value.`contextPolicyDigest`, buf)
+            FfiConverterString.write(value.`statusAssessment`, buf)
+            FfiConverterLong.write(value.`delegationValidUntil`, buf)
+            FfiConverterLong.write(value.`localTimeValidUntil`, buf)
+            FfiConverterLong.write(value.`extensionValidUntil`, buf)
+            FfiConverterLong.write(value.`statusFreshUntil`, buf)
+            FfiConverterLong.write(value.`audienceFreshUntil`, buf)
+            FfiConverterSequenceTypeFfiStatusEvidenceEntry.write(value.`statusEvidence`, buf)
+            FfiConverterSequenceString.write(value.`audienceEvidenceDigests`, buf)
+            FfiConverterBoolean.write(value.`rateStoreUnavailable`, buf)
+            FfiConverterBoolean.write(value.`rateAdmissionDeferred`, buf)
+            FfiConverterSequenceTypeFfiCertificateStatusCheck.write(value.`statusChecks`, buf)
+            FfiConverterSequenceTypeFfiDeferredConstraint.write(value.`deferred`, buf)
+            FfiConverterOptionalTypeFfiLocalPolicyFailure.write(value.`localPolicyFailure`, buf)
+            FfiConverterString.write(value.`status`, buf)
+            FfiConverterString.write(value.`reason`, buf)
+            FfiConverterString.write(value.`detail`, buf)
+    }
+}
+
+
+
+internal data class FfiLocalAuthorizationOptions (
+    var `futureSkewSeconds`: kotlin.Long
+    ,
+    var `requiredScope`: kotlin.String
+    ,
+    var `trustedRootId`: kotlin.String
+    ,
+    var `trustedRootKey`: FfiPublicKey
+    ,
+    var `trustConfigured`: kotlin.Boolean
+    ,
+    var `context`: FfiConstraintContext
+    ,
+    var `tzdbVersion`: kotlin.String
+    ,
+    var `contextPolicy`: FfiContextPolicy?
+    ,
+    var `expectedChallenge`: FfiExpectedChallenge?
+    ,
+    var `claimToken`: FfiEvaluationToken
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`futureSkewSeconds`,
+        this.`requiredScope`,
+        this.`trustedRootId`,
+        this.`trustedRootKey`,
+        this.`trustConfigured`,
+        this.`context`,
+        this.`tzdbVersion`,
+        this.`contextPolicy`,
+        this.`expectedChallenge`,
+        this.`claimToken`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiLocalAuthorizationOptions: FfiConverterRustBuffer<FfiLocalAuthorizationOptions> {
+    override fun read(buf: ByteBuffer): FfiLocalAuthorizationOptions {
+        return FfiLocalAuthorizationOptions(
+            FfiConverterLong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeFfiPublicKey.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeFfiConstraintContext.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalTypeFfiContextPolicy.read(buf),
+            FfiConverterOptionalTypeFfiExpectedChallenge.read(buf),
+            FfiConverterTypeFfiEvaluationToken.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiLocalAuthorizationOptions) = (
+            FfiConverterLong.allocationSize(value.`futureSkewSeconds`) +
+            FfiConverterString.allocationSize(value.`requiredScope`) +
+            FfiConverterString.allocationSize(value.`trustedRootId`) +
+            FfiConverterTypeFfiPublicKey.allocationSize(value.`trustedRootKey`) +
+            FfiConverterBoolean.allocationSize(value.`trustConfigured`) +
+            FfiConverterTypeFfiConstraintContext.allocationSize(value.`context`) +
+            FfiConverterString.allocationSize(value.`tzdbVersion`) +
+            FfiConverterOptionalTypeFfiContextPolicy.allocationSize(value.`contextPolicy`) +
+            FfiConverterOptionalTypeFfiExpectedChallenge.allocationSize(value.`expectedChallenge`) +
+            FfiConverterTypeFfiEvaluationToken.allocationSize(value.`claimToken`)
+    )
+
+    override fun write(value: FfiLocalAuthorizationOptions, buf: ByteBuffer) {
+            FfiConverterLong.write(value.`futureSkewSeconds`, buf)
+            FfiConverterString.write(value.`requiredScope`, buf)
+            FfiConverterString.write(value.`trustedRootId`, buf)
+            FfiConverterTypeFfiPublicKey.write(value.`trustedRootKey`, buf)
+            FfiConverterBoolean.write(value.`trustConfigured`, buf)
+            FfiConverterTypeFfiConstraintContext.write(value.`context`, buf)
+            FfiConverterString.write(value.`tzdbVersion`, buf)
+            FfiConverterOptionalTypeFfiContextPolicy.write(value.`contextPolicy`, buf)
+            FfiConverterOptionalTypeFfiExpectedChallenge.write(value.`expectedChallenge`, buf)
+            FfiConverterTypeFfiEvaluationToken.write(value.`claimToken`, buf)
+    }
+}
+
+
+
+internal data class FfiLocalPolicyFailure (
+    var `status`: kotlin.String
+    ,
+    var `reason`: kotlin.String
+    ,
+    var `detail`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiLocalPolicyFailure: FfiConverterRustBuffer<FfiLocalPolicyFailure> {
+    override fun read(buf: ByteBuffer): FfiLocalPolicyFailure {
+        return FfiLocalPolicyFailure(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiLocalPolicyFailure) = (
+            FfiConverterString.allocationSize(value.`status`) +
+            FfiConverterString.allocationSize(value.`reason`) +
+            FfiConverterString.allocationSize(value.`detail`)
+    )
+
+    override fun write(value: FfiLocalPolicyFailure, buf: ByteBuffer) {
+            FfiConverterString.write(value.`status`, buf)
+            FfiConverterString.write(value.`reason`, buf)
+            FfiConverterString.write(value.`detail`, buf)
     }
 }
 
@@ -18387,6 +19057,59 @@ internal object FfiConverterTypeFfiSignature: FfiConverterRustBuffer<FfiSignatur
     override fun write(value: FfiSignature, buf: ByteBuffer) {
             FfiConverterByteArray.write(value.`ed25519`, buf)
             FfiConverterByteArray.write(value.`mlDsa65`, buf)
+    }
+}
+
+
+
+internal data class FfiStagedClaim (
+    var `claim`: FfiChallengeClaim
+    ,
+    var `disposition`: FfiClaimDisposition
+    ,
+    var `evaluationToken`: FfiEvaluationToken?
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`claim`,
+        this.`disposition`,
+        this.`evaluationToken`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+internal object FfiConverterTypeFfiStagedClaim: FfiConverterRustBuffer<FfiStagedClaim> {
+    override fun read(buf: ByteBuffer): FfiStagedClaim {
+        return FfiStagedClaim(
+            FfiConverterTypeFfiChallengeClaim.read(buf),
+            FfiConverterTypeFfiClaimDisposition.read(buf),
+            FfiConverterOptionalTypeFfiEvaluationToken.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiStagedClaim) = (
+            FfiConverterTypeFfiChallengeClaim.allocationSize(value.`claim`) +
+            FfiConverterTypeFfiClaimDisposition.allocationSize(value.`disposition`) +
+            FfiConverterOptionalTypeFfiEvaluationToken.allocationSize(value.`evaluationToken`)
+    )
+
+    override fun write(value: FfiStagedClaim, buf: ByteBuffer) {
+            FfiConverterTypeFfiChallengeClaim.write(value.`claim`, buf)
+            FfiConverterTypeFfiClaimDisposition.write(value.`disposition`, buf)
+            FfiConverterOptionalTypeFfiEvaluationToken.write(value.`evaluationToken`, buf)
     }
 }
 
@@ -21344,6 +22067,38 @@ internal object FfiConverterOptionalTypeFfiEd25519Signer: FfiConverterRustBuffer
 /**
  * @suppress
  */
+internal object FfiConverterOptionalTypeFfiEvaluationToken: FfiConverterRustBuffer<FfiEvaluationToken?> {
+    override fun read(buf: ByteBuffer): FfiEvaluationToken? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiEvaluationToken.read(buf)
+    }
+
+    override fun allocationSize(value: FfiEvaluationToken?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiEvaluationToken.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiEvaluationToken?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiEvaluationToken.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterOptionalTypeFfiJournalStore: FfiConverterRustBuffer<FfiJournalStore?> {
     override fun read(buf: ByteBuffer): FfiJournalStore? {
         if (buf.get().toInt() == 0) {
@@ -21824,6 +22579,38 @@ internal object FfiConverterOptionalTypeFfiInterruptedClaim: FfiConverterRustBuf
 /**
  * @suppress
  */
+internal object FfiConverterOptionalTypeFfiLocalPolicyFailure: FfiConverterRustBuffer<FfiLocalPolicyFailure?> {
+    override fun read(buf: ByteBuffer): FfiLocalPolicyFailure? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFfiLocalPolicyFailure.read(buf)
+    }
+
+    override fun allocationSize(value: FfiLocalPolicyFailure?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFfiLocalPolicyFailure.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FfiLocalPolicyFailure?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFfiLocalPolicyFailure.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 internal object FfiConverterOptionalTypeFfiProofBundle: FfiConverterRustBuffer<FfiProofBundle?> {
     override fun read(buf: ByteBuffer): FfiProofBundle? {
         if (buf.get().toInt() == 0) {
@@ -22278,6 +23065,34 @@ internal object FfiConverterSequenceTypeFfiCertificateRef: FfiConverterRustBuffe
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeFfiCertificateRef.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+internal object FfiConverterSequenceTypeFfiCertificateStatusCheck: FfiConverterRustBuffer<List<FfiCertificateStatusCheck>> {
+    override fun read(buf: ByteBuffer): List<FfiCertificateStatusCheck> {
+        val len = buf.getInt()
+        return List<FfiCertificateStatusCheck>(len) {
+            FfiConverterTypeFfiCertificateStatusCheck.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiCertificateStatusCheck>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiCertificateStatusCheck.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiCertificateStatusCheck>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiCertificateStatusCheck.write(it, buf)
         }
     }
 }
@@ -24171,6 +24986,110 @@ internal object FfiConverterMapStringSequenceString: FfiConverterRustBuffer<Map<
         FfiConverterTypeFfiWitnessEntry.lower(`entry`),
         FfiConverterTypeFfiSplitKey.lower(`key`),
         FfiConverterTypeFfiEd25519Signer.lower(`ed25519`),_status)
+}
+    )
+    }
+
+
+    @Throws(FfiException::class) internal fun `ffiClaimProofBundle`(`bundle`: kotlin.ByteArray, `preflight`: FfiPreflightResult, `configuredNamespace`: kotlin.String, `configuredReplayEpoch`: kotlin.Long, `now`: kotlin.Long, `store`: FfiClaimStore, `token`: FfiCancelToken): FfiStagedClaim {
+            return FfiConverterTypeFfiStagedClaim.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_claim_proof_bundle(
+
+
+        FfiConverterByteArray.lower(`bundle`),
+        FfiConverterTypeFfiPreflightResult.lower(`preflight`),
+        FfiConverterString.lower(`configuredNamespace`),
+        FfiConverterLong.lower(`configuredReplayEpoch`),
+        FfiConverterLong.lower(`now`),
+        FfiConverterTypeFfiClaimStore.lower(`store`),
+        FfiConverterTypeFfiCancelToken.lower(`token`),_status)
+}
+    )
+    }
+
+
+    @Throws(FfiException::class) internal fun `ffiEvaluateLocalAuthorization`(`bundle`: kotlin.ByteArray, `options`: FfiLocalAuthorizationOptions): FfiLocalAuthorizationAssessment {
+            return FfiConverterTypeFfiLocalAuthorizationAssessment.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_evaluate_local_authorization(
+
+
+        FfiConverterByteArray.lower(`bundle`),
+        FfiConverterTypeFfiLocalAuthorizationOptions.lower(`options`),_status)
+}
+    )
+    }
+
+
+    @Throws(FfiException::class) internal fun `ffiFinalizeClaimProofBundle`(`token`: FfiEvaluationToken, `store`: FfiClaimStore, `cancel`: FfiCancelToken, `terminalResult`: kotlin.ByteArray, `receiptBody`: kotlin.ByteArray): FfiFinalizeReply {
+            return FfiConverterTypeFfiFinalizeReply.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_finalize_claim_proof_bundle(
+
+
+        FfiConverterTypeFfiEvaluationToken.lower(`token`),
+        FfiConverterTypeFfiClaimStore.lower(`store`),
+        FfiConverterTypeFfiCancelToken.lower(`cancel`),
+        FfiConverterByteArray.lower(`terminalResult`),
+        FfiConverterByteArray.lower(`receiptBody`),_status)
+}
+    )
+    }
+
+
+    @Throws(FfiException::class) internal fun `ffiFinalizeClaimProofBundleBarrier`(`token`: FfiEvaluationToken, `store`: FfiClaimStore, `cancel`: FfiCancelToken, `terminalResult`: kotlin.ByteArray, `receiptBody`: kotlin.ByteArray): FfiFinalizeReply {
+            return FfiConverterTypeFfiFinalizeReply.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_finalize_claim_proof_bundle_barrier(
+
+
+        FfiConverterTypeFfiEvaluationToken.lower(`token`),
+        FfiConverterTypeFfiClaimStore.lower(`store`),
+        FfiConverterTypeFfiCancelToken.lower(`cancel`),
+        FfiConverterByteArray.lower(`terminalResult`),
+        FfiConverterByteArray.lower(`receiptBody`),_status)
+}
+    )
+    }
+
+
+    @Throws(FfiException::class) internal fun `ffiResolveClaimAfterAudience`(`token`: FfiEvaluationToken, `memberships`: List<FfiAudienceMembership>): FfiLocalAuthorizationAssessment {
+            return FfiConverterTypeFfiLocalAuthorizationAssessment.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_resolve_claim_after_audience(
+
+
+        FfiConverterTypeFfiEvaluationToken.lower(`token`),
+        FfiConverterSequenceTypeFfiAudienceMembership.lower(`memberships`),_status)
+}
+    )
+    }
+
+
+    @Throws(FfiException::class) internal fun `ffiResolveClaimAfterRate`(`token`: FfiEvaluationToken, `store`: FfiRateReservationStore?, `cancel`: FfiCancelToken): FfiLocalAuthorizationAssessment {
+            return FfiConverterTypeFfiLocalAuthorizationAssessment.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_resolve_claim_after_rate(
+
+
+        FfiConverterTypeFfiEvaluationToken.lower(`token`),
+        FfiConverterOptionalTypeFfiRateReservationStore.lower(`store`),
+        FfiConverterTypeFfiCancelToken.lower(`cancel`),_status)
+}
+    )
+    }
+
+
+    @Throws(FfiException::class) internal fun `ffiResolveClaimAfterRateBarrier`(`token`: FfiEvaluationToken, `store`: FfiClaimStore, `cancel`: FfiCancelToken): FfiLocalAuthorizationAssessment {
+            return FfiConverterTypeFfiLocalAuthorizationAssessment.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.uniffi_ratify_protocol_ffi_fn_func_ffi_resolve_claim_after_rate_barrier(
+
+
+        FfiConverterTypeFfiEvaluationToken.lower(`token`),
+        FfiConverterTypeFfiClaimStore.lower(`store`),
+        FfiConverterTypeFfiCancelToken.lower(`cancel`),_status)
 }
     )
     }

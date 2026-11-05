@@ -1,7 +1,8 @@
 //! Panic containment and handle poisoning at the FFI boundary.
 //!
 //! Every exported function and method runs its body through [`call`] (free
-//! functions) or [`call_on`] (methods on a handle). A Rust panic is caught
+//! functions), [`call_on`] (methods on a handle), or [`call_token_on`]
+//! (staged evaluation tokens). A Rust panic is caught
 //! here and returned as `FfiError::Internal { kind: "panic" }`; it never
 //! reaches UniFFI's own panic path, whose Swift form traps in non-throwing
 //! functions. A panic inside a method also poisons that handle: every later
@@ -32,7 +33,6 @@ pub(crate) struct TokenBusy(AtomicBool);
 
 pub(crate) struct TokenUse<'a>(&'a AtomicBool);
 
-#[allow(dead_code)] // Used by the staged token entry points in the next M3 slice.
 impl TokenBusy {
     pub(crate) fn enter(&self) -> FfiResult<TokenUse<'_>> {
         self.0.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -106,6 +106,25 @@ pub(crate) fn call_on<T>(poison: &Poison, body: impl FnOnce() -> FfiResult<T>) -
         poison.0.store(true, Ordering::SeqCst);
         Err(panicked())
     })
+}
+
+/// Claim the evaluation token before a core call and poison it while still
+/// held if a panic occurs. Every alias shares the same busy and poison flags.
+pub(crate) fn call_token_on<T>(poison: &Poison, busy: &TokenBusy,
+                                body: impl FnOnce() -> FfiResult<T>) -> FfiResult<T> {
+    let held = busy.enter()?;
+    if poison.is_set() { return Err(poisoned()); }
+    let result = match contained(body) {
+        Ok(result) => result,
+        Err(()) => {
+            debug_assert!(busy.0.load(Ordering::Acquire), "token must remain held while poisoning");
+            poison.0.store(true, Ordering::SeqCst);
+            debug_assert!(poison.is_set(), "panic poison must precede token release");
+            Err(panicked())
+        }
+    };
+    drop(held);
+    result
 }
 
 /// Guard a free function that receives SDK key handles: refuse it if any of
@@ -229,6 +248,55 @@ mod tests {
         });
         assert!(panicked.is_err());
         assert!(busy.enter().is_ok());
+    }
+
+    #[test]
+    fn token_guard_poisons_before_releasing_on_panic() {
+        let poison = std::sync::Arc::new(Poison::default());
+        let busy = std::sync::Arc::new(TokenBusy::default());
+        let started = std::sync::Arc::new(AtomicBool::new(false));
+        let alias_poison = poison.clone();
+        let alias_busy = busy.clone();
+        let alias_started = started.clone();
+        let observer = std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while !alias_started.load(Ordering::Acquire) {
+                assert!(std::time::Instant::now() < deadline, "token call did not start");
+                std::thread::yield_now();
+            }
+            loop {
+                if let Ok(_held) = alias_busy.enter() { return alias_poison.is_set(); }
+                assert!(std::time::Instant::now() < deadline, "token stayed busy after panic");
+                std::thread::yield_now();
+            }
+        });
+        let first: FfiResult<()> = call_token_on(&poison, &busy, || {
+            started.store(true, Ordering::Release);
+            panic!("injected token panic");
+        });
+        assert!(matches!(first, Err(FfiError::Internal { ref kind, .. }) if kind == "panic"));
+        assert!(observer.join().unwrap(), "token became available before it was poisoned");
+        assert!(poison.is_set());
+        let second = call_token_on(&poison, &busy, || Ok(()));
+        assert!(matches!(second, Err(FfiError::Internal { ref kind, .. }) if kind == "poisoned"));
+        assert!(busy.enter().is_ok());
+    }
+
+    #[test]
+    fn token_guard_refuses_reentry_and_preserves_unrelated_tokens() {
+        let poison = Poison::default();
+        let busy = TokenBusy::default();
+        let other_poison = Poison::default();
+        let other_busy = TokenBusy::default();
+        let outer = call_token_on(&poison, &busy, || {
+            let nested = call_token_on(&poison, &busy, || Ok(()));
+            assert!(matches!(nested, Err(FfiError::Protocol { ref class, .. })
+                if class == "configuration_invalid"));
+            assert_eq!(call_token_on(&other_poison, &other_busy, || Ok(7))?, 7);
+            Ok(9)
+        });
+        assert_eq!(outer.unwrap(), 9);
+        assert_eq!(call_token_on(&poison, &busy, || Ok(11)).unwrap(), 11);
     }
 
     #[test]

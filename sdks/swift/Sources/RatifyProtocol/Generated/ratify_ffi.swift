@@ -3228,6 +3228,112 @@ func FfiConverterTypeFfiEd25519Signer_lower(_ value: FfiEd25519Signer) -> UInt64
 
 
 
+protocol FfiEvaluationTokenProtocol: AnyObject, Sendable {
+
+}
+class FfiEvaluationToken: FfiEvaluationTokenProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffievaluationtoken(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffievaluationtoken(handle, $0) }
+    }
+
+
+
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiEvaluationToken: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiEvaluationToken
+
+    static func lift(_ handle: UInt64) throws -> FfiEvaluationToken {
+        return FfiEvaluationToken(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiEvaluationToken) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiEvaluationToken {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiEvaluationToken, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiEvaluationToken_lift(_ handle: UInt64) throws -> FfiEvaluationToken {
+    return try FfiConverterTypeFfiEvaluationToken.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiEvaluationToken_lower(_ value: FfiEvaluationToken) -> UInt64 {
+    return FfiConverterTypeFfiEvaluationToken.lower(value)
+}
+
+
+
+
+
+
 protocol FfiJournalContextProtocol: AnyObject, Sendable {
 
     func isCancelled() throws  -> Bool
@@ -8091,6 +8197,68 @@ func FfiConverterTypeFfiCertificateRef_lower(_ value: FfiCertificateRef) -> Rust
 }
 
 
+struct FfiCertificateStatusCheck: Equatable, Hashable {
+    var delegationIndex: UInt64
+    var issuerId: String
+    var subjectId: String
+    var certId: String
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(delegationIndex: UInt64, issuerId: String, subjectId: String, certId: String) {
+        self.delegationIndex = delegationIndex
+        self.issuerId = issuerId
+        self.subjectId = subjectId
+        self.certId = certId
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiCertificateStatusCheck: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiCertificateStatusCheck: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiCertificateStatusCheck {
+        return
+            try FfiCertificateStatusCheck(
+                delegationIndex: FfiConverterUInt64.read(from: &buf),
+                issuerId: FfiConverterString.read(from: &buf),
+                subjectId: FfiConverterString.read(from: &buf),
+                certId: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiCertificateStatusCheck, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.delegationIndex, into: &buf)
+        FfiConverterString.write(value.issuerId, into: &buf)
+        FfiConverterString.write(value.subjectId, into: &buf)
+        FfiConverterString.write(value.certId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiCertificateStatusCheck_lift(_ buf: RustBuffer) throws -> FfiCertificateStatusCheck {
+    return try FfiConverterTypeFfiCertificateStatusCheck.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiCertificateStatusCheck_lower(_ value: FfiCertificateStatusCheck) -> RustBuffer {
+    return FfiConverterTypeFfiCertificateStatusCheck.lower(value)
+}
+
+
 struct FfiChallengeClaim: Equatable, Hashable {
     var claimId: String
     var namespace: String
@@ -9367,6 +9535,60 @@ func FfiConverterTypeFfiExpectedChallenge_lower(_ value: FfiExpectedChallenge) -
 }
 
 
+struct FfiFinalizeReply: Equatable, Hashable {
+    var finalized: Bool?
+    var failure: FfiReferenceStoreFailure?
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(finalized: Bool?, failure: FfiReferenceStoreFailure?) {
+        self.finalized = finalized
+        self.failure = failure
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiFinalizeReply: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiFinalizeReply: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiFinalizeReply {
+        return
+            try FfiFinalizeReply(
+                finalized: FfiConverterOptionBool.read(from: &buf),
+                failure: FfiConverterOptionTypeFfiReferenceStoreFailure.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiFinalizeReply, into buf: inout [UInt8]) {
+        FfiConverterOptionBool.write(value.finalized, into: &buf)
+        FfiConverterOptionTypeFfiReferenceStoreFailure.write(value.failure, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiFinalizeReply_lift(_ buf: RustBuffer) throws -> FfiFinalizeReply {
+    return try FfiConverterTypeFfiFinalizeReply.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiFinalizeReply_lower(_ value: FfiFinalizeReply) -> RustBuffer {
+    return FfiConverterTypeFfiFinalizeReply.lower(value)
+}
+
+
 struct FfiInterruptedClaim: Equatable, Hashable {
     var claim: FfiChallengeClaim
     var claimedAt: Int64
@@ -9808,6 +10030,296 @@ func FfiConverterTypeFfiLiveVerifyRequest_lift(_ buf: RustBuffer) throws -> FfiL
 #endif
 func FfiConverterTypeFfiLiveVerifyRequest_lower(_ value: FfiLiveVerifyRequest) -> RustBuffer {
     return FfiConverterTypeFfiLiveVerifyRequest.lower(value)
+}
+
+
+struct FfiLocalAuthorizationAssessment: Equatable, Hashable {
+    var bundleHash: String
+    var issuerIds: [String]
+    var agentId: String
+    var rootId: String
+    var requiredScope: String
+    var delegationDigest: Data
+    var effectiveScope: [String]
+    var contextAssessment: String
+    var contextPolicyDigest: String?
+    var statusAssessment: String
+    var delegationValidUntil: Int64
+    var localTimeValidUntil: Int64
+    var extensionValidUntil: Int64
+    var statusFreshUntil: Int64
+    var audienceFreshUntil: Int64
+    var statusEvidence: [FfiStatusEvidenceEntry]
+    var audienceEvidenceDigests: [String]
+    var rateStoreUnavailable: Bool
+    var rateAdmissionDeferred: Bool
+    var statusChecks: [FfiCertificateStatusCheck]
+    var deferred: [FfiDeferredConstraint]
+    var localPolicyFailure: FfiLocalPolicyFailure?
+    var status: String
+    var reason: String
+    var detail: String
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(bundleHash: String, issuerIds: [String], agentId: String, rootId: String, requiredScope: String, delegationDigest: Data, effectiveScope: [String], contextAssessment: String, contextPolicyDigest: String?, statusAssessment: String, delegationValidUntil: Int64, localTimeValidUntil: Int64, extensionValidUntil: Int64, statusFreshUntil: Int64, audienceFreshUntil: Int64, statusEvidence: [FfiStatusEvidenceEntry], audienceEvidenceDigests: [String], rateStoreUnavailable: Bool, rateAdmissionDeferred: Bool, statusChecks: [FfiCertificateStatusCheck], deferred: [FfiDeferredConstraint], localPolicyFailure: FfiLocalPolicyFailure?, status: String, reason: String, detail: String) {
+        self.bundleHash = bundleHash
+        self.issuerIds = issuerIds
+        self.agentId = agentId
+        self.rootId = rootId
+        self.requiredScope = requiredScope
+        self.delegationDigest = delegationDigest
+        self.effectiveScope = effectiveScope
+        self.contextAssessment = contextAssessment
+        self.contextPolicyDigest = contextPolicyDigest
+        self.statusAssessment = statusAssessment
+        self.delegationValidUntil = delegationValidUntil
+        self.localTimeValidUntil = localTimeValidUntil
+        self.extensionValidUntil = extensionValidUntil
+        self.statusFreshUntil = statusFreshUntil
+        self.audienceFreshUntil = audienceFreshUntil
+        self.statusEvidence = statusEvidence
+        self.audienceEvidenceDigests = audienceEvidenceDigests
+        self.rateStoreUnavailable = rateStoreUnavailable
+        self.rateAdmissionDeferred = rateAdmissionDeferred
+        self.statusChecks = statusChecks
+        self.deferred = deferred
+        self.localPolicyFailure = localPolicyFailure
+        self.status = status
+        self.reason = reason
+        self.detail = detail
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiLocalAuthorizationAssessment: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiLocalAuthorizationAssessment: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiLocalAuthorizationAssessment {
+        return
+            try FfiLocalAuthorizationAssessment(
+                bundleHash: FfiConverterString.read(from: &buf),
+                issuerIds: FfiConverterSequenceString.read(from: &buf),
+                agentId: FfiConverterString.read(from: &buf),
+                rootId: FfiConverterString.read(from: &buf),
+                requiredScope: FfiConverterString.read(from: &buf),
+                delegationDigest: FfiConverterData.read(from: &buf),
+                effectiveScope: FfiConverterSequenceString.read(from: &buf),
+                contextAssessment: FfiConverterString.read(from: &buf),
+                contextPolicyDigest: FfiConverterOptionString.read(from: &buf),
+                statusAssessment: FfiConverterString.read(from: &buf),
+                delegationValidUntil: FfiConverterInt64.read(from: &buf),
+                localTimeValidUntil: FfiConverterInt64.read(from: &buf),
+                extensionValidUntil: FfiConverterInt64.read(from: &buf),
+                statusFreshUntil: FfiConverterInt64.read(from: &buf),
+                audienceFreshUntil: FfiConverterInt64.read(from: &buf),
+                statusEvidence: FfiConverterSequenceTypeFfiStatusEvidenceEntry.read(from: &buf),
+                audienceEvidenceDigests: FfiConverterSequenceString.read(from: &buf),
+                rateStoreUnavailable: FfiConverterBool.read(from: &buf),
+                rateAdmissionDeferred: FfiConverterBool.read(from: &buf),
+                statusChecks: FfiConverterSequenceTypeFfiCertificateStatusCheck.read(from: &buf),
+                deferred: FfiConverterSequenceTypeFfiDeferredConstraint.read(from: &buf),
+                localPolicyFailure: FfiConverterOptionTypeFfiLocalPolicyFailure.read(from: &buf),
+                status: FfiConverterString.read(from: &buf),
+                reason: FfiConverterString.read(from: &buf),
+                detail: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiLocalAuthorizationAssessment, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.bundleHash, into: &buf)
+        FfiConverterSequenceString.write(value.issuerIds, into: &buf)
+        FfiConverterString.write(value.agentId, into: &buf)
+        FfiConverterString.write(value.rootId, into: &buf)
+        FfiConverterString.write(value.requiredScope, into: &buf)
+        FfiConverterData.write(value.delegationDigest, into: &buf)
+        FfiConverterSequenceString.write(value.effectiveScope, into: &buf)
+        FfiConverterString.write(value.contextAssessment, into: &buf)
+        FfiConverterOptionString.write(value.contextPolicyDigest, into: &buf)
+        FfiConverterString.write(value.statusAssessment, into: &buf)
+        FfiConverterInt64.write(value.delegationValidUntil, into: &buf)
+        FfiConverterInt64.write(value.localTimeValidUntil, into: &buf)
+        FfiConverterInt64.write(value.extensionValidUntil, into: &buf)
+        FfiConverterInt64.write(value.statusFreshUntil, into: &buf)
+        FfiConverterInt64.write(value.audienceFreshUntil, into: &buf)
+        FfiConverterSequenceTypeFfiStatusEvidenceEntry.write(value.statusEvidence, into: &buf)
+        FfiConverterSequenceString.write(value.audienceEvidenceDigests, into: &buf)
+        FfiConverterBool.write(value.rateStoreUnavailable, into: &buf)
+        FfiConverterBool.write(value.rateAdmissionDeferred, into: &buf)
+        FfiConverterSequenceTypeFfiCertificateStatusCheck.write(value.statusChecks, into: &buf)
+        FfiConverterSequenceTypeFfiDeferredConstraint.write(value.deferred, into: &buf)
+        FfiConverterOptionTypeFfiLocalPolicyFailure.write(value.localPolicyFailure, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterString.write(value.reason, into: &buf)
+        FfiConverterString.write(value.detail, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiLocalAuthorizationAssessment_lift(_ buf: RustBuffer) throws -> FfiLocalAuthorizationAssessment {
+    return try FfiConverterTypeFfiLocalAuthorizationAssessment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiLocalAuthorizationAssessment_lower(_ value: FfiLocalAuthorizationAssessment) -> RustBuffer {
+    return FfiConverterTypeFfiLocalAuthorizationAssessment.lower(value)
+}
+
+
+struct FfiLocalAuthorizationOptions {
+    var futureSkewSeconds: Int64
+    var requiredScope: String
+    var trustedRootId: String
+    var trustedRootKey: FfiPublicKey
+    var trustConfigured: Bool
+    var context: FfiConstraintContext
+    var tzdbVersion: String
+    var contextPolicy: FfiContextPolicy?
+    var expectedChallenge: FfiExpectedChallenge?
+    var claimToken: FfiEvaluationToken
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(futureSkewSeconds: Int64, requiredScope: String, trustedRootId: String, trustedRootKey: FfiPublicKey, trustConfigured: Bool, context: FfiConstraintContext, tzdbVersion: String, contextPolicy: FfiContextPolicy?, expectedChallenge: FfiExpectedChallenge?, claimToken: FfiEvaluationToken) {
+        self.futureSkewSeconds = futureSkewSeconds
+        self.requiredScope = requiredScope
+        self.trustedRootId = trustedRootId
+        self.trustedRootKey = trustedRootKey
+        self.trustConfigured = trustConfigured
+        self.context = context
+        self.tzdbVersion = tzdbVersion
+        self.contextPolicy = contextPolicy
+        self.expectedChallenge = expectedChallenge
+        self.claimToken = claimToken
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiLocalAuthorizationOptions: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiLocalAuthorizationOptions: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiLocalAuthorizationOptions {
+        return
+            try FfiLocalAuthorizationOptions(
+                futureSkewSeconds: FfiConverterInt64.read(from: &buf),
+                requiredScope: FfiConverterString.read(from: &buf),
+                trustedRootId: FfiConverterString.read(from: &buf),
+                trustedRootKey: FfiConverterTypeFfiPublicKey.read(from: &buf),
+                trustConfigured: FfiConverterBool.read(from: &buf),
+                context: FfiConverterTypeFfiConstraintContext.read(from: &buf),
+                tzdbVersion: FfiConverterString.read(from: &buf),
+                contextPolicy: FfiConverterOptionTypeFfiContextPolicy.read(from: &buf),
+                expectedChallenge: FfiConverterOptionTypeFfiExpectedChallenge.read(from: &buf),
+                claimToken: FfiConverterTypeFfiEvaluationToken.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiLocalAuthorizationOptions, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.futureSkewSeconds, into: &buf)
+        FfiConverterString.write(value.requiredScope, into: &buf)
+        FfiConverterString.write(value.trustedRootId, into: &buf)
+        FfiConverterTypeFfiPublicKey.write(value.trustedRootKey, into: &buf)
+        FfiConverterBool.write(value.trustConfigured, into: &buf)
+        FfiConverterTypeFfiConstraintContext.write(value.context, into: &buf)
+        FfiConverterString.write(value.tzdbVersion, into: &buf)
+        FfiConverterOptionTypeFfiContextPolicy.write(value.contextPolicy, into: &buf)
+        FfiConverterOptionTypeFfiExpectedChallenge.write(value.expectedChallenge, into: &buf)
+        FfiConverterTypeFfiEvaluationToken.write(value.claimToken, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiLocalAuthorizationOptions_lift(_ buf: RustBuffer) throws -> FfiLocalAuthorizationOptions {
+    return try FfiConverterTypeFfiLocalAuthorizationOptions.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiLocalAuthorizationOptions_lower(_ value: FfiLocalAuthorizationOptions) -> RustBuffer {
+    return FfiConverterTypeFfiLocalAuthorizationOptions.lower(value)
+}
+
+
+struct FfiLocalPolicyFailure: Equatable, Hashable {
+    var status: String
+    var reason: String
+    var detail: String
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(status: String, reason: String, detail: String) {
+        self.status = status
+        self.reason = reason
+        self.detail = detail
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiLocalPolicyFailure: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiLocalPolicyFailure: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiLocalPolicyFailure {
+        return
+            try FfiLocalPolicyFailure(
+                status: FfiConverterString.read(from: &buf),
+                reason: FfiConverterString.read(from: &buf),
+                detail: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiLocalPolicyFailure, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterString.write(value.reason, into: &buf)
+        FfiConverterString.write(value.detail, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiLocalPolicyFailure_lift(_ buf: RustBuffer) throws -> FfiLocalPolicyFailure {
+    return try FfiConverterTypeFfiLocalPolicyFailure.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiLocalPolicyFailure_lower(_ value: FfiLocalPolicyFailure) -> RustBuffer {
+    return FfiConverterTypeFfiLocalPolicyFailure.lower(value)
 }
 
 
@@ -11200,6 +11712,64 @@ func FfiConverterTypeFfiSignature_lift(_ buf: RustBuffer) throws -> FfiSignature
 #endif
 func FfiConverterTypeFfiSignature_lower(_ value: FfiSignature) -> RustBuffer {
     return FfiConverterTypeFfiSignature.lower(value)
+}
+
+
+struct FfiStagedClaim {
+    var claim: FfiChallengeClaim
+    var disposition: FfiClaimDisposition
+    var evaluationToken: FfiEvaluationToken?
+
+    // Default memberwise initializers are never by default, so we
+    // declare one manually.
+    init(claim: FfiChallengeClaim, disposition: FfiClaimDisposition, evaluationToken: FfiEvaluationToken?) {
+        self.claim = claim
+        self.disposition = disposition
+        self.evaluationToken = evaluationToken
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiStagedClaim: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiStagedClaim: FfiConverterRustBuffer {
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiStagedClaim {
+        return
+            try FfiStagedClaim(
+                claim: FfiConverterTypeFfiChallengeClaim.read(from: &buf),
+                disposition: FfiConverterTypeFfiClaimDisposition.read(from: &buf),
+                evaluationToken: FfiConverterOptionTypeFfiEvaluationToken.read(from: &buf)
+        )
+    }
+
+    static func write(_ value: FfiStagedClaim, into buf: inout [UInt8]) {
+        FfiConverterTypeFfiChallengeClaim.write(value.claim, into: &buf)
+        FfiConverterTypeFfiClaimDisposition.write(value.disposition, into: &buf)
+        FfiConverterOptionTypeFfiEvaluationToken.write(value.evaluationToken, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStagedClaim_lift(_ buf: RustBuffer) throws -> FfiStagedClaim {
+    return try FfiConverterTypeFfiStagedClaim.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiStagedClaim_lower(_ value: FfiStagedClaim) -> RustBuffer {
+    return FfiConverterTypeFfiStagedClaim.lower(value)
 }
 
 
@@ -14318,6 +14888,30 @@ fileprivate struct FfiConverterOptionTypeFfiEd25519Signer: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiEvaluationToken: FfiConverterRustBuffer {
+    typealias SwiftType = FfiEvaluationToken?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiEvaluationToken.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiEvaluationToken.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiJournalStore: FfiConverterRustBuffer {
     typealias SwiftType = FfiJournalStore?
 
@@ -14670,6 +15264,30 @@ fileprivate struct FfiConverterOptionTypeFfiInterruptedClaim: FfiConverterRustBu
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFfiInterruptedClaim.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFfiLocalPolicyFailure: FfiConverterRustBuffer {
+    typealias SwiftType = FfiLocalPolicyFailure?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiLocalPolicyFailure.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiLocalPolicyFailure.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -15034,6 +15652,31 @@ fileprivate struct FfiConverterSequenceTypeFfiCertificateRef: FfiConverterRustBu
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFfiCertificateRef.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFfiCertificateStatusCheck: FfiConverterRustBuffer {
+    typealias SwiftType = [FfiCertificateStatusCheck]
+
+    static func write(_ value: [FfiCertificateStatusCheck], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFfiCertificateStatusCheck.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FfiCertificateStatusCheck] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FfiCertificateStatusCheck]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFfiCertificateStatusCheck.read(from: &buf))
         }
         return seq
     }
@@ -16468,6 +17111,82 @@ func ffiSignWitnessEntryWithSplitKey(cancel: FfiCancelToken, entry: FfiWitnessEn
     )
 })
 }
+func ffiClaimProofBundle(bundle: Data, preflight: FfiPreflightResult, configuredNamespace: String, configuredReplayEpoch: Int64, now: Int64, store: FfiClaimStore, token: FfiCancelToken)throws  -> FfiStagedClaim  {
+    return try  FfiConverterTypeFfiStagedClaim_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_claim_proof_bundle(
+        FfiConverterData.lower(bundle),
+        FfiConverterTypeFfiPreflightResult_lower(preflight),
+        FfiConverterString.lower(configuredNamespace),
+        FfiConverterInt64.lower(configuredReplayEpoch),
+        FfiConverterInt64.lower(now),
+        FfiConverterTypeFfiClaimStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(token),uniffiCallStatus
+    )
+})
+}
+func ffiEvaluateLocalAuthorization(bundle: Data, options: FfiLocalAuthorizationOptions)throws  -> FfiLocalAuthorizationAssessment  {
+    return try  FfiConverterTypeFfiLocalAuthorizationAssessment_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_evaluate_local_authorization(
+        FfiConverterData.lower(bundle),
+        FfiConverterTypeFfiLocalAuthorizationOptions_lower(options),uniffiCallStatus
+    )
+})
+}
+func ffiFinalizeClaimProofBundle(token: FfiEvaluationToken, store: FfiClaimStore, cancel: FfiCancelToken, terminalResult: Data, receiptBody: Data)throws  -> FfiFinalizeReply  {
+    return try  FfiConverterTypeFfiFinalizeReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_finalize_claim_proof_bundle(
+        FfiConverterTypeFfiEvaluationToken_lower(token),
+        FfiConverterTypeFfiClaimStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterData.lower(terminalResult),
+        FfiConverterData.lower(receiptBody),uniffiCallStatus
+    )
+})
+}
+func ffiFinalizeClaimProofBundleBarrier(token: FfiEvaluationToken, store: FfiClaimStore, cancel: FfiCancelToken, terminalResult: Data, receiptBody: Data)throws  -> FfiFinalizeReply  {
+    return try  FfiConverterTypeFfiFinalizeReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_finalize_claim_proof_bundle_barrier(
+        FfiConverterTypeFfiEvaluationToken_lower(token),
+        FfiConverterTypeFfiClaimStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(cancel),
+        FfiConverterData.lower(terminalResult),
+        FfiConverterData.lower(receiptBody),uniffiCallStatus
+    )
+})
+}
+func ffiResolveClaimAfterAudience(token: FfiEvaluationToken, memberships: [FfiAudienceMembership])throws  -> FfiLocalAuthorizationAssessment  {
+    return try  FfiConverterTypeFfiLocalAuthorizationAssessment_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_resolve_claim_after_audience(
+        FfiConverterTypeFfiEvaluationToken_lower(token),
+        FfiConverterSequenceTypeFfiAudienceMembership.lower(memberships),uniffiCallStatus
+    )
+})
+}
+func ffiResolveClaimAfterRate(token: FfiEvaluationToken, store: FfiRateReservationStore?, cancel: FfiCancelToken)throws  -> FfiLocalAuthorizationAssessment  {
+    return try  FfiConverterTypeFfiLocalAuthorizationAssessment_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_resolve_claim_after_rate(
+        FfiConverterTypeFfiEvaluationToken_lower(token),
+        FfiConverterOptionTypeFfiRateReservationStore.lower(store),
+        FfiConverterTypeFfiCancelToken_lower(cancel),uniffiCallStatus
+    )
+})
+}
+func ffiResolveClaimAfterRateBarrier(token: FfiEvaluationToken, store: FfiClaimStore, cancel: FfiCancelToken)throws  -> FfiLocalAuthorizationAssessment  {
+    return try  FfiConverterTypeFfiLocalAuthorizationAssessment_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_func_ffi_resolve_claim_after_rate_barrier(
+        FfiConverterTypeFfiEvaluationToken_lower(token),
+        FfiConverterTypeFfiClaimStore_lower(store),
+        FfiConverterTypeFfiCancelToken_lower(cancel),uniffiCallStatus
+    )
+})
+}
 func ffiApplyRevocationList(state: FfiStatusState, list: FfiRevocationList, boundIssuerId: String, statusKeyEpoch: UInt64, statusKey: FfiPublicKey, policy: FfiStatusPolicy, now: Int64)throws  -> FfiStatusState  {
     return try  FfiConverterTypeFfiStatusState_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -17237,6 +17956,27 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_sign_witness_entry_with_split_key() != 18973) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_claim_proof_bundle() != 53293) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_evaluate_local_authorization() != 30647) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_finalize_claim_proof_bundle() != 29887) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_finalize_claim_proof_bundle_barrier() != 58245) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_resolve_claim_after_audience() != 4381) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_resolve_claim_after_rate() != 46529) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_func_ffi_resolve_claim_after_rate_barrier() != 49422) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_func_ffi_apply_revocation_list() != 33860) {

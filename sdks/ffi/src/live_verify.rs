@@ -103,8 +103,6 @@ impl From<core::V2VerifyOutcome> for FfiLiveVerifyOutcome {
 /// Sealed successful preflight state. Only the core can construct it.
 #[derive(uniffi::Object)]
 pub struct FfiPreflightResult {
-    // The staged claim entry point consumes this in the next M3 slice.
-    #[allow(dead_code)]
     pub(crate) inner: core::V2PreflightResult,
 }
 

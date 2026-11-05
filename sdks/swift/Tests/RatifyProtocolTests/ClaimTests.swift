@@ -996,7 +996,7 @@ final class ClaimTests: XCTestCase {
             "release_of_claim_the_store_does_not_hold", "planted_release_record_does_not_replace_acknowledgement",
             "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
             "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
-            "checkpoint_refusal_without_fork_does_not_freeze"]
+            "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances"]
         let scenarios = corpus.arr("scenarios").filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
         let counts = ["allow_published_acknowledged_released": 6, "release_without_receipt_is_pending": 2,
@@ -1051,7 +1051,7 @@ final class ClaimTests: XCTestCase {
             "planted_release_record_does_not_replace_acknowledgement": 8,
             "recorded_withheld_answers_before_receipt_checks": 7, "withheld_when_recording_fails": 7,
             "withheld_record_conflict_is_rejected": 7, "checkpoint_fork_freezes_log": 11,
-            "checkpoint_refusal_without_fork_does_not_freeze": 11]
+            "checkpoint_refusal_without_fork_does_not_freeze": 11, "concurrent_stream_advances": 4]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1061,7 +1061,8 @@ final class ClaimTests: XCTestCase {
             "finalize": ["op", "request", "terminal_b64", "body_b64", "expect"],
             "recover_direct": ["op", "request", "terminal_b64", "body_b64", "expect"],
             "restore": ["op", "mode", "expect"], "plant_release": ["op", "request", "time", "expect"],
-            "acknowledge": ["op", "request", "mode", "expect"]]
+            "acknowledge": ["op", "request", "mode", "expect"],
+            "verify_concurrent": ["op", "requests", "expect"]]
         let key = Fixture.shared.privateKey(corpus.s("verifier_key"))
         for scenario in scenarios {
             let name = scenario.s("name")
@@ -1135,6 +1136,30 @@ final class ClaimTests: XCTestCase {
                     } catch is StoreError {
                         XCTAssertEqual(want["failed"] as? Bool, true, at)
                     }
+                case "verify_concurrent":
+                    XCTAssertEqual(Set(want.keys), ["outcomes"], at)
+                    let names = step.strings("requests")
+                    XCTAssertEqual(names.count, 2, at)
+                    XCTAssertEqual(Set(names).count, 2, at)
+                    let first = try request(names[0], corpusName: "lifecycle-scenarios.json")
+                    let second = try request(names[1], corpusName: "lifecycle-scenarios.json")
+                    let (firstTrust, firstStatus, firstJournal) = try await vectorProviders(
+                        corpus.obj("requests").obj(names[0]), request: first)
+                    let (secondTrust, secondStatus, secondJournal) = try await vectorProviders(
+                        corpus.obj("requests").obj(names[1]), request: second)
+                    let concurrentStore = store
+                    async let firstOutcome = Ratify.verifyProofBundle(first, claimStore: concurrentStore,
+                        trust: firstTrust, statusEvidence: firstStatus, statusJournal: firstJournal)
+                    async let secondOutcome = Ratify.verifyProofBundle(second, claimStore: concurrentStore,
+                        trust: secondTrust, statusEvidence: secondStatus, statusJournal: secondJournal)
+                    let outcomes = try await [firstOutcome, secondOutcome]
+                    var labels: [String] = []
+                    for (name, outcome) in zip(names, outcomes) {
+                        labels.append(outcome.stage.rawValue + (outcome.errorClass.map { "/" + $0.rawValue } ?? ""))
+                        if outcome.stage == .committed { committed[name] = try XCTUnwrap(outcome.committed, at) }
+                        else { XCTAssertNil(outcome.committed, at) }
+                    }
+                    XCTAssertEqual(labels.sorted(), want.strings("outcomes"), at)
                 case "claim_only":
                     XCTAssertEqual(Set(want.keys), ["disposition"], at)
                     let req = try request(requestName, corpusName: "lifecycle-scenarios.json")

@@ -5,6 +5,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
@@ -923,7 +925,7 @@ class ClaimTest {
             "release_of_claim_the_store_does_not_hold", "planted_release_record_does_not_replace_acknowledgement",
             "recorded_withheld_answers_before_receipt_checks", "withheld_when_recording_fails",
             "withheld_record_conflict_is_rejected", "checkpoint_fork_freezes_log",
-            "checkpoint_refusal_without_fork_does_not_freeze")
+            "checkpoint_refusal_without_fork_does_not_freeze", "concurrent_stream_advances")
         val scenarios = corpus.arr("scenarios").filter { it.getString("name") in names }
         assertEquals(names.size, scenarios.size)
         val counts = mapOf("allow_published_acknowledged_released" to 6, "release_without_receipt_is_pending" to 2,
@@ -977,7 +979,7 @@ class ClaimTest {
             "planted_release_record_does_not_replace_acknowledgement" to 8,
             "recorded_withheld_answers_before_receipt_checks" to 7, "withheld_when_recording_fails" to 7,
             "withheld_record_conflict_is_rejected" to 7, "checkpoint_fork_freezes_log" to 11,
-            "checkpoint_refusal_without_fork_does_not_freeze" to 11)
+            "checkpoint_refusal_without_fork_does_not_freeze" to 11, "concurrent_stream_advances" to 4)
         val stepKeys = mapOf("verify" to setOf("op", "request", "expect"),
             "publish" to setOf("op", "request", "mode", "expect"),
             "release" to setOf("op", "request", "checkpoint", "expect"),
@@ -990,7 +992,8 @@ class ClaimTest {
             "recover_direct" to setOf("op", "request", "terminal_b64", "body_b64", "expect"),
             "restore" to setOf("op", "mode", "expect"),
             "plant_release" to setOf("op", "request", "time", "expect"),
-            "acknowledge" to setOf("op", "request", "mode", "expect"))
+            "acknowledge" to setOf("op", "request", "mode", "expect"),
+            "verify_concurrent" to setOf("op", "requests", "expect"))
         val keys = Corpus.load("keys.json").getJSONArray("keys")
         val verifier = (0 until keys.length()).asSequence().map(keys::getJSONObject)
             .first { it.getString("name") == corpus.getString("verifier_key") }
@@ -1069,6 +1072,30 @@ class ClaimTest {
                         } catch (e: StoreError) {
                             assertEquals(at, true, want.getBoolean("failed"))
                         }
+                    }
+                    "verify_concurrent" -> {
+                        assertEquals(at, setOf("outcomes"), want.keys().asSequence().toSet())
+                        val names = step.strings("requests")
+                        assertEquals(at, 2, names.size)
+                        assertEquals(at, 2, names.toSet().size)
+                        val first = request(names[0], corpusName = "lifecycle-scenarios.json")
+                        val second = request(names[1], corpusName = "lifecycle-scenarios.json")
+                        val (firstTrust, firstStatus, firstJournal) = vectorProviders(
+                            corpus.getJSONObject("requests").getJSONObject(names[0]), first)
+                        val (secondTrust, secondStatus, secondJournal) = vectorProviders(
+                            corpus.getJSONObject("requests").getJSONObject(names[1]), second)
+                        val firstCall = async(Dispatchers.Default) { verifyProofBundle(first, store,
+                            trust = firstTrust, statusEvidence = firstStatus, statusJournal = firstJournal) }
+                        val secondCall = async(Dispatchers.Default) { verifyProofBundle(second, store,
+                            trust = secondTrust, statusEvidence = secondStatus, statusJournal = secondJournal) }
+                        val outcomes = listOf(firstCall.await(), secondCall.await())
+                        val labels = names.zip(outcomes).map { (requestName, result) ->
+                            if (result.stage == VerifyStage.COMMITTED)
+                                committed[requestName] = checkNotNull(result.committed) { at }
+                            else assertEquals(at, null, result.committed)
+                            result.stage.spelling + (result.errorClass?.let { "/" + it.spelling } ?: "")
+                        }
+                        assertEquals(at, want.strings("outcomes"), labels.sorted())
                     }
                     "claim_only" -> {
                         assertEquals(at, setOf("disposition"), want.keys().asSequence().toSet())

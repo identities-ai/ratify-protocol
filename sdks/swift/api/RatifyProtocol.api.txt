@@ -404,8 +404,11 @@ OfflineDeviceBridge [Class]
 OfflineDeviceBridge.acknowledge(logId:sequence:previousEntryHash:entryHash:) [Func] -> RatifyProtocol.OfflineDeviceReplyBridge, Swift.String, Swift.Int64, Foundation.Data, Foundation.Data
 OfflineDeviceBridge.get(logId:sequence:) [Func] -> RatifyProtocol.OfflineDeviceReplyBridge, Swift.String, Swift.Int64
 OfflineDeviceBridge.init(store:replayEpoch:seed:capacity:) [Constructor] -> RatifyProtocol.OfflineDeviceBridge, RatifyProtocol.ReferenceStoreBridge, Swift.Int64, Foundation.Data, Swift.UInt32
+OfflineDeviceBridge.primaryStore() [Func] -> RatifyProtocol.ReferenceStoreBridge
+OfflineDeviceBridge.restore(_:) [Func] -> RatifyProtocol.OfflineDeviceBridge, RatifyProtocol.OfflineDeviceSnapshotBridge
 OfflineDeviceBridge.resubmit(_:) [Func] -> RatifyProtocol.OfflineDeviceReplyBridge, Swift.Int64
 OfflineDeviceBridge.setPowerLoss(_:) [Func] -> (), Swift.String
+OfflineDeviceBridge.snapshot() [Func] -> RatifyProtocol.OfflineDeviceSnapshotBridge
 OfflineDeviceBridge.startup() [Func] -> RatifyProtocol.OfflineDeviceReplyBridge
 OfflineDeviceBridge.submitPending() [Func] -> RatifyProtocol.OfflineDeviceReplyBridge
 OfflineDeviceBridge.upload() [Func] -> RatifyProtocol.OfflineDeviceReplyBridge
@@ -416,6 +419,7 @@ OfflineDeviceReplyBridge.failure [Var] -> Swift.String?
 OfflineDeviceReplyBridge.requiredAcknowledgement() [Func] -> RatifyProtocol.CheckpointAcknowledgement
 OfflineDeviceReplyBridge.status [Var] -> Swift.String?
 OfflineDeviceReplyBridge.uploaded [Var] -> [Swift.Int64]
+OfflineDeviceSnapshotBridge [Class]
 OperationContext [Struct]
 OperationContext.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.OperationContext, RatifyProtocol.OperationContext
 OperationContext.hash(into:) [Func] -> (), Swift.Hasher

@@ -45,10 +45,16 @@ fn error_reply(error: DeviceErrorTestOnly) -> FfiDeviceReply {
 #[derive(uniffi::Object)]
 pub struct FfiOfflineDevice {
     poison: Poison,
-    _primary: DevicePrimaryTestOnly,
+    primary: DevicePrimaryTestOnly,
     component: Arc<DeviceComponentTestOnly>,
     checkpoint: Arc<DeviceCheckpointTestOnly>,
     uplink: DeviceUplinkTestOnly,
+}
+
+#[derive(uniffi::Object)]
+pub struct FfiDeviceSnapshot {
+    poison: Poison,
+    primary: DevicePrimaryTestOnly,
 }
 
 #[uniffi::export]
@@ -64,8 +70,31 @@ impl FfiOfflineDevice {
                 &component.public_key())?);
             checkpoint.provision()?;
             let uplink = DeviceUplinkTestOnly::new(Arc::clone(&checkpoint));
-            Ok(Arc::new(Self { poison: Poison::default(), _primary: primary, component, checkpoint, uplink }))
+            Ok(Arc::new(Self { poison: Poison::default(), primary, component, checkpoint, uplink }))
         })
+    }
+
+    pub fn snapshot(&self) -> FfiResult<Arc<FfiDeviceSnapshot>> {
+        call_on(&self.poison, || Ok(Arc::new(FfiDeviceSnapshot {
+            poison: Poison::default(), primary: self.primary.clone_primary(),
+        })))
+    }
+
+    pub fn restore(&self, snapshot: Arc<FfiDeviceSnapshot>) -> FfiResult<Arc<Self>> {
+        call_with(&[&self.poison, &snapshot.poison], || {
+            let primary = snapshot.primary.clone_primary();
+            let component = Arc::clone(&self.component);
+            let checkpoint = Arc::new(DeviceCheckpointTestOnly::new(&primary, Arc::clone(&component),
+                &component.public_key())?);
+            let uplink = DeviceUplinkTestOnly::new(Arc::clone(&checkpoint));
+            Ok(Arc::new(Self { poison: Poison::default(), primary, component, checkpoint, uplink }))
+        })
+    }
+
+    pub fn primary_store(&self) -> FfiResult<Arc<FfiReferenceStore>> {
+        call_on(&self.poison, || Ok(Arc::new(FfiReferenceStore {
+            poison: Poison::default(), inner: Arc::clone(&self.primary.store),
+        })))
     }
 
     pub fn startup(&self) -> FfiResult<FfiDeviceReply> {
@@ -150,6 +179,23 @@ mod tests {
         assert_eq!(device.get_acknowledgement("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(), 1)
             .unwrap().failure.as_deref(), Some("acknowledgement_not_found"));
         assert!(device.set_power_loss("invalid".into()).is_err());
+    }
+
+    #[test]
+    fn snapshot_restores_a_separate_primary_bound_to_the_same_component() {
+        let (_, key) = ratify_protocol::hybrid_keypair_from_seeds(&[1; 32], &[2; 32]);
+        let store = Arc::new(FfiReferenceStore {
+            poison: Poison::default(),
+            inner: Arc::new(Store::new(1_800_000_000, 30,
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", &key).unwrap()),
+        });
+        let device = FfiOfflineDevice::new(Arc::clone(&store), 0, vec![3; 32], 2).unwrap();
+        let snapshot = device.snapshot().unwrap();
+        let restored = device.restore(snapshot).unwrap();
+        let restored_store = restored.primary_store().unwrap();
+        assert!(!Arc::ptr_eq(&store.inner, &restored_store.inner));
+        assert_eq!(restored.startup().unwrap().status.as_deref(), Some("ready"));
+        assert!(Arc::ptr_eq(&device.component, &restored.component));
     }
 
     #[test]

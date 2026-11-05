@@ -13,14 +13,26 @@ public struct DeviceReply: Sendable {
 }
 
 /// Single-device reference checkpoint and outbox for conformance tests.
+public final class OfflineDeviceSnapshot {
+    let bridge: OfflineDeviceSnapshotBridge
+    init(_ bridge: OfflineDeviceSnapshotBridge) { self.bridge = bridge }
+}
+
 public final class OfflineDevice: ReceiptCheckpoint {
     private let bridge: OfflineDeviceBridge
+
+    private init(_ bridge: OfflineDeviceBridge) { self.bridge = bridge }
 
     public init(store: Store, replayEpoch: Int64, seed: Data, capacity: UInt32) throws(RatifyError) {
         bridge = try OfflineDeviceBridge(store: store.bridge, replayEpoch: replayEpoch, seed: seed, capacity: capacity)
     }
 
     public func startup() throws(RatifyError) -> String { try bridge.startup().status ?? "" }
+    public func snapshot() throws(RatifyError) -> OfflineDeviceSnapshot { try OfflineDeviceSnapshot(bridge.snapshot()) }
+    public func restore(_ snapshot: OfflineDeviceSnapshot) throws(RatifyError) -> OfflineDevice {
+        try OfflineDevice(bridge.restore(snapshot.bridge))
+    }
+    public func primaryStore() throws(RatifyError) -> Store { try Store(bridge.primaryStore()) }
     public func setPowerLoss(_ mode: String) throws(RatifyError) { try bridge.setPowerLoss(mode) }
     public func submitPending() throws(RatifyError) -> DeviceReply { try DeviceReply(bridge.submitPending()) }
     public func resubmit(_ sequence: Int64) throws(RatifyError) -> DeviceReply { try DeviceReply(bridge.resubmit(sequence)) }

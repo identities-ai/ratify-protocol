@@ -2913,6 +2913,112 @@ func FfiConverterTypeFfiContextPolicy_lower(_ value: FfiContextPolicy) -> UInt64
 
 
 
+protocol FfiDeviceSnapshotProtocol: AnyObject, Sendable {
+
+}
+class FfiDeviceSnapshot: FfiDeviceSnapshotProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    struct NoHandle {
+        init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_ratify_protocol_ffi_fn_clone_ffidevicesnapshot(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_ratify_protocol_ffi_fn_free_ffidevicesnapshot(handle, $0) }
+    }
+
+
+
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+struct FfiConverterTypeFfiDeviceSnapshot: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FfiDeviceSnapshot
+
+    static func lift(_ handle: UInt64) throws -> FfiDeviceSnapshot {
+        return FfiDeviceSnapshot(unsafeFromHandle: handle)
+    }
+
+    static func lower(_ value: FfiDeviceSnapshot) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiDeviceSnapshot {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    static func write(_ value: FfiDeviceSnapshot, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiDeviceSnapshot_lift(_ handle: UInt64) throws -> FfiDeviceSnapshot {
+    return try FfiConverterTypeFfiDeviceSnapshot.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+func FfiConverterTypeFfiDeviceSnapshot_lower(_ value: FfiDeviceSnapshot) -> UInt64 {
+    return FfiConverterTypeFfiDeviceSnapshot.lower(value)
+}
+
+
+
+
+
+
 /**
  * The Keystore Ed25519 half: signs the SDK's 77-byte message.
  */
@@ -3495,9 +3601,15 @@ protocol FfiOfflineDeviceProtocol: AnyObject, Sendable {
 
     func getAcknowledgement(logId: String, sequence: Int64) throws  -> FfiDeviceReply
 
+    func primaryStore() throws  -> FfiReferenceStore
+
+    func restore(snapshot: FfiDeviceSnapshot) throws  -> FfiOfflineDevice
+
     func resubmit(sequence: Int64) throws  -> FfiDeviceReply
 
     func setPowerLoss(mode: String) throws
+
+    func snapshot() throws  -> FfiDeviceSnapshot
 
     func startup() throws  -> FfiDeviceReply
 
@@ -3595,6 +3707,25 @@ func getAcknowledgement(logId: String, sequence: Int64)throws  -> FfiDeviceReply
 })
 }
 
+func primaryStore()throws  -> FfiReferenceStore  {
+    return try  FfiConverterTypeFfiReferenceStore_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_primary_store(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+func restore(snapshot: FfiDeviceSnapshot)throws  -> FfiOfflineDevice  {
+    return try  FfiConverterTypeFfiOfflineDevice_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_restore(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeFfiDeviceSnapshot_lower(snapshot),uniffiCallStatus
+    )
+})
+}
+
 func resubmit(sequence: Int64)throws  -> FfiDeviceReply  {
     return try  FfiConverterTypeFfiDeviceReply_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
         uniffiCallStatus in
@@ -3612,6 +3743,15 @@ func setPowerLoss(mode: String)throws   {try rustCallWithError(FfiConverterTypeF
         FfiConverterString.lower(mode),uniffiCallStatus
     )
 }
+}
+
+func snapshot()throws  -> FfiDeviceSnapshot  {
+    return try  FfiConverterTypeFfiDeviceSnapshot_lift(try rustCallWithError(FfiConverterTypeFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_ratify_protocol_ffi_fn_method_ffiofflinedevice_snapshot(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
 }
 
 func startup()throws  -> FfiDeviceReply  {
@@ -16989,10 +17129,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_get_acknowledgement() != 33464) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_primary_store() != 19362) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_restore() != 9840) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_resubmit() != 7916) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_set_power_loss() != 33392) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_snapshot() != 41178) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ratify_protocol_ffi_checksum_method_ffiofflinedevice_startup() != 28128) {

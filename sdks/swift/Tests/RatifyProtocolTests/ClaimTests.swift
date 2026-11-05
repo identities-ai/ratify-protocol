@@ -1062,7 +1062,10 @@ final class ClaimTests: XCTestCase {
             "device_power_loss_after_ack", "device_checkpoint_storage_full",
             "device_offline_recovery_upload", "device_staged_status_goes_stale",
             "device_rtc_regression", "device_planted_release_record",
-            "device_altered_release_record", "device_state_digest_mismatch"]
+            "device_altered_release_record", "device_state_digest_mismatch",
+            "device_primary_rollback", "device_rollback_loses_consumed_challenge",
+            "device_rollback_loses_stream_advance", "device_rollback_loses_release_record",
+            "device_rollback_loses_rate_state"]
         let scenarios = (corpus.arr("scenarios") + corpus.arr("profile_scenarios"))
             .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
@@ -1134,7 +1137,11 @@ final class ClaimTests: XCTestCase {
             "device_checkpoint_storage_full": 7, "device_offline_recovery_upload": 13,
             "device_staged_status_goes_stale": 9, "device_rtc_regression": 17,
             "device_planted_release_record": 7, "device_altered_release_record": 9,
-            "device_state_digest_mismatch": 7]
+            "device_state_digest_mismatch": 7, "device_primary_rollback": 10,
+            "device_rollback_loses_consumed_challenge": 11,
+            "device_rollback_loses_stream_advance": 9,
+            "device_rollback_loses_release_record": 10,
+            "device_rollback_loses_rate_state": 9]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1153,6 +1160,7 @@ final class ClaimTests: XCTestCase {
             "ledger_execute_concurrent": ["op", "count", "expect"],
             "device_submit": ["op", "expect"], "upload": ["op", "expect"],
             "corrupt_state": ["op", "request", "expect"],
+            "snapshot": ["op", "snapshot", "expect"],
             "device_power_loss": ["op", "mode", "expect"],
             "device_startup": ["op", "expect"],
             "device_resubmit": ["op", "sequence", "expect"]]
@@ -1162,7 +1170,8 @@ final class ClaimTests: XCTestCase {
             XCTAssertEqual(scenario.arr("steps").count, counts[name], name)
             var store = try Store(now: Int64(scenario.int("start_time")), leaseSeconds: Int64(corpus.int("lease_seconds")),
                 logId: corpus.s("log_id"), verifierKey: key)
-            let rateStore = scenario["rate_at_finalization"] as? Bool == true ? try store.withRateAtFinalization() : nil
+            let rateAtFinalization = scenario["rate_at_finalization"] as? Bool == true
+            var rateStore = rateAtFinalization ? try store.withRateAtFinalization() : nil
             var rateTime = Int64(scenario.int("start_time"))
             var logId = corpus.s("log_id")
             var replayEpochOverride: Int64?
@@ -1173,10 +1182,12 @@ final class ClaimTests: XCTestCase {
             var publishedWires: [String: Data] = [:]
             var released: [String: ReleasedDecision] = [:]
             let approvalLedger = name.hasPrefix("dual_root_") ? try ApprovalLedger() : nil
-            let device = name.hasPrefix("device_") ? try OfflineDevice(store: store,
+            var device = name.hasPrefix("device_") ? try OfflineDevice(store: store,
                 replayEpoch: Int64(scenario.obj("device").int("replay_epoch")),
                 seed: scenario.obj("device").b64("component_seed_b64"),
                 capacity: UInt32(scenario.obj("device").int("capacity"))) : nil
+            var deviceSnapshot: OfflineDeviceSnapshot?
+            var deviceSnapshotName: String?
             var approvalSetId: String?
             for (index, step) in scenario.arr("steps").enumerated() {
                 let op = step.s("op")
@@ -1188,6 +1199,9 @@ final class ClaimTests: XCTestCase {
                 if op == "release" && step["mode"] != nil { expectedStepKeys.insert("mode") }
                 if op == "restore" && step.s("mode") == "lost_state_epoch_bump" {
                     expectedStepKeys.formUnion(["log_id", "replay_epoch"])
+                }
+                if op == "restore" && step.s("mode") == "snapshot" {
+                    expectedStepKeys.insert("snapshot")
                 }
                 if op == "verify" && step["mode"] != nil { expectedStepKeys.formUnion(["mode", "time"]) }
                 if (op == "ledger_record" || op == "ledger_execute") && step["set"] != nil {
@@ -1279,7 +1293,6 @@ final class ClaimTests: XCTestCase {
                 case "device_submit":
                     XCTAssertEqual(Set(want.keys), Set(["acknowledged", "device_error"])
                         .intersection(Set(want.keys)), at)
-                    XCTAssertTrue(want["acknowledged"] != nil || want["device_error"] != nil, at)
                     let reply = try XCTUnwrap(device, at).submitPending()
                     XCTAssertEqual(reply.failure, want["device_error"] == nil ? nil : want.s("device_error"), at)
                     XCTAssertEqual(reply.acknowledged, want["acknowledged"] == nil ? []
@@ -1287,6 +1300,10 @@ final class ClaimTests: XCTestCase {
                 case "corrupt_state":
                     XCTAssertTrue(want.isEmpty, at)
                     try store.corruptSealedStateTestOnly(claimId: try XCTUnwrap(committed[requestName], at).claimId)
+                case "snapshot":
+                    XCTAssertTrue(want.isEmpty, at)
+                    deviceSnapshot = try XCTUnwrap(device, at).snapshot()
+                    deviceSnapshotName = step.s("snapshot")
                 case "device_power_loss":
                     XCTAssertTrue(want.isEmpty, at)
                     try XCTUnwrap(device, at).setPowerLoss(step.s("mode"))
@@ -1311,9 +1328,18 @@ final class ClaimTests: XCTestCase {
                     XCTAssertTrue(want.isEmpty, at)
                 case "restore":
                     XCTAssertTrue(want.isEmpty, at)
-                    XCTAssertNil(rateStore, at)
-                    if step.s("mode") == "exact" { store = try store.cloneStore() }
+                    if name.hasPrefix("device_") {
+                        XCTAssertEqual(step.s("mode"), "snapshot", at)
+                        XCTAssertEqual(step.s("snapshot"), deviceSnapshotName, at)
+                        device = try XCTUnwrap(device, at).restore(XCTUnwrap(deviceSnapshot, at))
+                        store = try XCTUnwrap(device, at).primaryStore()
+                        rateStore = rateAtFinalization ? try store.withRateAtFinalization() : nil
+                    } else if step.s("mode") == "exact" {
+                        XCTAssertNil(rateStore, at)
+                        store = try store.cloneStore()
+                    }
                     else {
+                        XCTAssertNil(rateStore, at)
                         XCTAssertEqual(step.s("mode"), "lost_state_epoch_bump", at)
                         logId = step.s("log_id")
                         replayEpochOverride = Int64(step.int("replay_epoch"))

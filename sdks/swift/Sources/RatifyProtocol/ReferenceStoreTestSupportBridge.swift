@@ -8,7 +8,7 @@ import Foundation
         handle = try ffi { try FfiReferenceStore(now: now, leaseSeconds: leaseSeconds, logId: logId, verifierKey: verifierKey.handle) }
     }
 
-    private init(_ handle: FfiReferenceStore) { self.handle = handle }
+    init(_ handle: FfiReferenceStore) { self.handle = handle }
 
     public func cloneStore() throws(RatifyError) -> ReferenceStoreBridge {
         try ReferenceStoreBridge(ffi { try handle.cloneStore() })

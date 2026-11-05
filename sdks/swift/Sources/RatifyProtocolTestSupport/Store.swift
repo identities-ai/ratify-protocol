@@ -9,7 +9,7 @@ public final class Store: ClaimStore, CommittedClaimStore, ReleaseClaimStore, Re
         bridge = try ReferenceStoreBridge(now: now, leaseSeconds: leaseSeconds, logId: logId, verifierKey: verifierKey)
     }
 
-    private init(_ bridge: ReferenceStoreBridge) { self.bridge = bridge }
+    init(_ bridge: ReferenceStoreBridge) { self.bridge = bridge }
 
     public func cloneStore() throws(RatifyError) -> Store { try Store(bridge.cloneStore()) }
     /// Enables rate admission on this store and returns its verifier capability view.

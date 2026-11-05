@@ -3,6 +3,7 @@ package com.ratifyprotocol
 import com.ratifyprotocol.testing.Store as ReferenceStore
 import com.ratifyprotocol.testing.ApprovalLedger as ReferenceApprovalLedger
 import com.ratifyprotocol.testing.OfflineDevice as ReferenceOfflineDevice
+import com.ratifyprotocol.testing.OfflineDeviceSnapshot as ReferenceOfflineDeviceSnapshot
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -241,7 +242,11 @@ class ClaimTest {
             "device_checkpoint_storage_full" to 7, "device_offline_recovery_upload" to 13,
             "device_staged_status_goes_stale" to 9, "device_rtc_regression" to 17,
             "device_planted_release_record" to 7, "device_altered_release_record" to 9,
-            "device_state_digest_mismatch" to 7)
+            "device_state_digest_mismatch" to 7, "device_primary_rollback" to 10,
+            "device_rollback_loses_consumed_challenge" to 11,
+            "device_rollback_loses_stream_advance" to 9,
+            "device_rollback_loses_release_record" to 10,
+            "device_rollback_loses_rate_state" to 9)
         val scenarios = corpus.arr("profile_scenarios").filter { expectedCounts.containsKey(it.getString("name")) }
         assertEquals(expectedCounts.size, scenarios.size)
         val keys = Corpus.load("keys.json").getJSONArray("keys")
@@ -250,11 +255,15 @@ class ClaimTest {
         val verifier = SoftwarePrivateKey.fromSeeds(keyItem.hex("ed25519_seed_hex"), keyItem.hex("ml_dsa_65_seed_hex"))
         for (scenario in scenarios) {
         assertEquals(expectedCounts[scenario.getString("name")], scenario.arr("steps").size)
-        val store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"),
+        var store = ReferenceStore(scenario.getLong("start_time"), corpus.getLong("lease_seconds"),
             corpus.getString("log_id"), verifier)
         val setup = scenario.getJSONObject("device")
-        val device = ReferenceOfflineDevice(store, setup.getLong("replay_epoch"),
+        var device = ReferenceOfflineDevice(store, setup.getLong("replay_epoch"),
             setup.b64("component_seed_b64"), setup.getInt("capacity").toUInt())
+        var deviceSnapshot: ReferenceOfflineDeviceSnapshot? = null
+        var deviceSnapshotName: String? = null
+        val rateAtFinalization = scenario.optBoolean("rate_at_finalization")
+        var rateStore = if (rateAtFinalization) store.withRateAtFinalization() else null
         val committed = mutableMapOf<String, CommittedOutcome>()
         val receipts = mutableMapOf<String, ByteArray>()
         for ((index, step) in scenario.arr("steps").withIndex()) {
@@ -281,7 +290,10 @@ class ClaimTest {
                     assertEquals(at, expectedTime, now)
                     val req = request(name, corpusName = "lifecycle-scenarios.json", atTime = now)
                     val (trust, status, journal) = vectorProviders(corpus.getJSONObject("requests").getJSONObject(name), req)
-                    val result = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+                    val result = if (rateStore != null) verifyProofBundle(req, rateStore,
+                        trust = trust, statusEvidence = status, statusJournal = journal)
+                    else verifyProofBundle(req, store, trust = trust, statusEvidence = status,
+                        statusJournal = journal)
                     assertEquals(at, want.getString("stage"), result.stage.spelling)
                     if (want.has("error_class")) {
                         assertEquals(at, VerifyStage.PREFLIGHT, result.stage)
@@ -335,7 +347,6 @@ class ClaimTest {
                     assertEquals(at, setOf("op", "expect"), step.keys().asSequence().toSet())
                     val expectedKeys = want.keys().asSequence().toSet()
                     assertEquals(at, expectedKeys, expectedKeys.intersect(setOf("device_error", "acknowledged")))
-                    org.junit.Assert.assertTrue(at, want.has("device_error") || want.has("acknowledged"))
                     val reply = device.submitPending()
                     assertEquals(at, want.optString("device_error").ifEmpty { null }, reply.failure)
                     val expected = want.optJSONArray("acknowledged")
@@ -351,6 +362,21 @@ class ClaimTest {
                     assertEquals(at, setOf("op", "request", "expect"), step.keys().asSequence().toSet())
                     assertEquals(at, 0, want.length())
                     store.corruptSealedStateTestOnly(checkNotNull(committed[name]) { at }.claimId)
+                }
+                "snapshot" -> {
+                    assertEquals(at, setOf("op", "snapshot", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, 0, want.length())
+                    deviceSnapshot = device.snapshot()
+                    deviceSnapshotName = step.getString("snapshot")
+                }
+                "restore" -> {
+                    assertEquals(at, setOf("op", "mode", "snapshot", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, "snapshot", step.getString("mode"))
+                    assertEquals(at, deviceSnapshotName, step.getString("snapshot"))
+                    assertEquals(at, 0, want.length())
+                    device = device.restore(checkNotNull(deviceSnapshot) { at })
+                    store = device.primaryStore()
+                    rateStore = if (rateAtFinalization) store.withRateAtFinalization() else null
                 }
                 "plant_release" -> {
                     assertEquals(at, setOf("op", "request", "time", "expect"), step.keys().asSequence().toSet())

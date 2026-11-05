@@ -18,7 +18,7 @@ import com.ratifyprotocol.CheckpointAcknowledgement
 import com.ratifyprotocol.RateAtFinalizationClaimStore
 
 /** Rust Part B reference store for conformance tests. */
-public class Store private constructor(internal val bridge: ReferenceStoreBridge) :
+public class Store internal constructor(internal val bridge: ReferenceStoreBridge) :
     ClaimStore, CommittedClaimStore, ReleaseClaimStore, ReceiptPublisher, ReceiptCheckpoint {
     public constructor(now: Long, leaseSeconds: Long, logId: String, verifierKey: SoftwarePrivateKey) :
         this(ReferenceStoreBridge(now, leaseSeconds, logId, verifierKey))

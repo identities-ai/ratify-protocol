@@ -2,6 +2,7 @@ package com.ratifyprotocol
 
 import androidx.annotation.RestrictTo
 import com.ratifyprotocol.internal.ffi.FfiDeviceReply
+import com.ratifyprotocol.internal.ffi.FfiDeviceSnapshot
 import com.ratifyprotocol.internal.ffi.FfiOfflineDevice
 
 /** Bridge for the separate testing artifact. */
@@ -25,10 +26,19 @@ public class OfflineDeviceReplyBridge internal constructor(value: FfiDeviceReply
 
 /** Bridge for the separate testing artifact. */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-public class OfflineDeviceBridge(store: ReferenceStoreBridge, replayEpoch: Long, seed: ByteArray, capacity: UInt) {
-    private val handle = ffi { FfiOfflineDevice(store.handle, replayEpoch, seed, capacity) }
+public class OfflineDeviceSnapshotBridge internal constructor(internal val handle: FfiDeviceSnapshot)
+
+/** Bridge for the separate testing artifact. */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+public class OfflineDeviceBridge internal constructor(private val handle: FfiOfflineDevice) {
+    public constructor(store: ReferenceStoreBridge, replayEpoch: Long, seed: ByteArray, capacity: UInt) :
+        this(ffi { FfiOfflineDevice(store.handle, replayEpoch, seed, capacity) })
 
     public fun startup(): OfflineDeviceReplyBridge = OfflineDeviceReplyBridge(ffi { handle.startup() })
+    public fun snapshot(): OfflineDeviceSnapshotBridge = OfflineDeviceSnapshotBridge(ffi { handle.snapshot() })
+    public fun restore(snapshot: OfflineDeviceSnapshotBridge): OfflineDeviceBridge =
+        OfflineDeviceBridge(ffi { handle.restore(snapshot.handle) })
+    public fun primaryStore(): ReferenceStoreBridge = ReferenceStoreBridge(ffi { handle.primaryStore() })
     public fun setPowerLoss(mode: String): Unit = ffi { handle.setPowerLoss(mode) }
     public fun submitPending(): OfflineDeviceReplyBridge = OfflineDeviceReplyBridge(ffi { handle.submitPending() })
     public fun resubmit(sequence: Long): OfflineDeviceReplyBridge = OfflineDeviceReplyBridge(ffi { handle.resubmit(sequence) })

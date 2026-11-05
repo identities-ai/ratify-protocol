@@ -240,7 +240,8 @@ class ClaimTest {
             "device_power_loss_before_ack" to 9, "device_power_loss_after_ack" to 8,
             "device_checkpoint_storage_full" to 7, "device_offline_recovery_upload" to 13,
             "device_staged_status_goes_stale" to 9, "device_rtc_regression" to 17,
-            "device_planted_release_record" to 7, "device_altered_release_record" to 9)
+            "device_planted_release_record" to 7, "device_altered_release_record" to 9,
+            "device_state_digest_mismatch" to 7)
         val scenarios = corpus.arr("profile_scenarios").filter { expectedCounts.containsKey(it.getString("name")) }
         assertEquals(expectedCounts.size, scenarios.size)
         val keys = Corpus.load("keys.json").getJSONArray("keys")
@@ -345,6 +346,11 @@ class ClaimTest {
                     assertEquals(at, setOf("op", "mode", "expect"), step.keys().asSequence().toSet())
                     assertEquals(at, 0, want.length())
                     device.setPowerLoss(step.getString("mode"))
+                }
+                "corrupt_state" -> {
+                    assertEquals(at, setOf("op", "request", "expect"), step.keys().asSequence().toSet())
+                    assertEquals(at, 0, want.length())
+                    store.corruptSealedStateTestOnly(checkNotNull(committed[name]) { at }.claimId)
                 }
                 "plant_release" -> {
                     assertEquals(at, setOf("op", "request", "time", "expect"), step.keys().asSequence().toSet())

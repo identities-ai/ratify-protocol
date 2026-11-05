@@ -33,7 +33,7 @@ mkdir -p "$gen"
     -e 's/^public //' \
     -e 's/^((data|sealed|open|abstract|enum|inline|suspend|value|operator) )*(class|interface|object|fun|val|var|typealias) /internal &/' \
     -e 's/(^|[ \/])fun `ffi/\1internal fun `ffi/' \
-    "$here/build/gen/com/ratifyprotocol/internal/ffi/ratify_ffi.kt"
+    "$here/build/gen/com/ratifyprotocol/internal/ffi/ratify_ffi.kt" | sed -E 's/[[:blank:]]+$//'
 } > "$gen/ratify_ffi.kt"
 
 # Fail if a future UniFFI release emits a declaration form the rewrite misses:

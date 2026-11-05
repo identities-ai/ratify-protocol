@@ -19,6 +19,9 @@ import Foundation
     }
 
     public func setTime(_ now: Int64) throws(RatifyError) { try ffi { try handle.setTime(now: now) } }
+    public func corruptSealedStateTestOnly(claimId: String) throws(RatifyError) {
+        try ffi { try handle.corruptSealedStateTestOnly(claimId: claimId) }
+    }
     public func now() throws(RatifyError) -> Int64 { try ffi { try handle.now() } }
     public func setSignerFailure(_ failing: Bool) throws(RatifyError) { try ffi { try handle.setSignerFailure(failing: failing) } }
     public func setAcknowledgementWithheld(_ withheld: Bool) throws(RatifyError) { try ffi { try handle.setAcknowledgementWithheld(withheld: withheld) } }

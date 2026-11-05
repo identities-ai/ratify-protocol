@@ -34,6 +34,7 @@ public class ReferenceStoreBridge private constructor(internal val handle: FfiRe
     public fun setAcknowledgementWithheld(withheld: Boolean): Unit = ffi { handle.setAcknowledgementWithheld(withheld) }
     public fun logLength(): ULong = ffi { handle.logLength() }
     public fun plantReleaseTestOnly(claimId: String, ackTimestamp: Long): Unit = ffi { handle.plantReleaseTestOnly(claimId, ackTimestamp) }
+    public fun corruptSealedStateTestOnly(claimId: String): Unit = ffi { handle.corruptSealedStateTestOnly(claimId) }
     public fun abandonPendingReceipts(): List<String> = ffi { handle.abandonPendingReceipts() }
 
     private fun check(reply: FfiReferenceStoreReply) {

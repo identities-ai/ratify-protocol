@@ -1062,7 +1062,7 @@ final class ClaimTests: XCTestCase {
             "device_power_loss_after_ack", "device_checkpoint_storage_full",
             "device_offline_recovery_upload", "device_staged_status_goes_stale",
             "device_rtc_regression", "device_planted_release_record",
-            "device_altered_release_record"]
+            "device_altered_release_record", "device_state_digest_mismatch"]
         let scenarios = (corpus.arr("scenarios") + corpus.arr("profile_scenarios"))
             .filter { names.contains($0.s("name")) }
         XCTAssertEqual(scenarios.count, names.count)
@@ -1133,7 +1133,8 @@ final class ClaimTests: XCTestCase {
             "device_power_loss_before_ack": 9, "device_power_loss_after_ack": 8,
             "device_checkpoint_storage_full": 7, "device_offline_recovery_upload": 13,
             "device_staged_status_goes_stale": 9, "device_rtc_regression": 17,
-            "device_planted_release_record": 7, "device_altered_release_record": 9]
+            "device_planted_release_record": 7, "device_altered_release_record": 9,
+            "device_state_digest_mismatch": 7]
         let stepKeys: [String: Set<String>] = ["verify": ["op", "request", "expect"],
             "publish": ["op", "request", "mode", "expect"],
             "release": ["op", "request", "checkpoint", "expect"],
@@ -1151,6 +1152,7 @@ final class ClaimTests: XCTestCase {
             "ledger_record_concurrent": ["op", "requests", "expect"],
             "ledger_execute_concurrent": ["op", "count", "expect"],
             "device_submit": ["op", "expect"], "upload": ["op", "expect"],
+            "corrupt_state": ["op", "request", "expect"],
             "device_power_loss": ["op", "mode", "expect"],
             "device_startup": ["op", "expect"],
             "device_resubmit": ["op", "sequence", "expect"]]
@@ -1282,6 +1284,9 @@ final class ClaimTests: XCTestCase {
                     XCTAssertEqual(reply.failure, want["device_error"] == nil ? nil : want.s("device_error"), at)
                     XCTAssertEqual(reply.acknowledged, want["acknowledged"] == nil ? []
                         : (want["acknowledged"] as! [NSNumber]).map(\.int64Value), at)
+                case "corrupt_state":
+                    XCTAssertTrue(want.isEmpty, at)
+                    try store.corruptSealedStateTestOnly(claimId: try XCTUnwrap(committed[requestName], at).claimId)
                 case "device_power_loss":
                     XCTAssertTrue(want.isEmpty, at)
                     try XCTUnwrap(device, at).setPowerLoss(step.s("mode"))

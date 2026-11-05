@@ -62,7 +62,7 @@ cp "$out/gen/ratify_ffiFFI.modulemap" "$out/headers/module.modulemap"
          -e 's/(^|[^A-Za-z0-9_.])open func /\1func /g' \
          -e 's/(^|[^A-Za-z0-9_.])public +/\1/g' \
          -e 's/^import ratify_ffiFFI$/internal import ratify_ffiFFI/' \
-         "$out/gen/ratify_ffi.swift"
+         "$out/gen/ratify_ffi.swift" | sed -E 's/[[:blank:]]+$//'
 } > "$gen/ratify_ffi.swift"
 
 # Fail if a future UniFFI release emits a declaration form the rewrite misses.

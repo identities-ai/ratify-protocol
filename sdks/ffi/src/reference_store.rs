@@ -118,6 +118,10 @@ impl FfiReferenceStore {
         call_on(&self.poison, || Ok(self.inner.set_time(now)))
     }
 
+    pub fn corrupt_sealed_state_test_only(&self, claim_id: String) -> FfiResult<()> {
+        call_on(&self.poison, || Ok(self.inner.corrupt_sealed_state_test_only(&claim_id)))
+    }
+
     pub fn now(&self) -> FfiResult<i64> {
         call_on(&self.poison, || Ok(self.inner.now()))
     }

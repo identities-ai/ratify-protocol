@@ -25,6 +25,9 @@ public final class Store: ClaimStore, CommittedClaimStore, ReleaseClaimStore, Re
     public func plantReleaseTestOnly(claimId: String, ackTimestamp: Int64) throws(RatifyError) {
         try bridge.plantReleaseTestOnly(claimId: claimId, ackTimestamp: ackTimestamp)
     }
+    public func corruptSealedStateTestOnly(claimId: String) throws(RatifyError) {
+        try bridge.corruptSealedStateTestOnly(claimId: claimId)
+    }
     public func abandonPendingReceipts() throws(RatifyError) -> [String] { try bridge.abandonPendingReceipts() }
 
     public func authoritativeTime() async throws -> Int64 { try bridge.authoritativeTime() }

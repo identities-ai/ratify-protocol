@@ -213,6 +213,7 @@ EXTRA_MEMBERS = {
     "ReferenceStoreBridge.setAcknowledgementWithheld": "test-only checkpoint control",
     "ReferenceStoreBridge.logLength": "test-only receipt log count",
     "ReferenceStoreBridge.plantReleaseTestOnly": "test-only forged release setup",
+    "ReferenceStoreBridge.corruptSealedStateTestOnly": "test-only sealed claim corruption",
     "ReferenceStoreBridge.abandonPendingReceipts": "test-only receipt abandonment",
     "ReferenceStoreBridge.authoritativeTime": "reference authoritative clock for test callbacks",
     "ReferenceStoreBridge.claim": "reference atomic claim for test callbacks",

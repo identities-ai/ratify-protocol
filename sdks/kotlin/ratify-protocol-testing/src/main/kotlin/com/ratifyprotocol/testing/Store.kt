@@ -35,6 +35,7 @@ public class Store private constructor(internal val bridge: ReferenceStoreBridge
     public fun setAcknowledgementWithheld(withheld: Boolean): Unit = bridge.setAcknowledgementWithheld(withheld)
     public fun logLength(): ULong = bridge.logLength()
     public fun plantReleaseTestOnly(claimId: String, ackTimestamp: Long): Unit = bridge.plantReleaseTestOnly(claimId, ackTimestamp)
+    public fun corruptSealedStateTestOnly(claimId: String): Unit = bridge.corruptSealedStateTestOnly(claimId)
     public fun abandonPendingReceipts(): List<String> = bridge.abandonPendingReceipts()
 
     override suspend fun authoritativeTime(): Long = bridge.authoritativeTime()

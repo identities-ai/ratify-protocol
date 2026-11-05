@@ -807,6 +807,7 @@ public final class com/ratifyprotocol/ReferenceStoreBridge {
 	public final fun authoritativeTime ()J
 	public final fun claim (Lcom/ratifyprotocol/ChallengeClaim;)Lcom/ratifyprotocol/ClaimResult;
 	public final fun cloneStore ()Lcom/ratifyprotocol/ReferenceStoreBridge;
+	public final fun corruptSealedStateTestOnly (Ljava/lang/String;)V
 	public final fun enableRateAtFinalization ()V
 	public final fun finalize (Ljava/lang/String;[B[B[BJ)Z
 	public final fun get (Ljava/lang/String;J)Lcom/ratifyprotocol/CheckpointAcknowledgement;

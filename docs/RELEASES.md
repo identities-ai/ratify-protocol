@@ -260,7 +260,8 @@ X+1 and push the branch. The mobile PR
 gate builds from source with `RATIFY_SWIFT_LOCAL_BINARY=1`; the tagged release
 gate instead downloads the draft assets, checks the CI run and source
 fingerprint, and checks the SwiftPM URL and checksum. `release-tag` repeats that
-check before creating any tag. Do not merge the PR while the draft or staged
+check before creating any tag. That check also requires zero pending mobile API
+inventory entries and all seven cross-SDK fixture files. Do not merge the PR while the draft or staged
 manifest is missing. After publication, resolve SwiftPM from the final tag and
 release URL, and resolve both AARs from Maven staging before releasing them.
 

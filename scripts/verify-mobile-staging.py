@@ -32,6 +32,15 @@ for entry in subprocess.check_output(["git", "ls-tree", "-r", "-z", "HEAD"]).spl
 if source.hexdigest() != manifest["source_except_package_sha256"]:
     fail("source differs from the built candidate outside Package.swift")
 
+inventory = json.loads(pathlib.Path("sdks/ffi/api-inventory.json").read_text())
+pending = [name for name, item in inventory.items() if item["status"] == "pending"]
+if pending:
+    fail(f"public API inventory has {len(pending)} pending items")
+fixture_dir = pathlib.Path("testvectors/v2/cross-sdk")
+expected_sdks = {"go", "typescript", "python", "rust", "c", "swift", "kotlin"}
+if {path.stem for path in fixture_dir.glob("*.json")} != expected_sdks:
+    fail("cross-SDK fixtures must cover all seven SDKs")
+
 package = pathlib.Path("Package.swift").read_text()
 url = f"https://github.com/identities-ai/ratify-protocol/releases/download/{tag}/RatifyProtocolFFI.xcframework.zip"
 checksum = manifest["artifacts"]["RatifyProtocolFFI.xcframework.zip"]["sha256"]

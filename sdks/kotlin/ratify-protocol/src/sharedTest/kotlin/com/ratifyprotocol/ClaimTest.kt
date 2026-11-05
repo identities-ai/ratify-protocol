@@ -1546,6 +1546,45 @@ class ClaimTest {
             HybridSignature(ed25519, receipt.signature.mlDsa65)))
     }
 
+    @Test fun concurrentClaimStormHasOneCommit() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first { it.getString("name") == "same_challenge_claim_storm" }
+        val participant = scenario.arr("participants").first()
+        assertEquals("verify", participant.getString("op"))
+        assertEquals("A", participant.getString("request"))
+        assertEquals(8, participant.getInt("count"))
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val keys = Corpus.load("keys.json").getJSONArray("keys")
+        val verifier = (0 until keys.length()).map(keys::getJSONObject)
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+                inputs.getString("log_id"), key)
+            val req = request("A", corpusName = "lifecycle-scenarios.json")
+            val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("A"), req)
+            val calls = List(participant.getInt("count")) {
+                async(Dispatchers.Default) { verifyProofBundle(req, store,
+                    trust = trust, statusEvidence = status, statusJournal = journal) }
+            }
+            val outcomes = calls.map { it.await() }
+            assertEquals("iteration $iteration", 8, outcomes.size)
+            assertEquals("iteration $iteration", 1, outcomes.count { it.stage == VerifyStage.COMMITTED })
+            org.junit.Assert.assertTrue("iteration $iteration", outcomes.all { outcome ->
+                outcome.stage == VerifyStage.COMMITTED && outcome.committed != null && outcome.errorClass == null ||
+                    outcome.stage == VerifyStage.REPLAY && outcome.disposition in
+                        setOf(ClaimDisposition.IN_PROGRESS, ClaimDisposition.TERMINAL_REPLAY)
+            })
+            val body = JSONObject(String(checkNotNull(outcomes.first { it.stage == VerifyStage.COMMITTED }.committed).receiptBody))
+            assertEquals("iteration $iteration", "allow", body.getString("decision"))
+            assertEquals("iteration $iteration", "authorized", body.getString("decision_reason"))
+            val replay = verifyProofBundle(req, store,
+                trust = trust, statusEvidence = status, statusJournal = journal)
+            assertEquals("iteration $iteration", VerifyStage.REPLAY, replay.stage)
+            assertEquals("iteration $iteration", ClaimDisposition.TERMINAL_REPLAY, replay.disposition)
+        }
+    }
+
     @Test fun lifecycleBasicReleaseScenarios() = runBlocking {
         val corpus = Corpus.load("lifecycle-scenarios.json")
         val names = setOf("allow_published_acknowledged_released", "release_without_receipt_is_pending",

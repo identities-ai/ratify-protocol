@@ -1260,6 +1260,46 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    func testConcurrentClaimStormHasOneCommit() async throws {
+        let corpus = Corpus.load("concurrency-scenarios.json")
+        let scenario = try XCTUnwrap(corpus.arr("scenarios").first { $0.s("name") == "same_challenge_claim_storm" })
+        let participant = try XCTUnwrap(scenario.arr("participants").first)
+        XCTAssertEqual(participant.s("op"), "verify")
+        XCTAssertEqual(participant.s("request"), "A")
+        XCTAssertEqual(participant.int("count"), 8)
+        let inputs = Corpus.load("lifecycle-scenarios.json")
+        let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        for iteration in 0..<corpus.int("default_iterations") {
+            let store = try Store(now: Int64(scenario.int("start_time")),
+                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: inputs.s("log_id"), verifierKey: key)
+            let req = try request("A", corpusName: "lifecycle-scenarios.json")
+            let (trust, status, journal) = try await vectorProviders(inputs.obj("requests").obj("A"), request: req)
+            let outcomes = try await withThrowingTaskGroup(of: VerifyOutcome.self) { group in
+                for _ in 0..<participant.int("count") {
+                    group.addTask { try await Ratify.verifyProofBundle(req, claimStore: store,
+                        trust: trust, statusEvidence: status, statusJournal: journal) }
+                }
+                var results: [VerifyOutcome] = []
+                for try await outcome in group { results.append(outcome) }
+                return results
+            }
+            XCTAssertEqual(outcomes.count, 8, "iteration \(iteration)")
+            XCTAssertEqual(outcomes.filter { $0.stage == .committed }.count, 1, "iteration \(iteration)")
+            XCTAssertTrue(outcomes.allSatisfy { outcome in
+                outcome.stage == .committed && outcome.committed != nil && outcome.errorClass == nil ||
+                outcome.stage == .replay && [.inProgress, .terminalReplay].contains(outcome.disposition)
+            }, "iteration \(iteration)")
+            let winner = try XCTUnwrap(outcomes.first { $0.stage == .committed }?.committed)
+            let body = try JSONSerialization.jsonObject(with: winner.receiptBody) as! [String: Any]
+            XCTAssertEqual(body["decision"] as? String, "allow", "iteration \(iteration)")
+            XCTAssertEqual(body["decision_reason"] as? String, "authorized", "iteration \(iteration)")
+            let replay = try await Ratify.verifyProofBundle(req, claimStore: store,
+                trust: trust, statusEvidence: status, statusJournal: journal)
+            XCTAssertEqual(replay.stage, .replay, "iteration \(iteration)")
+            XCTAssertEqual(replay.disposition, .terminalReplay, "iteration \(iteration)")
+        }
+    }
+
     func testLifecycleBasicReleaseScenarios() async throws {
         let corpus = Corpus.load("lifecycle-scenarios.json")
         let names: Set<String> = ["allow_published_acknowledged_released", "release_without_receipt_is_pending",

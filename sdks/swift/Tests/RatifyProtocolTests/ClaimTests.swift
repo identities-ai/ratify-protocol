@@ -1727,6 +1727,68 @@ final class ClaimTests: XCTestCase {
         }
     }
 
+    func testConcurrentRecoveryCannotReplaceCommittedAllow() async throws {
+        let corpus = Corpus.load("concurrency-scenarios.json")
+        let scenario = try XCTUnwrap(corpus.arr("scenarios").first {
+            $0.s("name") == "recovery_races_after_owner_committed"
+        })
+        let participants = scenario.arr("participants")
+        XCTAssertEqual(participants.map { $0.s("op") }, ["recover_direct", "recover"])
+        let inputs = Corpus.load("lifecycle-scenarios.json")
+        let key = Fixture.shared.privateKey(inputs.s("verifier_key"))
+        let req = try request("A", corpusName: "lifecycle-scenarios.json")
+        let (trust, status, journal) = try await vectorProviders(inputs.obj("requests").obj("A"), request: req)
+        for iteration in 0..<corpus.int("default_iterations") {
+            let store = try Store(now: Int64(scenario.int("start_time")),
+                leaseSeconds: Int64(inputs.int("lease_seconds")), logId: inputs.s("log_id"), verifierKey: key)
+            let verified = try await Ratify.verifyProofBundle(req, claimStore: store,
+                trust: trust, statusEvidence: status, statusJournal: journal)
+            let committed = try XCTUnwrap(verified.committed, "iteration \(iteration)")
+            try store.setTime(Int64(scenario.arr("setup")[1].int("time")))
+            let results = await withTaskGroup(of: String.self) { group in
+                for participant in participants {
+                    for _ in 0..<participant.int("count") {
+                        if participant.s("op") == "recover_direct" {
+                            let terminal = participant.b64("terminal_b64")
+                            let body = participant.b64("body_b64")
+                            group.addTask {
+                                do {
+                                    _ = try await store.recoverInterrupted(claimId: committed.claimId,
+                                        terminalResult: terminal, receiptBody: body)
+                                    return "unexpected/success"
+                                } catch {
+                                    return "error/" + ((error as? StoreError)?.errorClass?.rawValue ?? "unclassified")
+                                }
+                            }
+                        } else {
+                            group.addTask {
+                                do {
+                                    _ = try await Ratify.recoverInterruptedClaim(store: store, claimId: committed.claimId)
+                                    return "unexpected/success"
+                                } catch {
+                                    return "error/" + ((error as? RatifyError)?.errorClass?.rawValue ?? "unclassified")
+                                }
+                            }
+                        }
+                    }
+                }
+                var values: [String] = []
+                for await value in group { values.append(value) }
+                return values
+            }
+            XCTAssertEqual(results.count, 6, "iteration \(iteration)")
+            XCTAssertTrue(results.allSatisfy { $0 == "error/claim_already_terminal" }, "iteration \(iteration): \(results)")
+            let replay = try await Ratify.verifyProofBundle(req, claimStore: store,
+                trust: trust, statusEvidence: status, statusJournal: journal)
+            XCTAssertEqual(replay.stage, .replay, "iteration \(iteration)")
+            XCTAssertEqual(replay.disposition, .terminalReplay, "iteration \(iteration)")
+            let wire = try await store.publish(claimId: committed.claimId, receiptBody: committed.receiptBody)
+            XCTAssertEqual(try Ratify.decodeVerificationReceipt(wire).sequence, 1, "iteration \(iteration)")
+            let second = try await store.publish(claimId: committed.claimId, receiptBody: committed.receiptBody)
+            XCTAssertEqual(second, wire, "iteration \(iteration)")
+        }
+    }
+
     func testConcurrentIdenticalRecoveriesCommitOnce() async throws {
         let corpus = Corpus.load("concurrency-scenarios.json")
         let scenario = try XCTUnwrap(corpus.arr("scenarios").first {

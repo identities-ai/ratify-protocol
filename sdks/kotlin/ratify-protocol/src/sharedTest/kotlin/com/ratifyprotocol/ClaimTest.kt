@@ -1983,6 +1983,56 @@ class ClaimTest {
         }
     }
 
+    @Test fun concurrentRecoveryCannotReplaceCommittedAllow() = runBlocking {
+        val corpus = Corpus.load("concurrency-scenarios.json")
+        val scenario = corpus.arr("scenarios").first {
+            it.getString("name") == "recovery_races_after_owner_committed"
+        }
+        val participants = scenario.arr("participants")
+        assertEquals(listOf("recover_direct", "recover"), participants.map { it.getString("op") })
+        val inputs = Corpus.load("lifecycle-scenarios.json")
+        val verifier = Corpus.load("keys.json").getJSONArray("keys")
+            .let { keys -> (0 until keys.length()).map(keys::getJSONObject) }
+            .first { it.getString("name") == inputs.getString("verifier_key") }
+        val key = SoftwarePrivateKey.fromSeeds(verifier.hex("ed25519_seed_hex"), verifier.hex("ml_dsa_65_seed_hex"))
+        val req = request("A", corpusName = "lifecycle-scenarios.json")
+        val (trust, status, journal) = vectorProviders(inputs.getJSONObject("requests").getJSONObject("A"), req)
+        repeat(corpus.getInt("default_iterations")) { iteration ->
+            val store = ReferenceStore(scenario.getLong("start_time"), inputs.getLong("lease_seconds"),
+                inputs.getString("log_id"), key)
+            val verified = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+            val committed = checkNotNull(verified.committed) { "iteration $iteration" }
+            store.setTime(scenario.arr("setup")[1].getLong("time"))
+            val calls = participants.flatMap { participant ->
+                List(participant.getInt("count")) {
+                    async(Dispatchers.Default) {
+                        try {
+                            if (participant.getString("op") == "recover_direct")
+                                store.recoverInterrupted(committed.claimId,
+                                    participant.b64("terminal_b64"), participant.b64("body_b64"))
+                            else recoverInterruptedClaim(store, committed.claimId)
+                            "unexpected/success"
+                        } catch (e: StoreError.Classified) {
+                            "error/${e.errorClass.spelling}"
+                        } catch (e: RatifyException.Protocol) {
+                            "error/${e.errorClass.spelling}"
+                        }
+                    }
+                }
+            }
+            val results = calls.map { it.await() }
+            assertEquals("iteration $iteration", 6, results.size)
+            org.junit.Assert.assertTrue("iteration $iteration: $results",
+                results.all { it == "error/claim_already_terminal" })
+            val replay = verifyProofBundle(req, store, trust = trust, statusEvidence = status, statusJournal = journal)
+            assertEquals("iteration $iteration", VerifyStage.REPLAY, replay.stage)
+            assertEquals("iteration $iteration", ClaimDisposition.TERMINAL_REPLAY, replay.disposition)
+            val wire = store.publish(committed.claimId, committed.receiptBody)
+            assertEquals("iteration $iteration", 1L, decodeVerificationReceipt(wire).sequence)
+            org.junit.Assert.assertArrayEquals(wire, store.publish(committed.claimId, committed.receiptBody))
+        }
+    }
+
     @Test fun concurrentIdenticalRecoveriesCommitOnce() = runBlocking {
         val corpus = Corpus.load("concurrency-scenarios.json")
         val scenario = corpus.arr("scenarios").first { it.getString("name") == "concurrent_identical_recoveries" }

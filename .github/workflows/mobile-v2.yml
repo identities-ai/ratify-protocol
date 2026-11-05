@@ -91,6 +91,7 @@ jobs:
     timeout-minutes: 90
     env:
       RATIFY_SWIFT_LOCAL_BINARY: '1'
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -107,7 +108,11 @@ jobs:
         env:
           RATIFY_FUZZ_SECONDS: '1'
         run: |
-          xcodebuild -downloadPlatform iOS -buildVersion 17.5
+          for attempt in 1 2 3; do
+            if xcodebuild -downloadPlatform iOS -buildVersion 17.5; then break; fi
+            test "$attempt" -lt 3
+            sleep 30
+          done
           runtime=$(xcrun simctl list runtimes --json | python3 -c 'import json,sys; print(next(r["identifier"] for r in json.load(sys.stdin)["runtimes"] if r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-17-")))')
           device=$(xcrun simctl create 'Ratify iOS 17' 'com.apple.CoreSimulator.SimDeviceType.iPhone-15' "$runtime")
           cd sdks/swift/HostApp
@@ -121,10 +126,14 @@ jobs:
         if: failure()
         run: |
           mkdir -p "$RUNNER_TEMP/ios17-diagnostics/crashes"
+          xcodebuild -version > "$RUNNER_TEMP/ios17-diagnostics/toolchain.txt"
+          xcrun simctl list runtimes >> "$RUNNER_TEMP/ios17-diagnostics/toolchain.txt"
           find "$HOME/Library/Logs/DiagnosticReports" -type f -name 'RatifyHost*' \
             -exec cp {} "$RUNNER_TEMP/ios17-diagnostics/crashes/" \; || true
-          xcrun xcresulttool export diagnostics --path "$RUNNER_TEMP/ios17.xcresult" \
-            --output-path "$RUNNER_TEMP/ios17-diagnostics/xcresult" || true
+          if [ -d "$RUNNER_TEMP/ios17.xcresult" ]; then
+            xcrun xcresulttool export diagnostics --path "$RUNNER_TEMP/ios17.xcresult" \
+              --output-path "$RUNNER_TEMP/ios17-diagnostics/xcresult" || true
+          fi
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

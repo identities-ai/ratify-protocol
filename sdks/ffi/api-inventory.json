@@ -301,38 +301,45 @@
  },
  "CONSTRAINT_ALLOWED_VALUES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CONSTRAINT_ALLOWED_VALUES_V2",
+  "status": "mapped",
+  "swift": "Ratify.constraintAllowedValues"
  },
  "CONSTRAINT_MAX_AMOUNT": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CONSTRAINT_MAX_AMOUNT",
+  "status": "mapped",
+  "swift": "Ratify.constraintMaxAmount"
  },
  "CONSTRAINT_MAX_COUNT_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CONSTRAINT_MAX_COUNT_V2",
+  "status": "mapped",
+  "swift": "Ratify.constraintMaxCount"
  },
  "CONSTRAINT_MAX_RATE": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CONSTRAINT_MAX_RATE",
+  "status": "mapped",
+  "swift": "Ratify.constraintMaxRate"
  },
  "CONSTRAINT_RECEIVER_AUDIENCE": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CONSTRAINT_RECEIVER_AUDIENCE",
+  "status": "mapped",
+  "swift": "Ratify.constraintReceiverAudience"
  },
  "CONSTRAINT_RESOURCE_PATH": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CONSTRAINT_RESOURCE_PATH",
+  "status": "mapped",
+  "swift": "Ratify.constraintResourcePath"
  },
  "CONSTRAINT_TIME_WINDOW": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "CONSTRAINT_TIME_WINDOW",
+  "status": "mapped",
+  "swift": "Ratify.constraintTimeWindow"
  },
  "CROSS_SDK_KEY_NAMES_V2": {
   "kind": "const",
@@ -2723,8 +2730,9 @@
  },
  "FRESHNESS_UNVERIFIED_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "FRESHNESS_UNVERIFIED_V2",
+  "status": "mapped",
+  "swift": "Ratify.freshnessUnverified"
  },
  "HybridPrivateKey": {
   "kind": "struct",
@@ -3156,13 +3164,15 @@
  },
  "MAX_ALLOWED_VALUES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_ALLOWED_VALUES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxAllowedValues"
  },
  "MAX_AUDIENCE_IDS_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_AUDIENCE_IDS_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxAudienceIds"
  },
  "MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2": {
   "kind": "const",
@@ -3172,13 +3182,15 @@
  },
  "MAX_CONSTRAINT_EVALUATORS_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_CONSTRAINT_EVALUATORS_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxConstraintEvaluators"
  },
  "MAX_CONSTRAINT_EVALUATOR_TIMEOUT_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_CONSTRAINT_EVALUATOR_TIMEOUT_SECONDS_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxConstraintEvaluatorTimeoutSeconds"
  },
  "MAX_DELEGATION_CERT_BYTES_V2": {
   "kind": "const",
@@ -3188,23 +3200,27 @@
  },
  "MAX_EXTENSION_CONTEXT_ENTRIES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_EXTENSION_CONTEXT_ENTRIES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxExtensionContextEntries"
  },
  "MAX_EXTENSION_CONTEXT_NAME_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_EXTENSION_CONTEXT_NAME_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxExtensionContextNameBytes"
  },
  "MAX_EXTENSION_CONTEXT_VALUE_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_EXTENSION_CONTEXT_VALUE_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxExtensionContextValueBytes"
  },
  "MAX_EXTENSION_TYPE_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_EXTENSION_TYPE_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxExtensionTypeBytes"
  },
  "MAX_KEY_ROTATION_STATEMENT_BYTES_V2": {
   "kind": "const",
@@ -3214,8 +3230,9 @@
  },
  "MAX_PROFILE_ID_BYTES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_PROFILE_ID_BYTES_V2",
+  "status": "mapped",
+  "swift": "Ratify.maxProfileIdBytes"
  },
  "MAX_PROOF_BUNDLE_BYTES_V2": {
   "kind": "const",
@@ -3249,8 +3266,9 @@
  },
  "MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "MAX_SECURITY_JOURNAL_SNAPSHOT_BYTES",
+  "status": "mapped",
+  "swift": "Ratify.maxSecurityJournalSnapshotBytes"
  },
  "MAX_STATUS_EVIDENCE_BATCH_BYTES_V2": {
   "kind": "const",
@@ -3368,13 +3386,15 @@
  },
  "PROFILE_ALLOWED_VALUES_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "PROFILE_ALLOWED_VALUES_V2",
+  "status": "mapped",
+  "swift": "Ratify.profileAllowedValues"
  },
  "PROFILE_MAX_COUNT_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "PROFILE_MAX_COUNT_V2",
+  "status": "mapped",
+  "swift": "Ratify.profileMaxCount"
  },
  "ParamsValue": {
   "kind": "enum",
@@ -4151,8 +4171,9 @@
  },
  "SECURITY_JOURNAL_CONFLICT_MESSAGE_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "SECURITY_JOURNAL_CONFLICT_MESSAGE_V2",
+  "status": "mapped",
+  "swift": "Ratify.securityJournalConflictMessage"
  },
  "SecurityJournalHeadV2": {
   "kind": "struct",
@@ -4762,8 +4783,9 @@
  },
  "TZDB_VERSION_V2": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "TZDB_VERSION_V2",
+  "status": "mapped",
+  "swift": "Ratify.tzdbVersion"
  },
  "TestOnlyChallengeIssuanceStore": {
   "kind": "struct",
@@ -8557,8 +8579,9 @@
  },
  "V2_SIGNING_MESSAGE_SIZE": {
   "kind": "const",
-  "milestone": "M2",
-  "status": "pending"
+  "kotlin": "V2_SIGNING_MESSAGE_SIZE",
+  "status": "mapped",
+  "swift": "Ratify.signingMessageSize"
  },
  "VerificationReceiptV2": {
   "kind": "struct",

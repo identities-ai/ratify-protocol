@@ -550,7 +550,14 @@ Ratify.challengeClaimDigest(_:) [Func] -> Foundation.Data, Foundation.Data
 Ratify.checkVerificationReceiptBundleBinding(_:bundle:) [Func] -> (), RatifyProtocol.VerificationReceipt, RatifyProtocol.ProofBundle
 Ratify.claimProofBundle(bundle:preflight:namespace:replayEpoch:now:store:timeout:) [Func] -> RatifyProtocol.StagedClaim, Foundation.Data, RatifyProtocol.PreflightResult, Swift.String, Swift.Int64, Swift.Int64, any RatifyProtocol.ClaimStore, Swift.Duration?
 Ratify.configureStatusKeyEpoch(store:issuerId:epoch:key:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, Swift.Duration?
+Ratify.constraintAllowedValues [Var] -> Swift.String
+Ratify.constraintMaxAmount [Var] -> Swift.String
+Ratify.constraintMaxCount [Var] -> Swift.String
+Ratify.constraintMaxRate [Var] -> Swift.String
 Ratify.constraintProfileDigest(_:) [Func] -> Swift.String, RatifyProtocol.ConstraintProfileDescriptor
+Ratify.constraintReceiverAudience [Var] -> Swift.String
+Ratify.constraintResourcePath [Var] -> Swift.String
+Ratify.constraintTimeWindow [Var] -> Swift.String
 Ratify.decodeCheckpointAcknowledgement(_:) [Func] -> RatifyProtocol.CheckpointAcknowledgement, Foundation.Data
 Ratify.decodeDelegationCert(_:) [Func] -> RatifyProtocol.DelegationCert, Foundation.Data
 Ratify.decodeKeyRotationStatement(_:) [Func] -> RatifyProtocol.KeyRotationStatement, Foundation.Data
@@ -584,6 +591,7 @@ Ratify.expandScopes(_:) [Func] -> [Swift.String], [Swift.String]
 Ratify.externalMu(mlDsaPublicKey:mlDsaContext:message:) [Func] -> Foundation.Data, Foundation.Data, Foundation.Data, Foundation.Data
 Ratify.finalizeClaimProofBundle(token:store:terminalResult:receiptBody:timeout:) [Func] -> Swift.Bool, RatifyProtocol.EvaluationToken, any RatifyProtocol.ClaimStore, Foundation.Data, Foundation.Data, Swift.Duration?
 Ratify.finalizeClaimProofBundle(token:store:terminalResult:receiptBody:timeout:) [Func] -> Swift.Bool, RatifyProtocol.EvaluationToken, any RatifyProtocol.RateAtFinalizationClaimStore, Foundation.Data, Foundation.Data, Swift.Duration?
+Ratify.freshnessUnverified [Var] -> Swift.String
 Ratify.intersectScopes(_:) [Func] -> [Swift.String], [[Swift.String]]
 Ratify.isSensitiveScope(_:) [Func] -> Swift.Bool, Swift.String
 Ratify.issueChallenge(request:clock:store:random:timeout:) [Func] -> RatifyProtocol.ExpectedChallenge, RatifyProtocol.ChallengeIssueRequest, any RatifyProtocol.AuthoritativeClock, any RatifyProtocol.ChallengeIssuanceStore, (any RatifyProtocol.ChallengeRandomSource)?, Swift.Duration?
@@ -591,13 +599,22 @@ Ratify.keyId(_:) [Func] -> Swift.String, RatifyProtocol.HybridPublicKey
 Ratify.keyRotationStatementDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
 Ratify.keyRotationStatementSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
 Ratify.loadExpectedChallenge(store:namespace:replayEpoch:challenge:timeout:) [Func] -> RatifyProtocol.ExpectedChallenge, any RatifyProtocol.ChallengeIssuanceStore, Swift.String, Swift.Int64, Foundation.Data, Swift.Duration?
+Ratify.maxAllowedValues [Var] -> Swift.Int
+Ratify.maxAudienceIds [Var] -> Swift.Int
 Ratify.maxAudienceMembershipAgeSeconds [Var] -> Swift.Int64
 Ratify.maxChallengeAgeSeconds [Var] -> Swift.Int64
 Ratify.maxCheckpointAcknowledgementBytes [Var] -> Swift.Int
+Ratify.maxConstraintEvaluatorTimeoutSeconds [Var] -> Swift.Int64
+Ratify.maxConstraintEvaluators [Var] -> Swift.Int
 Ratify.maxDelegationCertBytes [Var] -> Swift.Int
 Ratify.maxDelegationLifetimeSeconds [Var] -> Swift.Int64
+Ratify.maxExtensionContextEntries [Var] -> Swift.Int
+Ratify.maxExtensionContextNameBytes [Var] -> Swift.Int
+Ratify.maxExtensionContextValueBytes [Var] -> Swift.Int
+Ratify.maxExtensionTypeBytes [Var] -> Swift.Int
 Ratify.maxFutureSkewSeconds [Var] -> Swift.Int64
 Ratify.maxKeyRotationStatementBytes [Var] -> Swift.Int
+Ratify.maxProfileIdBytes [Var] -> Swift.Int
 Ratify.maxProofBundleBytes [Var] -> Swift.Int
 Ratify.maxRateWindowSeconds [Var] -> Swift.Int64
 Ratify.maxRevocationListBytes [Var] -> Swift.Int
@@ -605,6 +622,7 @@ Ratify.maxRevocationListRefs [Var] -> Swift.Int
 Ratify.maxRevocationPushBytes [Var] -> Swift.Int
 Ratify.maxRevocationPushRefs [Var] -> Swift.Int
 Ratify.maxSafeInteger [Var] -> Swift.Int64
+Ratify.maxSecurityJournalSnapshotBytes [Var] -> Swift.Int
 Ratify.maxStatusEvidenceBatchBytes [Var] -> Swift.Int
 Ratify.maxStatusEvidenceBatchObjects [Var] -> Swift.Int
 Ratify.maxStatusLifetimeSeconds [Var] -> Swift.Int64
@@ -623,6 +641,8 @@ Ratify.newStatusPublisher(store:issuerKey:statusSigner:lifetimeSeconds:timeout:)
 Ratify.operationContextHash(_:) [Func] -> Foundation.Data, RatifyProtocol.OperationContext
 Ratify.preflightProofBundle(_:) [Func] -> RatifyProtocol.PreflightResult, RatifyProtocol.PreflightRequest
 Ratify.presentationSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.ProofBundle
+Ratify.profileAllowedValues [Var] -> Swift.String
+Ratify.profileMaxCount [Var] -> Swift.String
 Ratify.protocolClaimId(namespace:replayEpoch:challenge:) [Func] -> Swift.String, Swift.String, Swift.Int64, Foundation.Data
 Ratify.protocolClaimId(namespace:replayEpoch:digest:) [Func] -> Swift.String, Swift.String, Swift.Int64, Foundation.Data
 Ratify.publishReceipt(_:using:timeout:) [Func] -> Foundation.Data, RatifyProtocol.CommittedOutcome, any RatifyProtocol.ReceiptPublisher, Swift.Duration?
@@ -641,6 +661,7 @@ Ratify.revocationStatusForCert(_:issuerId:certId:statusKeyEpoch:statusKey:policy
 Ratify.revocationStatusFromJournal(store:issuerId:certId:epoch:key:policy:now:timeout:) [Func] -> RatifyProtocol.RevocationStatusResult, any RatifyProtocol.SecurityJournalStore, Swift.String, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64, Swift.Duration?
 Ratify.scopeVocabulary() [Func] -> [Swift.String]
 Ratify.scopeWildcards() [Func] -> [Swift.String : [Swift.String]]
+Ratify.securityJournalConflictMessage [Var] -> Swift.String
 Ratify.securityJournalSnapshotDigest(_:) [Func] -> Swift.String, Foundation.Data
 Ratify.sessionContextBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.SessionContextInputs
 Ratify.signDelegationCert(_:key:) [Func] -> RatifyProtocol.DelegationCert, RatifyProtocol.DelegationCert, RatifyProtocol.SoftwarePrivateKey
@@ -670,6 +691,7 @@ Ratify.signWitnessEntry(_:key:) [Func] -> RatifyProtocol.WitnessEntry, RatifyPro
 Ratify.signWitnessEntry(_:signer:) [Func] -> RatifyProtocol.WitnessEntry, RatifyProtocol.WitnessEntry, any RatifyProtocol.ExternalSigner
 Ratify.signWitnessEntry(_:with:) [Func] -> RatifyProtocol.WitnessEntry, RatifyProtocol.WitnessEntry, RatifyProtocol.SigningKey
 Ratify.signingMessage(_:signable:) [Func] -> Foundation.Data, RatifyProtocol.ObjectType, Foundation.Data
+Ratify.signingMessageSize [Var] -> Swift.Int
 Ratify.statementBodyDigest(objectTypeCode:signableBody:) [Func] -> Foundation.Data, Swift.UInt16, Foundation.Data
 Ratify.statusEvidenceDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationList
 Ratify.statusEvidenceDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationPush
@@ -678,6 +700,7 @@ Ratify.transactionContextHash(_:) [Func] -> Foundation.Data, RatifyProtocol.Tran
 Ratify.transactionPartyRequestHash(_:requiredScope:) [Func] -> Foundation.Data, Foundation.Data, Swift.String
 Ratify.transactionReceiptSignBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.TransactionReceipt
 Ratify.transitionRevocationStatusEpoch(_:issuerId:nextEpoch:nextStatusKey:) [Func] -> RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationStatusState, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey
+Ratify.tzdbVersion [Var] -> Swift.String
 Ratify.validId(_:) [Func] -> Swift.Bool, Swift.String
 Ratify.validReleaseRecordOutcome(_:reason:) [Func] -> Swift.Bool, RatifyProtocol.ReleaseStatus, Swift.String
 Ratify.validateRequestContext(_:) [Func] -> (), RatifyProtocol.ConstraintContext

@@ -237,7 +237,8 @@ class ClaimTest {
     @Test fun singleDeviceReleaseRequiresComponentAck() = runBlocking {
         val corpus = Corpus.load("lifecycle-scenarios.json")
         val expectedCounts = mapOf("device_release_requires_component_ack" to 6,
-            "device_power_loss_before_ack" to 9, "device_power_loss_after_ack" to 8)
+            "device_power_loss_before_ack" to 9, "device_power_loss_after_ack" to 8,
+            "device_checkpoint_storage_full" to 7, "device_offline_recovery_upload" to 13)
         val scenarios = corpus.arr("profile_scenarios").filter { expectedCounts.containsKey(it.getString("name")) }
         assertEquals(expectedCounts.size, scenarios.size)
         val keys = Corpus.load("keys.json").getJSONArray("keys")
@@ -308,8 +309,9 @@ class ClaimTest {
                 }
                 "device_submit" -> {
                     assertEquals(at, setOf("op", "expect"), step.keys().asSequence().toSet())
-                    assertEquals(at, if (want.has("device_error")) setOf("device_error") else setOf("acknowledged"),
-                        want.keys().asSequence().toSet())
+                    val expectedKeys = want.keys().asSequence().toSet()
+                    assertEquals(at, expectedKeys, expectedKeys.intersect(setOf("device_error", "acknowledged")))
+                    org.junit.Assert.assertTrue(at, want.has("device_error") || want.has("acknowledged"))
                     val reply = device.submitPending()
                     assertEquals(at, want.optString("device_error").ifEmpty { null }, reply.failure)
                     val expected = want.optJSONArray("acknowledged")
@@ -340,9 +342,11 @@ class ClaimTest {
                 }
                 "upload" -> {
                     assertEquals(at, setOf("op", "expect"), step.keys().asSequence().toSet())
-                    assertEquals(at, setOf("uploaded"), want.keys().asSequence().toSet())
-                    val expected = want.getJSONArray("uploaded")
-                    assertEquals(at, (0 until expected.length()).map(expected::getLong), device.upload())
+                    assertEquals(at, if (want.has("uploaded")) setOf("uploaded") else emptySet(),
+                        want.keys().asSequence().toSet())
+                    val expected = want.optJSONArray("uploaded")
+                    assertEquals(at, expected?.let { (0 until it.length()).map(it::getLong) } ?: emptyList<Long>(),
+                        device.upload())
                 }
                 else -> error("$at: unsupported operation")
             }

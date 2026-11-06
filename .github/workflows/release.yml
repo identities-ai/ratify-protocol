@@ -37,6 +37,11 @@ on:
         required: false
         default: ''
         type: string
+      mobile_candidate_run:
+        description: 'Recovery only: successful dry-run ID containing the exact mobile candidates'
+        required: false
+        default: ''
+        type: string
 
 env:
   # Normalise the ref so both push and workflow_dispatch use the same variable.
@@ -56,6 +61,7 @@ env:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -282,7 +288,8 @@ jobs:
 
   # ──────────────────────────────────────────────────────────────────────────
   # A v2 dry run builds candidates. A tag verifies the prebuilt draft assets;
-  # rebuilding after the checksum was committed would break SwiftPM provenance.
+  # a manual recovery run can read the same successful dry-run artifact.
+  # Rebuilding after the checksum was committed would break SwiftPM provenance.
   mobile-candidates:
     name: Mobile SDK release candidates
     if: needs.gate-tests.outputs.line == 'v2'
@@ -317,13 +324,20 @@ jobs:
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         env:
           GH_TOKEN: ${{ github.token }}
+          MOBILE_CANDIDATE_RUN: ${{ inputs.mobile_candidate_run }}
         run: |
-          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
           mkdir -p dist/mobile
-          gh release download "$RELEASE_TAG" -D dist/mobile
+          if [ -n "$MOBILE_CANDIDATE_RUN" ]; then
+            [[ "$MOBILE_CANDIDATE_RUN" =~ ^[0-9]+$ ]]
+            gh run download "$MOBILE_CANDIDATE_RUN" -n mobile-v2-candidates -D dist/mobile
+          else
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+            gh release download "$RELEASE_TAG" -D dist/mobile
+          fi
           python3 scripts/verify-mobile-staging.py "$RELEASE_TAG" dist/mobile
           run_id=$(python3 -c 'import json; print(json.load(open("dist/mobile/manifest.json"))["workflow_run"])')
           commit=$(python3 -c 'import json; print(json.load(open("dist/mobile/manifest.json"))["commit"])')
+          if [ -n "$MOBILE_CANDIDATE_RUN" ]; then test "$run_id" = "$MOBILE_CANDIDATE_RUN"; fi
           test "$(gh run view "$run_id" --json headSha --jq .headSha)" = "$commit"
           test "$(gh run view "$run_id" --json conclusion --jq .conclusion)" = success
       - uses: actions/upload-artifact@v7
@@ -351,10 +365,20 @@ jobs:
         if: ${{ needs.gate-tests.outputs.line == 'v2' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         env:
           GH_TOKEN: ${{ github.token }}
+          MOBILE_CANDIDATE_RUN: ${{ inputs.mobile_candidate_run }}
         run: |
           mkdir -p dist/mobile
-          gh release download "$RELEASE_TAG" -D dist/mobile
+          if [ -n "$MOBILE_CANDIDATE_RUN" ]; then
+            [[ "$MOBILE_CANDIDATE_RUN" =~ ^[0-9]+$ ]]
+            gh run download "$MOBILE_CANDIDATE_RUN" -n mobile-v2-candidates -D dist/mobile
+          else
+            gh release download "$RELEASE_TAG" -D dist/mobile
+          fi
           python3 scripts/verify-mobile-staging.py "$RELEASE_TAG" dist/mobile
+          if [ -n "$MOBILE_CANDIDATE_RUN" ]; then
+            test "$(python3 -c 'import json; print(json.load(open("dist/mobile/manifest.json"))["workflow_run"])')" = "$MOBILE_CANDIDATE_RUN"
+            test "$(gh run view "$MOBILE_CANDIDATE_RUN" --json conclusion --jq .conclusion)" = success
+          fi
       - name: Sign and validate Kotlin deployment
         id: stage
         if: ${{ needs.gate-tests.outputs.line == 'v2' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
@@ -1319,6 +1343,7 @@ jobs:
             esac
           } >> "$GITHUB_ENV"
       - name: create release
+        if: ${{ inputs.mobile_candidate_run == '' }}
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}   # required for workflow_dispatch (no tag in ref)
@@ -1364,3 +1389,12 @@ jobs:
             - **Trademark:** Ratify Protocol™ and identities.ai™ are trademarks of Identities.AI, Inc.
             - **Patent:** U.S. patent application pending.
             - **License:** Apache-2.0 (code) · CC-BY-4.0 (specification); see [docs/LICENSES.md](https://github.com/identities-ai/ratify-protocol/blob/main/docs/LICENSES.md).
+      - name: Preserve final release assets for manual draft publication
+        if: ${{ inputs.mobile_candidate_run != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-assets
+          path: |
+            ratify-testvectors-*.tar.gz
+            c-artifacts/*
+          if-no-files-found: error

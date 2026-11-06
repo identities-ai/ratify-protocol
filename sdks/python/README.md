@@ -7,7 +7,7 @@
 
 Hybrid signatures: every signature is Ed25519 plus ML-DSA-65 (NIST FIPS 204), and both must verify, so a forger has to break both algorithms.
 
-Byte-identical interoperability with the Go, TypeScript, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package implements Protocol v1 at `ratify_protocol` and Protocol v2 (version `2.0.0-beta.1`, a prerelease) at `ratify_protocol.v2`, installed with the `protocol-v2` extra. The v2 module runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
+Byte-identical interoperability with the Go, TypeScript, Rust, and C/C++ reference implementations. Validated against the **79 canonical test vectors** (Protocol v1) on every CI run. This package implements Protocol v1 at `ratify_protocol` and Protocol v2 (version `2.0.0-beta.2`, a prerelease) at `ratify_protocol.v2`, installed with the `protocol-v2` extra. The v2 module runs every file in the shared `testvectors/v2` corpus and the cross-SDK fixtures of every other SDK.
 
 ## What is Ratify Protocol?
 
@@ -30,13 +30,13 @@ at `ratify_protocol` and Protocol v2 at `ratify_protocol.v2`.
 
 ```bash
 # Protocol v1 and Protocol v2
-pip install "ratify-protocol[protocol-v2]==2.0.0b1"
+pip install "ratify-protocol[protocol-v2]==2.0.0b2"
 
 # Protocol v1 only, on the v1 maintenance release (v1.0.0-alpha.21)
 pip install "ratify-protocol==1.0.0a21"
 ```
 
-The base install keeps v1's requirements: `cryptography` (Ed25519 via OpenSSL), `pqcrypto>=0.3.4` (ML-DSA-65) and `tzdata`. Both binary dependencies ship wheels for Linux / macOS / Windows on CPython 3.10+. This matters because every published version of this package is a prerelease, so pip treats `2.0.0b1` as the newest release for anyone who installs or upgrades without a pin: a v1 user who upgrades or rebuilds lands on this release. The v1 API in it is unchanged, and `import ratify_protocol` never imports `ratify_protocol.v2`. Protocol v2's own requirements, the native signing extension `ratify-protocol-native-v2` and the IANA `tzdata` 2025.3 release, come only with the `protocol-v2` extra. To stay on the v1 release line, pin `ratify-protocol<2` or `ratify-protocol==1.0.0a21`.
+The base install keeps v1's requirements: `cryptography` (Ed25519 via OpenSSL), `pqcrypto>=0.3.4` (ML-DSA-65) and `tzdata`. Both binary dependencies ship wheels for Linux / macOS / Windows on CPython 3.10+. This matters because every published version of this package is a prerelease, so pip treats `2.0.0b2` as the newest release for anyone who installs or upgrades without a pin: a v1 user who upgrades or rebuilds lands on this release. The v1 API in it is unchanged, and `import ratify_protocol` never imports `ratify_protocol.v2`. Protocol v2's own requirements, the native signing extension `ratify-protocol-native-v2` and the IANA `tzdata` 2025.3 release, come only with the `protocol-v2` extra. To stay on the v1 release line, pin `ratify-protocol<2` or `ratify-protocol==1.0.0a21`.
 
 The Protocol v2 API is described in [Protocol v2](#protocol-v2) below.
 Runnable v2 programs are in
@@ -49,7 +49,7 @@ and the upgrade guide is
 One function, `hybrid_keypair_from_seeds`, needs an optional add-on:
 
 ```bash
-pip install 'ratify-protocol[native]==2.0.0b1'
+pip install 'ratify-protocol[native]==2.0.0b2'
 ```
 
 Everything else works without it: verifying proofs, issuing delegations,
@@ -318,11 +318,11 @@ The following surface first shipped in the v1 alpha.16 release and is available 
 
 ## Protocol v2
 
-Protocol v2 (version `2.0.0-beta.1`, a prerelease) is the `ratify_protocol.v2`
+Protocol v2 (version `2.0.0-beta.2`, a prerelease) is the `ratify_protocol.v2`
 module, installed with the `protocol-v2` extra:
 
 ```bash
-pip install "ratify-protocol[protocol-v2]==2.0.0b1"
+pip install "ratify-protocol[protocol-v2]==2.0.0b2"
 ```
 
 ```python

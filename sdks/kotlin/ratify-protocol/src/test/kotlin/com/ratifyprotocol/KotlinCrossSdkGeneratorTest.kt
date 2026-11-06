@@ -367,7 +367,7 @@ private class KotlinCrossSdkGenerator {
             scenario("allow_withheld_past_horizon", "The allow horizon expires before release.", 0xA4,
                 rootShort, intermediateCurrent, input, NOW + 60, NOW + 60),
         ))
-        return obj("version" to 2, "sdk" to "kotlin", "sdk_version" to "2.0.0-beta.1",
+        return obj("version" to 2, "sdk" to "kotlin", "sdk_version" to "2.0.0-beta.2",
             "generator" to "RATIFY_GENERATE_KOTLIN_FIXTURE=1 ./gradlew :ratify-protocol:testDebugUnitTest --tests com.ratifyprotocol.KotlinCrossSdkGeneratorTest",
             "description" to "Fresh Kotlin SDK keys and hedged ML-DSA-65 signatures; verifier and release observations use the Kotlin public API.",
             "kind_object_type_codes" to obj("delegation_certificate" to 1, "proof_bundle" to 2,

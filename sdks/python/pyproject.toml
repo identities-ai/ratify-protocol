@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ratify-protocol"
-version = "2.0.0b1"
+version = "2.0.0b2"
 description = "Delegated-authority proofs for human-agent and agent-agent interactions — Python reference SDK for the Ratify Protocol."
 readme = "README.md"
 authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
@@ -61,7 +61,7 @@ native = [
 # The extra name must not parse as a version: pip 25.0 fails to resolve this
 # package at all, with or without extras, when one does (as "v2" would).
 protocol-v2 = [
-    "ratify-protocol-native-v2==2.0.0b1",
+    "ratify-protocol-native-v2==2.0.0b2",
     "tzdata==2025.3",
 ]
 dev = [

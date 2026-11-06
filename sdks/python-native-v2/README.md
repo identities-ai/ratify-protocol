@@ -6,7 +6,7 @@ Protocol v2 module (`ratify_protocol.v2`) of
 SDK with its `protocol-v2` extra and this extension comes with it:
 
 ```bash
-pip install "ratify-protocol[protocol-v2]==2.0.0b1"
+pip install "ratify-protocol[protocol-v2]==2.0.0b2"
 ```
 
 Applications never import this package directly.

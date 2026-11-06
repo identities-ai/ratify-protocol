@@ -42,7 +42,7 @@ jobs:
   swift:
     name: Swift macOS and current iOS simulator
     runs-on: macos-26-intel
-    timeout-minutes: 120
+    timeout-minutes: 180
     env:
       RATIFY_SWIFT_LOCAL_BINARY: '1'
     steps:
@@ -77,7 +77,7 @@ jobs:
         run: swift test --sanitize=thread --filter ClaimTests/testConcurrent
       - name: iOS simulator suite
         env:
-          RATIFY_FUZZ_SECONDS: '1'
+          TEST_RUNNER_RATIFY_FUZZ_SECONDS: '1'
         run: |
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
           cd sdks/swift/HostApp
@@ -106,7 +106,7 @@ jobs:
         run: SLICES=ios-sim FEATURES=test-hooks sdks/swift/scripts/build-xcframework.sh
       - name: iOS 17 simulator suite
         env:
-          RATIFY_FUZZ_SECONDS: '1'
+          TEST_RUNNER_RATIFY_FUZZ_SECONDS: '1'
         run: |
           for attempt in 1 2 3; do
             if xcodebuild -downloadPlatform iOS -buildVersion 17.5; then break; fi

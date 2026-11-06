@@ -10,8 +10,8 @@ import Foundation
 
 // The release-prepare step fills these from the CI-built draft asset. Source
 // builds opt into their local XCFramework with RATIFY_SWIFT_LOCAL_BINARY=1.
-let releaseAssetURL = ""
-let releaseAssetChecksum = ""
+let releaseAssetURL = "https://github.com/identities-ai/ratify-protocol/releases/download/v2.0.0-beta.2/RatifyProtocolFFI.xcframework.zip"
+let releaseAssetChecksum = "9e38fa532a40cd3c9db35e5843cb9290600ace0a884c54d58cc545209b174194"
 let useLocalBinary = ProcessInfo.processInfo.environment["RATIFY_SWIFT_LOCAL_BINARY"] == "1"
 let ffi: Target
 if useLocalBinary || releaseAssetURL.isEmpty {

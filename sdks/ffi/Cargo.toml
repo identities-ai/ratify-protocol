@@ -1,6 +1,6 @@
 [package]
 name = "ratify-protocol-ffi"
-version = "2.0.0-beta.1"
+version = "2.0.0-beta.2"
 edition = "2021"
 license = "Apache-2.0"
 description = "Internal FFI layer for the Ratify Protocol Swift and Kotlin SDKs. Not a public API."
@@ -24,7 +24,7 @@ test-hooks = ["ratify-protocol/test-hooks"]
 
 [dependencies]
 # Exact pin: this crate wraps one core version; release-sync checks it.
-ratify-protocol = { path = "../rust", version = "=2.0.0-beta.1" }
+ratify-protocol = { path = "../rust", version = "=2.0.0-beta.2" }
 uniffi = "=0.32.2"
 thiserror = "2"
 getrandom = "0.2"

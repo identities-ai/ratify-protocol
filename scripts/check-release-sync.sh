@@ -244,10 +244,16 @@ if not cross_sdk_default or cross_sdk_default.group(1) != ts_version:
 # a fixture from another release would claim interoperability nobody ran.
 # Go may also record the untagged "+dev" form of the line.
 for sdk, want in (("go", ts_version), ("typescript", ts_version), ("python", py_version),
-                  ("rust", ts_version), ("c", ts_version)):
+                  ("rust", ts_version), ("c", ts_version), ("swift", ts_version),
+                  ("kotlin", ts_version)):
     got = json.loads(read(f"testvectors/v2/cross-sdk/{sdk}.json")).get("sdk_version", "missing")
     if got != want and not (sdk == "go" and got == want + "+dev"):
         fail(f"testvectors/v2/cross-sdk/{sdk}.json sdk_version {got} is not the v2 line {want}; regenerate it")
+for generator in ("sdks/swift/Tests/RatifyProtocolTests/SwiftCrossSdkGenerator.swift",
+                  "sdks/kotlin/ratify-protocol/src/test/kotlin/com/ratifyprotocol/KotlinCrossSdkGeneratorTest.kt"):
+    match = re.search(r'"sdk_version"\s*(?::|to)\s*"([^"]+)"', read(generator))
+    if not match or match.group(1) != ts_version:
+        fail(f"{generator} sdk_version must match the v2 line {ts_version}")
 for line in read("docs/V2_REFERENCE_COMPATIBILITY.md").splitlines():
     if line.startswith("| ") and "| `sdks/" in line:
         for found in re.findall(r"`(2\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+|(?:a|b|rc)\d+))`", line):
@@ -272,6 +278,8 @@ install_pins = {
     "sdks/python-native-v2/README.md": [f'pip install "ratify-protocol[protocol-v2]=={py_version}"'],
     "sdks/rust/README.md": [f'ratify-protocol = "{rust_version}"'],
     "sdks/go/README.md": [f"go get github.com/identities-ai/ratify-protocol/v2@v{v2_version}"],
+    "sdks/swift/README.md": [f'exact: "{v2_version}"'],
+    "sdks/kotlin/README.md": [f'implementation("com.ratifyprotocol:ratify-protocol:{v2_version}")'],
     "README.md": [
         f"go get github.com/identities-ai/ratify-protocol/v2@v{v2_version}",
         f'pip install "ratify-protocol[protocol-v2]=={py_version}"',

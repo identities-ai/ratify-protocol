@@ -1,8 +1,8 @@
 [package]
 name = "ratify-protocol-native-v2"
 # Lockstep with the ratify-protocol Python SDK, whose [protocol-v2] extra pins
-# this extension exactly (2.0.0b1 in PEP 440 form).
-version = "2.0.0-beta.1"
+# this extension exactly (2.0.0b2 in PEP 440 form).
+version = "2.0.0-beta.2"
 edition = "2021"
 license = "Apache-2.0"
 description = "Native key generation, hybrid signing and hybrid verification for the Ratify Protocol v2 Python SDK"

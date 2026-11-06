@@ -1,8 +1,14 @@
 # Ratify Protocol for Swift
 
-Ratify verifies signed agent authority before an iOS or macOS app acts on it. This v2 SDK is being built for full protocol API parity through hand-written Swift types. The cryptographic and verifier implementation is the repository's Rust v2 core. `RatifyProtocolTestSupport` contains reference stores for vectors and integration tests; applications must supply stores that meet the atomicity and durability requirements of SPEC-v2 Part B.
+Ratify verifies signed agent authority before an iOS or macOS app acts on it. This v2 SDK provides hand-written Swift types over the repository's Rust v2 core. `RatifyProtocolTestSupport` contains reference stores for vectors and integration tests; applications must supply stores that meet the atomicity and durability requirements of SPEC-v2 Part B.
 
-The package supports iOS 17+ and macOS 14+. The source tree currently uses a local XCFramework path in [`Package.swift`](../../Package.swift). Release preparation fills in the checksummed release asset URL; source builds can still use the local framework with `RATIFY_SWIFT_LOCAL_BINARY=1`. This branch is a release candidate, not a published SwiftPM version.
+The package supports iOS 17+ and macOS 14+. Add the tagged Swift package to your app:
+
+```swift
+.package(url: "https://github.com/identities-ai/ratify-protocol.git", exact: "2.0.0-beta.2")
+```
+
+Select the `RatifyProtocol` product. The tagged [`Package.swift`](../../Package.swift) pins the release XCFramework by SHA-256. Source builds can use a locally built framework with `RATIFY_SWIFT_LOCAL_BINARY=1`.
 
 ## Build and test from source
 

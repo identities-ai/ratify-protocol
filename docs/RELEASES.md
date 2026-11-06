@@ -244,7 +244,7 @@ Any failure in either phase aborts. `release-tag` refuses to run if main's versi
 6. **Commit (signed-off), push the branch, open the PR.** CI and the DCO check run on the release PR exactly as on any other PR.
 6a. **Complete the draft release notes.** When `docs/releases/<version>.md` exists, its "Evidence (fill in at the tag)" section holds placeholders in angle brackets: `<sha>`, `<re-measure at the tag>`, `<result and date>`, `<records>`, and `<record>`. Replace every one with a result measured on the release branch (per-SDK test counts, the armv7 C ABI run, fuzzing, concurrency and issuer-collision records, and the review closure record), and remove the draft banner, in the release PR. `` grep -nE '`<[a-z][^>]*>`' docs/releases/<version>.md `` must print nothing before the PR merges. The tag commit SHA is known only after the merge: point that line at the GitHub release, and record the SHA in the release body when the tag is pushed.
 
-6b. **Regenerate the v2 cross-SDK fixtures (v2 line only).** After the version bump, each SDK writes its `testvectors/v2/cross-sdk/<sdk>.json` from fresh keys at the new version, and every SDK verifies all five: `go run ./cmd/ratify-v2-cross-sdk -sdk-version <version>`; `npm run generate:cross-sdk` in `sdks/typescript`; `python tests_v2/gen_cross_sdk_fixture.py` in `sdks/python` with the `protocol-v2` extra and the native extension installed; `cargo run --example v2_cross_sdk_fixture` in `sdks/rust`; `RATIFY_WRITE_CROSS_SDK=1 cargo test --test v2c_cross_sdk` in `sdks/c`. The release-sync check refuses a fixture whose `sdk_version` is not the release being prepared.
+6b. **Regenerate the v2 cross-SDK fixtures (v2 line only).** After the version bump, each SDK writes its `testvectors/v2/cross-sdk/<sdk>.json` from fresh keys at the new version, and every SDK verifies all seven: `go run ./cmd/ratify-v2-cross-sdk -sdk-version <version>`; `npm run generate:cross-sdk` in `sdks/typescript`; `python tests_v2/gen_cross_sdk_fixture.py` in `sdks/python` with the `protocol-v2` extra and the native extension installed; `cargo run --example v2_cross_sdk_fixture` in `sdks/rust`; `RATIFY_WRITE_CROSS_SDK=1 cargo test --test v2c_cross_sdk` in `sdks/c`; `RATIFY_SWIFT_LOCAL_BINARY=1 RATIFY_GENERATE_SWIFT_FIXTURE=1 swift test --filter SwiftCrossSdkGeneratorTests` in `sdks/swift` after building the macOS XCFramework; and `RATIFY_GENERATE_KOTLIN_FIXTURE=1 ./gradlew :ratify-protocol:testDebugUnitTest --tests com.ratifyprotocol.KotlinCrossSdkGeneratorTest` in `sdks/kotlin` after building the Android FFI. The release-sync check refuses a fixture whose `sdk_version` is not the release being prepared.
 
 **Mobile v2 staging, before the release PR merges:** Run `mobile-v2.yml` by
 workflow dispatch on the release branch's version-bump commit X. Download its
@@ -264,6 +264,15 @@ check before creating any tag. That check also requires zero pending mobile API
 inventory entries and all seven cross-SDK fixture files. Do not merge the PR while the draft or staged
 manifest is missing. After publication, resolve SwiftPM from the final tag and
 release URL, and resolve both AARs from Maven staging before releasing them.
+Before tagging a v2 release, verify the `com.ratifyprotocol` namespace in
+Maven Central and configure `CENTRAL_PORTAL_USERNAME`,
+`CENTRAL_PORTAL_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`,
+`MAVEN_GPG_PASSPHRASE`, and `MAVEN_GPG_KEY_ID` as repository secrets. The
+release workflow signs the exact draft Kotlin staging files, waits for Central
+to validate them, and compares staged AAR and POM bytes with the bundle before
+any v2 registry publication. It publishes the validated deployment after the
+other registry jobs succeed. A missing secret or failed Central validation
+blocks the coordinated release.
 
 **Phase 2: `make release-tag` (after the PR merges):**
 

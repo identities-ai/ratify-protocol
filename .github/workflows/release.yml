@@ -11,10 +11,9 @@ run-name: >-
 
 # Tag-driven publishing. Push a tag matching v* (e.g. v1.0.0-alpha.6) and this
 # workflow runs the full CI matrix, then publishes each SDK to its registry
-# only if all tests pass. Per-SDK publish steps are conditional and continue
-# on individual failure so a partial failure on one registry doesn't block
-# the others. See docs/RELEASES.md for the full release process and how to
-# recover from partial-publish states.
+# only if all tests pass. A v2 release also validates the Kotlin bundle in
+# Maven Central before registry publication. See docs/RELEASES.md for the
+# release process and recovery from partial-publish states.
 
 on:
   push:
@@ -336,6 +335,49 @@ jobs:
           retention-days: 14
           compression-level: 0
 
+  central-ready:
+    name: Validate Kotlin bundle in Maven Central
+    needs: [gate-tests, mobile-candidates]
+    if: ${{ always() && needs.gate-tests.result == 'success' && (needs.gate-tests.outputs.line != 'v2' || needs.mobile-candidates.result == 'success') }}
+    runs-on: ubuntu-latest
+    outputs:
+      deployment: ${{ steps.stage.outputs.deployment }}
+    steps:
+      - uses: actions/checkout@v7
+        if: ${{ needs.gate-tests.outputs.line == 'v2' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: Download exact draft assets
+        if: ${{ needs.gate-tests.outputs.line == 'v2' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist/mobile
+          gh release download "$RELEASE_TAG" -D dist/mobile
+          python3 scripts/verify-mobile-staging.py "$RELEASE_TAG" dist/mobile
+      - name: Sign and validate Kotlin deployment
+        id: stage
+        if: ${{ needs.gate-tests.outputs.line == 'v2' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        env:
+          CENTRAL_PORTAL_USERNAME: ${{ secrets.CENTRAL_PORTAL_USERNAME }}
+          CENTRAL_PORTAL_PASSWORD: ${{ secrets.CENTRAL_PORTAL_PASSWORD }}
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          MAVEN_GPG_KEY_ID: ${{ secrets.MAVEN_GPG_KEY_ID }}
+        run: |
+          set -euo pipefail
+          for name in CENTRAL_PORTAL_USERNAME CENTRAL_PORTAL_PASSWORD MAVEN_GPG_PRIVATE_KEY MAVEN_GPG_PASSPHRASE MAVEN_GPG_KEY_ID; do
+            test -n "${!name}" || { echo "::error::Missing $name"; exit 1; }
+          done
+          printf '%s\n' "$MAVEN_GPG_PRIVATE_KEY" | gpg --batch --import
+          printf '%s' "$MAVEN_GPG_PASSPHRASE" > "$RUNNER_TEMP/maven-passphrase"
+          chmod 600 "$RUNNER_TEMP/maven-passphrase"
+          python3 scripts/prepare-mobile-central.py "${RELEASE_TAG#v}" dist/mobile/kotlin-maven-staging.zip dist/mobile/central-bundle.zip --key "$MAVEN_GPG_KEY_ID" --passphrase-file "$RUNNER_TEMP/maven-passphrase"
+          python3 scripts/central-portal.py stage --bundle dist/mobile/central-bundle.zip | tee "$RUNNER_TEMP/central-stage.log"
+          deployment=$(sed -n 's/^DEPLOYMENT_ID=//p' "$RUNNER_TEMP/central-stage.log")
+          test -n "$deployment"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
+
   # PyPI — Trusted Publisher (OIDC). No long-lived secret. Requires that the
   # 'pypi-publish' environment exist on the repo and that PyPI is configured
   # with this repo + workflow as a trusted publisher for the project. See
@@ -632,7 +674,7 @@ jobs:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.outputs.line == 'v2' }}
     # The [protocol-v2] extra pins ratify-protocol-native-v2 exactly, so the
     # native package must be on PyPI first or the extra is uninstallable.
-    needs: [gate-tests, publish-pypi-native-v2]
+    needs: [gate-tests, central-ready, publish-pypi-native-v2]
     runs-on: ubuntu-latest
     environment:
       name: pypi-publish
@@ -810,7 +852,7 @@ jobs:
   publish-pypi-native-v2:
     name: Publish v2 native extra to PyPI
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
-    needs: verify-pypi-native-v2
+    needs: [verify-pypi-native-v2, central-ready]
     runs-on: ubuntu-latest
     environment:
       name: pypi-publish
@@ -865,7 +907,7 @@ jobs:
   publish-crates:
     name: Publish to crates.io
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
-    needs: gate-tests
+    needs: [gate-tests, central-ready]
     runs-on: ubuntu-latest
     environment:
       name: crates-publish
@@ -949,7 +991,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   publish-npm:
     name: Publish to npm
-    needs: gate-tests
+    needs: [gate-tests, central-ready]
     runs-on: ubuntu-latest
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && vars.NPM_PUBLISH_ENABLED == 'true' }}
     environment:
@@ -1057,7 +1099,7 @@ jobs:
   publish-go:
     name: Publish Go (auto via pkg.go.dev)
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
-    needs: gate-tests
+    needs: [gate-tests, central-ready]
     runs-on: ubuntu-latest
     steps:
       - name: trigger pkg.go.dev index refresh
@@ -1172,10 +1214,28 @@ jobs:
   # build failed is itself only "skipped", and the failed build is what blocks
   # the release.
   # ──────────────────────────────────────────────────────────────────────────
+  central-publish:
+    name: Publish Kotlin to Maven Central
+    needs: [gate-tests, central-ready, publish-pypi-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go]
+    if: ${{ always() && needs.gate-tests.outputs.line == 'v2' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.central-ready.result == 'success' && needs.publish-pypi-v2.result == 'success' && needs.publish-pypi-native-v2.result == 'success' && needs.publish-crates.result == 'success' && needs.publish-npm.result == 'success' && needs.publish-go.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - name: Publish validated deployment
+        env:
+          CENTRAL_PORTAL_USERNAME: ${{ secrets.CENTRAL_PORTAL_USERNAME }}
+          CENTRAL_PORTAL_PASSWORD: ${{ secrets.CENTRAL_PORTAL_PASSWORD }}
+          DEPLOYMENT_ID: ${{ needs.central-ready.outputs.deployment }}
+        run: |
+          test -n "$DEPLOYMENT_ID"
+          python3 scripts/central-portal.py publish --deployment "$DEPLOYMENT_ID"
+
   github-release:
     name: Create GitHub Release
-    needs: [gate-tests, mobile-candidates, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-pypi-v2, build-pypi-native-v2, verify-pypi-native-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
-    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    needs: [gate-tests, mobile-candidates, central-ready, central-publish, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-pypi-v2, build-pypi-native-v2, verify-pypi-native-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
+    if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' && (needs.gate-tests.outputs.line != 'v2' || needs.central-publish.result == 'success') && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1233,8 +1293,8 @@ jobs:
               go_module="github.com/identities-ai/ratify-protocol/v2"; py_spec="\"ratify-protocol[protocol-v2]==${py_version}\""
               spec_file="SPEC-v2.md"; vectors_dir="testvectors/v2"
               case "$tag_clean" in
-                *-*) summary="Protocol v2 prerelease. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. Review so far is the project's own pre-release security review; external independent review and outside interoperability are 2.0.0 gates, so this release carries no production security claim. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md." ;;
-                *)   summary="Protocol v2. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, and C SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md." ;;
+                *-*) summary="Protocol v2 prerelease. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, C, Swift, and Kotlin SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. SwiftPM and Maven Central packages use the same tag and version; see sdks/swift/README.md and sdks/kotlin/README.md for installation. Review so far is the project's own pre-release security review; external independent review and outside interoperability are 2.0.0 gates, so this release carries no production security claim. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md." ;;
+                *)   summary="Protocol v2. Not backward compatible with v1: v2 uses a separate key ID namespace, wire schemas, and strict dispatch, and v1 keys and proofs are never accepted as v2. At this tag the Go, TypeScript, Python, Rust, C, Swift, and Kotlin SDKs run every testvectors/v2 file, including the stateful verifier, lifecycle, and cross-SDK fixtures. SwiftPM and Maven Central packages use the same tag and version; see sdks/swift/README.md and sdks/kotlin/README.md for installation. See SPEC-v2.md section 8, docs/V2_REFERENCE_COMPATIBILITY.md, and the upgrade guide docs/PROTOCOL_V2_MIGRATION.md." ;;
               esac
               ;;
             *)

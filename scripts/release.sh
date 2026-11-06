@@ -116,7 +116,7 @@ run_tests() {
 # Each SDK writes its v2 cross-SDK fixture from fresh keys at the bumped
 # version (docs/RELEASES.md step 6b). This must run after bump_versions and
 # before check-release-sync.sh, which refuses a fixture whose sdk_version is
-# not the release being prepared. test-all then has every SDK verify all five.
+# not the release being prepared. Each SDK then verifies all seven.
 # Runs in a subshell so the EXIT trap removes the temporary venv on failure
 # as well as on success.
 regenerate_cross_sdk_fixtures() (
@@ -131,6 +131,10 @@ regenerate_cross_sdk_fixtures() (
   (cd sdks/python && RATIFY_REQUIRE_NATIVE=1 "$work/venv/bin/python" tests_v2/gen_cross_sdk_fixture.py)
   (cd sdks/rust && cargo run --quiet --example v2_cross_sdk_fixture)
   (cd sdks/c && RATIFY_WRITE_CROSS_SDK=1 cargo test --quiet --test v2c_cross_sdk)
+  SLICES=macos FEATURES=test-hooks sdks/swift/scripts/build-xcframework.sh
+  (cd sdks/swift && RATIFY_SWIFT_LOCAL_BINARY=1 RATIFY_GENERATE_SWIFT_FIXTURE=1 swift test --filter SwiftCrossSdkGeneratorTests)
+  ABIS=arm64-v8a FEATURES=test-hooks sdks/kotlin/scripts/build-rust.sh
+  (cd sdks/kotlin && RATIFY_GENERATE_KOTLIN_FIXTURE=1 ./gradlew :ratify-protocol:testDebugUnitTest --tests com.ratifyprotocol.KotlinCrossSdkGeneratorTest)
 )
 
 bump_versions() {
@@ -207,6 +211,13 @@ write("sdks/kotlin/gradle.properties", re.sub(r'^VERSION_NAME=\S+$',
     f'VERSION_NAME={npm_version}', kotlin_props, count=1, flags=re.M))
 for mobile_readme in ("sdks/swift/README.md", "sdks/kotlin/README.md"):
     write(mobile_readme, read(mobile_readme).replace(old_npm, npm_version))
+for generator in ("sdks/swift/Tests/RatifyProtocolTests/SwiftCrossSdkGenerator.swift",
+                  "sdks/kotlin/ratify-protocol/src/test/kotlin/com/ratifyprotocol/KotlinCrossSdkGeneratorTest.kt"):
+    content, count = re.subn(r'("sdk_version"\s*(?:to\s*)?:\s*"|"sdk_version"\s+to\s+")[^"]+',
+                             rf'\g<1>{npm_version}', read(generator), count=1)
+    if count != 1:
+        raise SystemExit(f"bump: missing sdk_version in {generator}")
+    write(generator, content)
 
 # C SDK: crate version, the ratify-protocol dependency pin (used by
 # cargo publish to substitute the path dependency), the cbindgen header
@@ -307,7 +318,9 @@ compat_path = "docs/V2_REFERENCE_COMPATIBILITY.md"
 compat = read(compat_path).split("\n")
 for i, line in enumerate(compat):
     if line.startswith("| ") and "| `sdks/" in line:
-        compat[i] = line.replace(f"`{old_npm}`", f"`{npm_version}`").replace(f"`{old_pyv2}`", f"`{py_version}`")
+        columns = line.split("|")
+        columns[2] = columns[2].replace(f"`{old_npm}`", f"`{npm_version}`").replace(f"`{old_pyv2}`", f"`{py_version}`")
+        compat[i] = "|".join(columns)
 write(compat_path, "\n".join(compat))
 PY
 }

@@ -398,7 +398,7 @@ struct SwiftCrossSdkGenerator {
                 rootEvidence: rootShort, intermediateEvidence: intermediateCurrent,
                 root: root, leaf: leaf, session: session, publishTime: Self.now + 60, releaseTime: Self.now + 60),
         ]
-        return ["version": 2, "sdk": "swift", "sdk_version": "2.0.0-beta.1",
+        return ["version": 2, "sdk": "swift", "sdk_version": "2.0.0-beta.2",
             "generator": "RATIFY_GENERATE_SWIFT_FIXTURE=1 swift test --filter SwiftCrossSdkGeneratorTests",
             "description": "Fresh Swift SDK keys and hedged ML-DSA-65 signatures; verifier and release observations use the Swift public API.",
             "kind_object_type_codes": ["delegation_certificate": 1, "proof_bundle": 2,

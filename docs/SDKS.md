@@ -14,7 +14,7 @@ A protocol with one SDK is a product. A protocol with SDKs everywhere is a proto
 
 ## 2. Current status
 
-Five reference SDKs are published. Swift and Kotlin are in-tree Protocol v2 release candidates; their publication gates and exact evidence are tracked in the [compatibility ledger](V2_REFERENCE_COMPATIBILITY.md).
+The Protocol v2 tree contains seven SDKs. Their publication gates and exact evidence are tracked in the [compatibility ledger](V2_REFERENCE_COMPATIBILITY.md) and [GitHub releases](https://github.com/identities-ai/ratify-protocol/releases).
 
 | Language | Package | Location | Test status |
 |---|---|---|---|
@@ -24,11 +24,11 @@ Five reference SDKs are published. Swift and Kotlin are in-tree Protocol v2 rele
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite; full `testvectors/v2` through the stateful v2 C ABI over the Rust implementation (also run on armv7 Linux, Raspberry Pi 2: 7152 checks, 0 failures, `2.0.0-beta.1`, 2026-10-27) |
 | **Swift (iOS, macOS)** | `RatifyProtocol` SwiftPM candidate | `sdks/swift/` | In-tree v2 corpus and seven-file cross-SDK suite; release CI and hardware evidence gate publication |
-| **Kotlin (Android)** | `com.ratifyprotocol:ratify-protocol:2.0.0-beta.1` candidate | `sdks/kotlin/` | In-tree v2 corpus and seven-file cross-SDK suite; release CI and hardware evidence gate publication |
+| **Kotlin (Android)** | `com.ratifyprotocol:ratify-protocol:2.0.0-beta.2` candidate | `sdks/kotlin/` | In-tree v2 corpus and seven-file cross-SDK suite; release CI and hardware evidence gate publication |
 
-This tree carries two release lines. The v2 line (`2.0.0-beta.1`) covers Go
+This tree carries two release lines. The v2 line (`2.0.0-beta.2`) covers Go
 (module path `/v2`), TypeScript, Rust, C/C++, and Python: the `ratify-protocol`
-distribution (`2.0.0b1`) carries v1 at `ratify_protocol` and v2 at
+distribution (`2.0.0b2`) carries v1 at `ratify_protocol` and v2 at
 `ratify_protocol.v2`, and its `protocol-v2` extra installs the v2 native
 extension `ratify-protocol-native-v2`. The v1 native extra
 `ratify-protocol-native` stays on the v1 line (`1.0.0a21`), and a Python

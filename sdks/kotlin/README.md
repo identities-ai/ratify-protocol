@@ -1,8 +1,16 @@
 # Ratify Protocol for Android
 
-Ratify verifies signed agent authority before an Android app acts on it. This v2 SDK is being built for full protocol API parity through hand-written Kotlin types. The cryptographic and verifier implementation is the repository's Rust v2 core. `ratify-protocol-testing` contains reference stores for vectors and integration tests; applications must supply stores that meet the atomicity and durability requirements of SPEC-v2 Part B.
+Ratify verifies signed agent authority before an Android app acts on it. This v2 SDK provides hand-written Kotlin types over the repository's Rust v2 core. `ratify-protocol-testing` contains reference stores for vectors and integration tests; applications must supply stores that meet the atomicity and durability requirements of SPEC-v2 Part B.
 
-The AAR targets Android API 28+. Its publication coordinates are `com.ratifyprotocol:ratify-protocol:2.0.0-beta.1` and `com.ratifyprotocol:ratify-protocol-testing:2.0.0-beta.1`. The packages are staged locally during development and are not yet available from Maven Central.
+The AAR targets Android API 28+. Install the tagged release from Maven Central:
+
+```kotlin
+repositories { mavenCentral() }
+dependencies {
+    implementation("com.ratifyprotocol:ratify-protocol:2.0.0-beta.2")
+    testImplementation("com.ratifyprotocol:ratify-protocol-testing:2.0.0-beta.2")
+}
+```
 
 ## Build and test from source
 

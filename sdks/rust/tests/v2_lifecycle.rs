@@ -748,7 +748,8 @@ fn lifecycle_scenarios() {
                 "release_forged" => {
                     // Go releases a zero-value CommittedV2Outcome. In Rust the
                     // type is sealed (private fields, no Default), so a forged
-                    // outcome cannot be constructed outside the crate; the
+                    // outcome cannot be constructed outside the crate in an
+                    // ordinary build; the opt-in test-hooks feature is for SDK conformance. The
                     // crate's own unit test releases one and checks this
                     // expectation.
                     assert_eq!(

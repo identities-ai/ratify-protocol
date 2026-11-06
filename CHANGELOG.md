@@ -6,6 +6,19 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 
 ---
 
+## Unreleased mobile SDK candidates
+
+- Added hand-written Swift and Kotlin Protocol v2 APIs over a private Rust
+  UniFFI layer, including typed signing, the live verifier, Part B store
+  interfaces, receipt publication and release, and separate reference test
+  support products.
+- Added iOS 17+ and macOS 14+ SwiftPM packaging and Android API 28+ AAR
+  packaging for three native ABIs. Publication awaits the mobile release
+  gates and owner approval.
+- Added fresh-key, hedged-signature Swift and Kotlin cross-SDK fixtures.
+  All seven implementations verified all seven fixtures and their four verifier
+  and release scenarios in-tree on 2026-11-05.
+
 ## v2.0.0-beta.1 (2026-10-30)
 
 The first beta of Protocol v2 ([`SPEC-v2.md`](SPEC-v2.md)), a breaking,

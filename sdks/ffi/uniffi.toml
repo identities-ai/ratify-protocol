@@ -1,0 +1,7 @@
+[bindings.kotlin]
+package_name = "com.ratifyprotocol.internal.ffi"
+cdylib_name = "ratify_protocol_ffi"
+
+[bindings.swift]
+module_name = "ratify_ffi"
+ffi_module_name = "ratify_ffiFFI"

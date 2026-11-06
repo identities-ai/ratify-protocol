@@ -1,0 +1,65 @@
+# A minimal iOS host app for the Swift test suite on a physical device and
+# for the Keychain tests (a package test bundle has no host app, so iOS
+# gives it neither a device destination nor Keychain access). Generate the
+# project with `xcodegen` in this directory; it runs the same test sources
+# as `swift test`, against the same local package.
+name: RatifyHost
+options:
+  bundleIdPrefix: com.ratifyprotocol.host
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  RatifyProtocol:
+    path: ../../..
+targets:
+  RatifyHost:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "6.0"
+    dependencies:
+      - package: RatifyProtocol
+  RatifyHostTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../Tests/RatifyProtocolTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "6.0"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/RatifyHost.app/RatifyHost"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        # The tests call the test-hooks build's C symbols.
+        ENABLE_TESTABILITY: YES
+    postBuildScripts:
+      - name: Copy the shared corpus
+        basedOnDependencyAnalysis: false
+        script: |
+          # The device cannot read the repository, so the bundle carries the
+          # corpus files the runners read, in their repository layout.
+          root="${SRCROOT}/../../.."
+          dest="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/corpusroot"
+          rm -rf "$dest" && mkdir -p "$dest/sdks/swift" "$dest/sdks/kotlin"
+          cp -R "$root/testvectors" "$dest/"
+          cp "$root/SPEC-v2-ANNEX-A.md" "$dest/"
+          cp "$root/sdks/swift/KEY_STORAGE.md" "$dest/sdks/swift/"
+          cp "$root/sdks/kotlin/KEY_STORAGE.md" "$dest/sdks/kotlin/"
+    dependencies:
+      - target: RatifyHost
+      - package: RatifyProtocol
+        product: RatifyProtocolTestSupport
+schemes:
+  RatifyHost:
+    build:
+      targets:
+        RatifyHost: all
+        RatifyHostTests: [test]
+    test:
+      targets: [RatifyHostTests]

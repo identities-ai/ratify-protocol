@@ -1,0 +1,1250 @@
+ApprovalLedgerBridge [Class]
+ApprovalLedgerBridge.execute(id:clock:) [Func] -> RatifyProtocol.ApprovalReplyBridge, Swift.String, RatifyProtocol.ReferenceStoreBridge
+ApprovalLedgerBridge.init() [Constructor] -> RatifyProtocol.ApprovalLedgerBridge
+ApprovalLedgerBridge.open(id:verifierId:workspaceId:sessionId:agentKey:requiredScope:requestHash:rootA:rootB:) [Func] -> RatifyProtocol.ApprovalReplyBridge, Swift.String, Swift.String, Swift.String, Swift.String, RatifyProtocol.HybridPublicKey, Swift.String, Foundation.Data, RatifyProtocol.HybridPublicKey, RatifyProtocol.HybridPublicKey
+ApprovalLedgerBridge.record(id:slot:decision:bundle:) [Func] -> RatifyProtocol.ApprovalReplyBridge, Swift.String, Swift.UInt32, RatifyProtocol.ReleasedDecision?, Foundation.Data
+ApprovalReplyBridge [Struct]
+ApprovalReplyBridge.complete [Var] -> Swift.Bool?
+ApprovalReplyBridge.failure [Var] -> Swift.String?
+ArchivalProofBundleResult [Struct]
+ArchivalProofBundleResult.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ArchivalProofBundleResult, RatifyProtocol.ArchivalProofBundleResult
+ArchivalProofBundleResult.actionable [Var] -> Swift.Bool
+ArchivalProofBundleResult.agentId [Var] -> Swift.String
+ArchivalProofBundleResult.assessment [Var] -> Swift.String
+ArchivalProofBundleResult.bundleHash [Var] -> Swift.String
+ArchivalProofBundleResult.errorClass [Var] -> RatifyProtocol.ErrorClass?
+ArchivalProofBundleResult.errorMessage [Var] -> Swift.String
+ArchivalProofBundleResult.hash(into:) [Func] -> (), Swift.Hasher
+ArchivalProofBundleResult.hashValue [Var] -> Swift.Int
+ArchivalProofBundleResult.issuerIds [Var] -> [Swift.String]
+ArchivalProofBundleResult.json() [Func] -> Foundation.Data
+ArchivalVerification [Struct]
+ArchivalVerification.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ArchivalVerification, RatifyProtocol.ArchivalVerification
+ArchivalVerification.actionable [Var] -> Swift.Bool
+ArchivalVerification.digest [Var] -> Swift.String
+ArchivalVerification.freshness [Var] -> Swift.String
+ArchivalVerification.hash(into:) [Func] -> (), Swift.Hasher
+ArchivalVerification.hashValue [Var] -> Swift.Int
+ArchivalVerification.objectType [Var] -> Swift.UInt16
+ArchivalVerification.signerKeyIds [Var] -> [Swift.String]
+AudienceMembership [Struct]
+AudienceMembership.constraintIndex [Var] -> Swift.UInt64
+AudienceMembership.delegationIndex [Var] -> Swift.UInt64
+AudienceMembership.evidenceDigest [Var] -> Swift.String
+AudienceMembership.expiresAt [Var] -> Swift.Int64
+AudienceMembership.init(delegationIndex:constraintIndex:receiverId:trustDomainIds:issuedAt:expiresAt:evidenceDigest:) [Constructor] -> RatifyProtocol.AudienceMembership, Swift.UInt64, Swift.UInt64, Swift.String, [Swift.String], Swift.Int64, Swift.Int64, Swift.String
+AudienceMembership.issuedAt [Var] -> Swift.Int64
+AudienceMembership.receiverId [Var] -> Swift.String
+AudienceMembership.trustDomainIds [Var] -> [Swift.String]
+AudienceProvider [Protocol]
+AudienceProvider.memberships(for:receiverId:) [Func] -> [RatifyProtocol.AudienceMembership], [RatifyProtocol.DeferredConstraint], Swift.String
+AuthoritativeClock [Protocol]
+AuthoritativeClock.authoritativeTime() [Func] -> Swift.Int64
+CertificateRef [Struct]
+CertificateRef.certId [Var] -> Swift.String
+CertificateRef.issuerId [Var] -> Swift.String
+CertificateStatusCheck [Struct]
+CertificateStatusCheck.certId [Var] -> Swift.String
+CertificateStatusCheck.delegationIndex [Var] -> Swift.UInt64
+CertificateStatusCheck.issuerId [Var] -> Swift.String
+CertificateStatusCheck.subjectId [Var] -> Swift.String
+ChallengeClaim [Struct]
+ChallengeClaim.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ChallengeClaim, RatifyProtocol.ChallengeClaim
+ChallengeClaim.agentId [Var] -> Swift.String
+ChallengeClaim.bundleHash [Var] -> Swift.String
+ChallengeClaim.challengeDigest [Var] -> Swift.String
+ChallengeClaim.claimId [Var] -> Swift.String
+ChallengeClaim.clockSkewSeconds [Var] -> Swift.Int64
+ChallengeClaim.constraintEvaluators [Var] -> [RatifyProtocol.ConstraintEvaluatorRef]
+ChallengeClaim.contextPolicyDigest [Var] -> Swift.String
+ChallengeClaim.expiresAt [Var] -> Swift.Int64
+ChallengeClaim.hash(into:) [Func] -> (), Swift.Hasher
+ChallengeClaim.hashValue [Var] -> Swift.Int
+ChallengeClaim.init(claimId:namespace:replayEpoch:challengeDigest:proofDigest:bundleHash:issuerIds:requiredScope:contextPolicyDigest:verifierId:agentId:requiresRate:rateBatch:issuedAt:expiresAt:maxAgeSeconds:clockSkewSeconds:streamId:streamSeq:constraintEvaluators:) [Constructor] -> RatifyProtocol.ChallengeClaim, Swift.String, Swift.String, Swift.Int64, Swift.String, Swift.String, Swift.String, [Swift.String], Swift.String, Swift.String, Swift.String, Swift.String, Swift.Bool, [RatifyProtocol.RateReservation], Swift.Int64, Swift.Int64, Swift.Int64, Swift.Int64, Foundation.Data?, Swift.Int64?, [RatifyProtocol.ConstraintEvaluatorRef]
+ChallengeClaim.issuedAt [Var] -> Swift.Int64
+ChallengeClaim.issuerIds [Var] -> [Swift.String]
+ChallengeClaim.maxAgeSeconds [Var] -> Swift.Int64
+ChallengeClaim.namespace [Var] -> Swift.String
+ChallengeClaim.proofDigest [Var] -> Swift.String
+ChallengeClaim.rateBatch [Var] -> [RatifyProtocol.RateReservation]
+ChallengeClaim.replayEpoch [Var] -> Swift.Int64
+ChallengeClaim.requiredScope [Var] -> Swift.String
+ChallengeClaim.requiresRate [Var] -> Swift.Bool
+ChallengeClaim.streamId [Var] -> Foundation.Data?
+ChallengeClaim.streamSeq [Var] -> Swift.Int64?
+ChallengeClaim.verifierId [Var] -> Swift.String
+ChallengeIssuanceStore [Protocol]
+ChallengeIssuanceStore.load(namespace:replayEpoch:claimDigest:) [Func] -> RatifyProtocol.ExpectedChallenge, Swift.String, Swift.Int64, Foundation.Data
+ChallengeIssuanceStore.persist(_:) [Func] -> (), RatifyProtocol.ExpectedChallenge
+ChallengeIssueRequest [Struct]
+ChallengeIssueRequest.expectedAgentId [Var] -> Swift.String
+ChallengeIssueRequest.expectedAgentPublicKey [Var] -> RatifyProtocol.HybridPublicKey?
+ChallengeIssueRequest.expectedReceiverId [Var] -> Swift.String
+ChallengeIssueRequest.expectedSessionContext [Var] -> Foundation.Data?
+ChallengeIssueRequest.init(verifierNamespace:replayEpoch:verifierId:lifetimeSeconds:expectedAgentId:expectedAgentPublicKey:expectedReceiverId:expectedSessionContext:) [Constructor] -> RatifyProtocol.ChallengeIssueRequest, Swift.String, Swift.Int64, Swift.String, Swift.Int64, Swift.String, RatifyProtocol.HybridPublicKey?, Swift.String, Foundation.Data?
+ChallengeIssueRequest.lifetimeSeconds [Var] -> Swift.Int64
+ChallengeIssueRequest.replayEpoch [Var] -> Swift.Int64
+ChallengeIssueRequest.verifierId [Var] -> Swift.String
+ChallengeIssueRequest.verifierNamespace [Var] -> Swift.String
+ChallengeRandomSource [Protocol]
+ChallengeRandomSource.fill(count:) [Func] -> Foundation.Data, Swift.Int
+CheckpointAcknowledgement [Struct]
+CheckpointAcknowledgement.entryHash [Var] -> Foundation.Data
+CheckpointAcknowledgement.init(logId:sequence:entryHash:timestamp:) [Constructor] -> RatifyProtocol.CheckpointAcknowledgement, Swift.String, Swift.Int64, Foundation.Data, Swift.Int64
+CheckpointAcknowledgement.logId [Var] -> Swift.String
+CheckpointAcknowledgement.sequence [Var] -> Swift.Int64
+CheckpointAcknowledgement.timestamp [Var] -> Swift.Int64
+ClaimDisposition [Enum]
+ClaimDisposition.RawValue [TypeAlias]
+ClaimDisposition.created [EnumElement] -> (RatifyProtocol.ClaimDisposition.Type) -> RatifyProtocol.ClaimDisposition
+ClaimDisposition.inProgress [EnumElement] -> (RatifyProtocol.ClaimDisposition.Type) -> RatifyProtocol.ClaimDisposition
+ClaimDisposition.init(rawValue:) [Constructor] -> RatifyProtocol.ClaimDisposition?, Swift.String
+ClaimDisposition.rawValue [Var] -> Swift.String
+ClaimDisposition.terminalReplay [EnumElement] -> (RatifyProtocol.ClaimDisposition.Type) -> RatifyProtocol.ClaimDisposition
+ClaimResult [Struct]
+ClaimResult.claimedAt [Var] -> Swift.Int64
+ClaimResult.disposition [Var] -> RatifyProtocol.ClaimDisposition
+ClaimResult.init(disposition:claimedAt:ownerToken:) [Constructor] -> RatifyProtocol.ClaimResult, RatifyProtocol.ClaimDisposition, Swift.Int64, Foundation.Data
+ClaimResult.ownerToken [Var] -> Foundation.Data
+ClaimStore [Protocol]
+ClaimStore.claim(_:) [Func] -> RatifyProtocol.ClaimResult, RatifyProtocol.ChallengeClaim
+ClaimStore.finalize(claimId:ownerToken:terminalResult:receiptBody:allowValidUntil:) [Func] -> Swift.Bool, Swift.String, Foundation.Data, Foundation.Data, Foundation.Data, Swift.Int64
+ClaimStore.loadInterrupted(claimId:) [Func] -> RatifyProtocol.InterruptedClaim, Swift.String
+ClaimStore.recordProgress(claimId:ownerToken:progress:) [Func] -> (), Swift.String, Foundation.Data, RatifyProtocol.EvaluationProgress
+ClaimStore.recoverInterrupted(claimId:terminalResult:receiptBody:) [Func] -> Swift.Bool, Swift.String, Foundation.Data, Foundation.Data
+CommittedClaim [Struct]
+CommittedClaim.allowHorizon [Var] -> Swift.Int64
+CommittedClaim.claim [Var] -> RatifyProtocol.ChallengeClaim
+CommittedClaim.claimRecord [Var] -> Foundation.Data?
+CommittedClaim.init(claim:claimRecord:terminalResult:receiptBody:allowHorizon:) [Constructor] -> RatifyProtocol.CommittedClaim, RatifyProtocol.ChallengeClaim, Foundation.Data?, Foundation.Data, Foundation.Data, Swift.Int64
+CommittedClaim.init(claim:terminalResult:receiptBody:allowHorizon:) [Constructor] -> RatifyProtocol.CommittedClaim, RatifyProtocol.ChallengeClaim, Foundation.Data, Foundation.Data, Swift.Int64
+CommittedClaim.receiptBody [Var] -> Foundation.Data
+CommittedClaim.terminalResult [Var] -> Foundation.Data
+CommittedClaimStore [Protocol]
+CommittedClaimStore.loadCommitted(claimId:) [Func] -> RatifyProtocol.CommittedClaim, Swift.String
+CommittedOutcome [Class]
+CommittedOutcome.allowHorizon [Var] -> Swift.Int64?
+CommittedOutcome.challengeExpiresAt [Var] -> Swift.Int64
+CommittedOutcome.claimId [Var] -> Swift.String
+CommittedOutcome.receiptBody [Var] -> Foundation.Data
+CommittedOutcome.receiptBodyDigest [Var] -> Swift.String
+Constraint [Struct]
+Constraint.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.Constraint, RatifyProtocol.Constraint
+Constraint.count [Var] -> Swift.Int64
+Constraint.currency [Var] -> Swift.String
+Constraint.end [Var] -> Swift.String
+Constraint.hash(into:) [Func] -> (), Swift.Hasher
+Constraint.hashValue [Var] -> Swift.Int
+Constraint.init(kind:start:end:tz:currency:maxAmountMicros:count:windowS:resourceId:pathPrefix:params:) [Constructor] -> RatifyProtocol.Constraint, Swift.String, Swift.String, Swift.String, Swift.String, Swift.String, Swift.Int64, Swift.Int64, Swift.Int64, Swift.String, Swift.String, [Swift.String : RatifyProtocol.ParamsValue]?
+Constraint.kind [Var] -> Swift.String
+Constraint.maxAmountMicros [Var] -> Swift.Int64
+Constraint.params [Var] -> [Swift.String : RatifyProtocol.ParamsValue]?
+Constraint.pathPrefix [Var] -> Swift.String
+Constraint.resourceId [Var] -> Swift.String
+Constraint.start [Var] -> Swift.String
+Constraint.tz [Var] -> Swift.String
+Constraint.windowS [Var] -> Swift.Int64
+ConstraintContext [Struct]
+ConstraintContext.extensionCounts [Var] -> [Swift.String : Swift.Int64]
+ConstraintContext.extensionValues [Var] -> [Swift.String : Swift.String]
+ConstraintContext.hasAmount [Var] -> Swift.Bool
+ConstraintContext.hasResource [Var] -> Swift.Bool
+ConstraintContext.init(requestedAmountMicros:requestedCurrency:hasAmount:requestedResourceId:requestedPath:hasResource:extensionCounts:extensionValues:) [Constructor] -> RatifyProtocol.ConstraintContext, Swift.Int64, Swift.String, Swift.Bool, Swift.String, Swift.String, Swift.Bool, [Swift.String : Swift.Int64], [Swift.String : Swift.String]
+ConstraintContext.requestedAmountMicros [Var] -> Swift.Int64
+ConstraintContext.requestedCurrency [Var] -> Swift.String
+ConstraintContext.requestedPath [Var] -> Swift.String
+ConstraintContext.requestedResourceId [Var] -> Swift.String
+ConstraintEvaluationInput [Struct]
+ConstraintEvaluationInput.certId [Var] -> Swift.String
+ConstraintEvaluationInput.constraintIndex [Var] -> Swift.UInt64
+ConstraintEvaluationInput.context [Var] -> RatifyProtocol.ConstraintContext
+ConstraintEvaluationInput.delegationIndex [Var] -> Swift.UInt64
+ConstraintEvaluationInput.evaluationTime [Var] -> Swift.Int64
+ConstraintEvaluationInput.init(type:paramsJSON:delegationIndex:constraintIndex:issuerId:certId:context:evaluationTime:) [Constructor] -> RatifyProtocol.ConstraintEvaluationInput, Swift.String, Foundation.Data?, Swift.UInt64, Swift.UInt64, Swift.String, Swift.String, RatifyProtocol.ConstraintContext, Swift.Int64
+ConstraintEvaluationInput.issuerId [Var] -> Swift.String
+ConstraintEvaluationInput.paramsJSON [Var] -> Foundation.Data?
+ConstraintEvaluationInput.type [Var] -> Swift.String
+ConstraintEvaluationResult [Struct]
+ConstraintEvaluationResult.detail [Var] -> Swift.String
+ConstraintEvaluationResult.init(outcome:validUntil:detail:) [Constructor] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintOutcome, Swift.Int64, Swift.String
+ConstraintEvaluationResult.outcome [Var] -> RatifyProtocol.ConstraintOutcome
+ConstraintEvaluationResult.validUntil [Var] -> Swift.Int64
+ConstraintEvaluator [Protocol]
+ConstraintEvaluator.evaluate(_:) [Func] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintEvaluationInput
+ConstraintEvaluatorRef [Struct]
+ConstraintEvaluatorRef.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ConstraintEvaluatorRef, RatifyProtocol.ConstraintEvaluatorRef
+ConstraintEvaluatorRef.hash(into:) [Func] -> (), Swift.Hasher
+ConstraintEvaluatorRef.hashValue [Var] -> Swift.Int
+ConstraintEvaluatorRef.init(kind:profileDigest:) [Constructor] -> RatifyProtocol.ConstraintEvaluatorRef, Swift.String, Swift.String
+ConstraintEvaluatorRef.kind [Var] -> Swift.String
+ConstraintEvaluatorRef.profileDigest [Var] -> Swift.String
+ConstraintEvaluatorRegistration [Struct]
+ConstraintEvaluatorRegistration.descriptor [Var] -> RatifyProtocol.ConstraintProfileDescriptor
+ConstraintEvaluatorRegistration.evaluator [Var] -> any RatifyProtocol.ConstraintEvaluator
+ConstraintEvaluatorRegistration.init(descriptor:evaluator:) [Constructor] -> RatifyProtocol.ConstraintEvaluatorRegistration, RatifyProtocol.ConstraintProfileDescriptor, any RatifyProtocol.ConstraintEvaluator
+ConstraintEvaluatorRegistry [Class]
+ConstraintEvaluatorRegistry.init(timeoutMilliseconds:registrations:) [Constructor] -> RatifyProtocol.ConstraintEvaluatorRegistry, Swift.UInt64, [RatifyProtocol.ConstraintEvaluatorRegistration]
+ConstraintEvaluatorRegistry.refs() [Func] -> [RatifyProtocol.ConstraintEvaluatorRef]
+ConstraintEvaluatorRegistry.timeoutMilliseconds [Var] -> Swift.UInt64
+ConstraintOutcome [Enum]
+ConstraintOutcome.RawValue [TypeAlias]
+ConstraintOutcome.denied [EnumElement] -> (RatifyProtocol.ConstraintOutcome.Type) -> RatifyProtocol.ConstraintOutcome
+ConstraintOutcome.init(rawValue:) [Constructor] -> RatifyProtocol.ConstraintOutcome?, Swift.String
+ConstraintOutcome.invalid [EnumElement] -> (RatifyProtocol.ConstraintOutcome.Type) -> RatifyProtocol.ConstraintOutcome
+ConstraintOutcome.pass [EnumElement] -> (RatifyProtocol.ConstraintOutcome.Type) -> RatifyProtocol.ConstraintOutcome
+ConstraintOutcome.rawValue [Var] -> Swift.String
+ConstraintOutcome.unverifiable [EnumElement] -> (RatifyProtocol.ConstraintOutcome.Type) -> RatifyProtocol.ConstraintOutcome
+ConstraintProfileDescriptor [Struct]
+ConstraintProfileDescriptor.init(profile:type:) [Constructor] -> RatifyProtocol.ConstraintProfileDescriptor, Swift.String, Swift.String
+ConstraintProfileDescriptor.profile [Var] -> Swift.String
+ConstraintProfileDescriptor.type [Var] -> Swift.String
+ContextPolicy [Class]
+ContextPolicy.digest [Var] -> Swift.String
+ContextPolicy.expectedSessionContext [Var] -> Foundation.Data
+ContextPolicy.init(profile:requireBound:requiredFields:expectedSessionContext:) [Constructor] -> RatifyProtocol.ContextPolicy, Swift.String, Swift.Bool, [Swift.String], Foundation.Data
+ContextPolicy.profile [Var] -> Swift.String
+ContextPolicy.requireBound [Var] -> Swift.Bool
+ContextPolicy.requiredFields [Var] -> [Swift.String]
+DeferredConstraint [Struct]
+DeferredConstraint.canonicalJSON [Var] -> Foundation.Data
+DeferredConstraint.certId [Var] -> Swift.String
+DeferredConstraint.constraintIndex [Var] -> Swift.UInt64
+DeferredConstraint.delegationIndex [Var] -> Swift.UInt64
+DeferredConstraint.issuerId [Var] -> Swift.String
+DeferredConstraint.kind [Var] -> Swift.String
+DelegationCert [Struct]
+DelegationCert.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.DelegationCert, RatifyProtocol.DelegationCert
+DelegationCert.certId [Var] -> Swift.String
+DelegationCert.constraints [Var] -> [RatifyProtocol.Constraint]
+DelegationCert.expiresAt [Var] -> Swift.Int64
+DelegationCert.hash(into:) [Func] -> (), Swift.Hasher
+DelegationCert.hashValue [Var] -> Swift.Int
+DelegationCert.init(version:certId:issuerId:issuerPubKey:subjectId:subjectPubKey:scope:constraints:issuedAt:expiresAt:signature:) [Constructor] -> RatifyProtocol.DelegationCert, Swift.Int64, Swift.String, Swift.String, RatifyProtocol.HybridPublicKey, Swift.String, RatifyProtocol.HybridPublicKey, [Swift.String], [RatifyProtocol.Constraint], Swift.Int64, Swift.Int64, RatifyProtocol.HybridSignature
+DelegationCert.issuedAt [Var] -> Swift.Int64
+DelegationCert.issuerId [Var] -> Swift.String
+DelegationCert.issuerPubKey [Var] -> RatifyProtocol.HybridPublicKey
+DelegationCert.scope [Var] -> [Swift.String]
+DelegationCert.signature [Var] -> RatifyProtocol.HybridSignature
+DelegationCert.subjectId [Var] -> Swift.String
+DelegationCert.subjectPubKey [Var] -> RatifyProtocol.HybridPublicKey
+DelegationCert.version [Var] -> Swift.Int64
+DeviceStateProjectionBridge [Struct]
+DeviceStateProjectionBridge.claims [Var] -> Foundation.Data
+DeviceStateProjectionBridge.completeStateDigest [Var] -> Foundation.Data
+DeviceStateProjectionBridge.issuanceRecords [Var] -> Foundation.Data
+DeviceStateProjectionBridge.projection [Var] -> Foundation.Data
+DeviceStateProjectionBridge.rateCounters [Var] -> Foundation.Data
+DeviceStateProjectionBridge.receiptLog [Var] -> Foundation.Data
+DeviceStateProjectionBridge.streams [Var] -> Foundation.Data
+ErrorClass [Enum]
+ErrorClass.AllCases [TypeAlias]
+ErrorClass.RawValue [TypeAlias]
+ErrorClass.allCases [Var] -> [RatifyProtocol.ErrorClass]
+ErrorClass.allowHorizonPassed [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.bundleHashMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.chainLinkageMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.challengeMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.challengeNotFresh [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.claimAlreadyTerminal [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.claimLeaseLive [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.claimLeaseLost [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.claimNotFound [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.claimReplay [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.claimStoreUnavailable [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.clockRegressed [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.configurationInvalid [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.delegationDigestMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.duplicateCertificateRef [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.evaluationCancelled [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.expectedAgentMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.expectedChallengeUnavailable [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.init(rawValue:) [Constructor] -> RatifyProtocol.ErrorClass?, Swift.String
+ErrorClass.invalidRequiredScope [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.invalidSignature [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.keyIdMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.logFork [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.logFrozen [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.logGap [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.logOrphan [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.logStateMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.malformed [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.namespaceMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.rawValue [Var] -> Swift.String
+ErrorClass.receiptAbandoned [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.receiptBundleMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.receiverAudienceMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.receiverAudienceRequired [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.receiverBindingRejected [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.rotationFork [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.rotationFrozen [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.rotationFutureDated [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.rotationKeyReused [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.rotationRecoveryInvalid [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.rotationStateMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.sessionContextMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.staleReplayEpoch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.statusKeyBindingMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.statusObjectRejected [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.streamSequenceMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.transactionContextMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.transactionPartyMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.transactionSignatureSetInvalid [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.unsupportedObjectType [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+ErrorClass.verifierIdMismatch [EnumElement] -> (RatifyProtocol.ErrorClass.Type) -> RatifyProtocol.ErrorClass
+EvaluationProgress [Struct]
+EvaluationProgress.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.EvaluationProgress, RatifyProtocol.EvaluationProgress
+EvaluationProgress.contextAssessment [Var] -> Swift.String
+EvaluationProgress.contextPolicyDigest [Var] -> Swift.String?
+EvaluationProgress.hash(into:) [Func] -> (), Swift.Hasher
+EvaluationProgress.hashValue [Var] -> Swift.Int
+EvaluationProgress.init(trustAssessment:statusAssessment:contextAssessment:contextPolicyDigest:statusEvidence:) [Constructor] -> RatifyProtocol.EvaluationProgress, Swift.String, Swift.String, Swift.String, Swift.String?, [RatifyProtocol.StatusEvidenceEntry]
+EvaluationProgress.statusAssessment [Var] -> Swift.String
+EvaluationProgress.statusEvidence [Var] -> [RatifyProtocol.StatusEvidenceEntry]
+EvaluationProgress.trustAssessment [Var] -> Swift.String
+EvaluationToken [Class]
+ExpectedChallenge [Struct]
+ExpectedChallenge.contextPolicy [Var] -> RatifyProtocol.ContextPolicy?
+ExpectedChallenge.expectedAgentId [Var] -> Swift.String
+ExpectedChallenge.expectedAgentPublicKey [Var] -> RatifyProtocol.HybridPublicKey?
+ExpectedChallenge.expectedReceiverId [Var] -> Swift.String
+ExpectedChallenge.expectedSessionContext [Var] -> Foundation.Data?
+ExpectedChallenge.expiresAt [Var] -> Swift.Int64
+ExpectedChallenge.init(value:issuedAt:expiresAt:verifierNamespace:replayEpoch:verifierId:expectedAgentId:expectedAgentPublicKey:expectedReceiverId:expectedSessionContext:contextPolicy:) [Constructor] -> RatifyProtocol.ExpectedChallenge, Foundation.Data, Swift.Int64, Swift.Int64, Swift.String, Swift.Int64, Swift.String, Swift.String, RatifyProtocol.HybridPublicKey?, Swift.String, Foundation.Data?, RatifyProtocol.ContextPolicy?
+ExpectedChallenge.issuedAt [Var] -> Swift.Int64
+ExpectedChallenge.replayEpoch [Var] -> Swift.Int64
+ExpectedChallenge.value [Var] -> Foundation.Data
+ExpectedChallenge.verifierId [Var] -> Swift.String
+ExpectedChallenge.verifierNamespace [Var] -> Swift.String
+ExternalSigner [Protocol]
+ExternalSigner.mode [Var] -> RatifyProtocol.SignerMode
+ExternalSigner.publicKey [Var] -> RatifyProtocol.HybridPublicKey
+ExternalSigner.sign(_:) [Func] -> RatifyProtocol.HybridSignature, RatifyProtocol.SignRequest
+HybridPublicKey [Struct]
+HybridPublicKey.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.HybridPublicKey, RatifyProtocol.HybridPublicKey
+HybridPublicKey.ed25519 [Var] -> Foundation.Data
+HybridPublicKey.hash(into:) [Func] -> (), Swift.Hasher
+HybridPublicKey.hashValue [Var] -> Swift.Int
+HybridPublicKey.init(ed25519:mlDsa65:) [Constructor] -> RatifyProtocol.HybridPublicKey, Foundation.Data, Foundation.Data
+HybridPublicKey.mlDsa65 [Var] -> Foundation.Data
+HybridSignature [Struct]
+HybridSignature.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.HybridSignature, RatifyProtocol.HybridSignature
+HybridSignature.ed25519 [Var] -> Foundation.Data
+HybridSignature.hash(into:) [Func] -> (), Swift.Hasher
+HybridSignature.hashValue [Var] -> Swift.Int
+HybridSignature.init(ed25519:mlDsa65:) [Constructor] -> RatifyProtocol.HybridSignature, Foundation.Data, Foundation.Data
+HybridSignature.mlDsa65 [Var] -> Foundation.Data
+InternalErrorKind [Enum]
+InternalErrorKind.AllCases [TypeAlias]
+InternalErrorKind.RawValue [TypeAlias]
+InternalErrorKind.allCases [Var] -> [RatifyProtocol.InternalErrorKind]
+InternalErrorKind.init(rawValue:) [Constructor] -> RatifyProtocol.InternalErrorKind?, Swift.String
+InternalErrorKind.panic [EnumElement] -> (RatifyProtocol.InternalErrorKind.Type) -> RatifyProtocol.InternalErrorKind
+InternalErrorKind.poisoned [EnumElement] -> (RatifyProtocol.InternalErrorKind.Type) -> RatifyProtocol.InternalErrorKind
+InternalErrorKind.randomSource [EnumElement] -> (RatifyProtocol.InternalErrorKind.Type) -> RatifyProtocol.InternalErrorKind
+InternalErrorKind.rawValue [Var] -> Swift.String
+InterruptedClaim [Struct]
+InterruptedClaim.claim [Var] -> RatifyProtocol.ChallengeClaim
+InterruptedClaim.claimedAt [Var] -> Swift.Int64
+InterruptedClaim.init(claim:claimedAt:progress:) [Constructor] -> RatifyProtocol.InterruptedClaim, RatifyProtocol.ChallengeClaim, Swift.Int64, RatifyProtocol.EvaluationProgress
+InterruptedClaim.progress [Var] -> RatifyProtocol.EvaluationProgress
+KeyRotationStatement [Struct]
+KeyRotationStatement.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.KeyRotationStatement, RatifyProtocol.KeyRotationStatement
+KeyRotationStatement.authorityId [Var] -> Swift.String
+KeyRotationStatement.hash(into:) [Func] -> (), Swift.Hasher
+KeyRotationStatement.hashValue [Var] -> Swift.Int
+KeyRotationStatement.init(version:authorityId:recoveryEpoch:role:sequence:previousStatementHash:oldKey:newKey:oldKeyId:newKeyId:issuedAt:notBefore:oldSignature:newSignature:) [Constructor] -> RatifyProtocol.KeyRotationStatement, Swift.Int64, Swift.String, Swift.Int64, Swift.String, Swift.Int64, Foundation.Data, RatifyProtocol.HybridPublicKey, RatifyProtocol.HybridPublicKey, Swift.String, Swift.String, Swift.Int64, Swift.Int64, RatifyProtocol.HybridSignature, RatifyProtocol.HybridSignature
+KeyRotationStatement.issuedAt [Var] -> Swift.Int64
+KeyRotationStatement.newKey [Var] -> RatifyProtocol.HybridPublicKey
+KeyRotationStatement.newKeyId [Var] -> Swift.String
+KeyRotationStatement.newSignature [Var] -> RatifyProtocol.HybridSignature
+KeyRotationStatement.notBefore [Var] -> Swift.Int64
+KeyRotationStatement.oldKey [Var] -> RatifyProtocol.HybridPublicKey
+KeyRotationStatement.oldKeyId [Var] -> Swift.String
+KeyRotationStatement.oldSignature [Var] -> RatifyProtocol.HybridSignature
+KeyRotationStatement.previousStatementHash [Var] -> Foundation.Data
+KeyRotationStatement.recoveryEpoch [Var] -> Swift.Int64
+KeyRotationStatement.role [Var] -> Swift.String
+KeyRotationStatement.sequence [Var] -> Swift.Int64
+KeyRotationStatement.version [Var] -> Swift.Int64
+KeyStorageRecord [Struct]
+KeyStorageRecord.RecordType [Enum]
+KeyStorageRecord.RecordType.RawValue [TypeAlias]
+KeyStorageRecord.RecordType.androidSplit [EnumElement] -> (RatifyProtocol.KeyStorageRecord.RecordType.Type) -> RatifyProtocol.KeyStorageRecord.RecordType
+KeyStorageRecord.RecordType.init(rawValue:) [Constructor] -> RatifyProtocol.KeyStorageRecord.RecordType?, Swift.UInt8
+KeyStorageRecord.RecordType.rawValue [Var] -> Swift.UInt8
+KeyStorageRecord.RecordType.secureEnclaveHybrid [EnumElement] -> (RatifyProtocol.KeyStorageRecord.RecordType.Type) -> RatifyProtocol.KeyStorageRecord.RecordType
+KeyStorageRecord.RecordType.software [EnumElement] -> (RatifyProtocol.KeyStorageRecord.RecordType.Type) -> RatifyProtocol.KeyStorageRecord.RecordType
+KeyStorageRecord.header [Var] -> Foundation.Data
+KeyStorageRecord.init(_:) [Constructor] -> RatifyProtocol.KeyStorageRecord, Foundation.Data
+KeyStorageRecord.keyId [Var] -> Swift.String
+KeyStorageRecord.recordType [Var] -> RatifyProtocol.KeyStorageRecord.RecordType
+KeychainKeyStore [Struct]
+KeychainKeyStore.accessGroup [Var] -> Swift.String?
+KeychainKeyStore.delete(keyId:) [Func] -> (), Swift.String
+KeychainKeyStore.init(accessGroup:) [Constructor] -> RatifyProtocol.KeychainKeyStore, Swift.String?
+KeychainKeyStore.load(keyId:) [Func] -> RatifyProtocol.SoftwarePrivateKey?, Swift.String
+KeychainKeyStore.loadSecureEnclaveKey(keyId:) [Func] -> RatifyProtocol.SecureEnclaveKey?, Swift.String @26.0
+KeychainKeyStore.save(_:) [Func] -> (), RatifyProtocol.SecureEnclaveKey @26.0
+KeychainKeyStore.save(_:) [Func] -> (), RatifyProtocol.SoftwarePrivateKey
+KeychainKeyStore.service [Var] -> Swift.String
+LocalAuthorizationAssessment [Struct]
+LocalAuthorizationAssessment.agentId [Var] -> Swift.String
+LocalAuthorizationAssessment.audienceEvidenceDigests [Var] -> [Swift.String]
+LocalAuthorizationAssessment.audienceFreshUntil [Var] -> Swift.Int64
+LocalAuthorizationAssessment.bundleHash [Var] -> Swift.String
+LocalAuthorizationAssessment.contextAssessment [Var] -> Swift.String
+LocalAuthorizationAssessment.contextPolicyDigest [Var] -> Swift.String?
+LocalAuthorizationAssessment.deferred [Var] -> [RatifyProtocol.DeferredConstraint]
+LocalAuthorizationAssessment.delegationDigest [Var] -> Foundation.Data
+LocalAuthorizationAssessment.delegationValidUntil [Var] -> Swift.Int64
+LocalAuthorizationAssessment.detail [Var] -> Swift.String
+LocalAuthorizationAssessment.effectiveScope [Var] -> [Swift.String]
+LocalAuthorizationAssessment.extensionValidUntil [Var] -> Swift.Int64
+LocalAuthorizationAssessment.issuerIds [Var] -> [Swift.String]
+LocalAuthorizationAssessment.localPolicyFailure [Var] -> RatifyProtocol.LocalPolicyFailure?
+LocalAuthorizationAssessment.localTimeValidUntil [Var] -> Swift.Int64
+LocalAuthorizationAssessment.rateAdmissionDeferred [Var] -> Swift.Bool
+LocalAuthorizationAssessment.rateStoreUnavailable [Var] -> Swift.Bool
+LocalAuthorizationAssessment.reason [Var] -> Swift.String
+LocalAuthorizationAssessment.requiredScope [Var] -> Swift.String
+LocalAuthorizationAssessment.rootId [Var] -> Swift.String
+LocalAuthorizationAssessment.status [Var] -> Swift.String
+LocalAuthorizationAssessment.statusAssessment [Var] -> Swift.String
+LocalAuthorizationAssessment.statusChecks [Var] -> [RatifyProtocol.CertificateStatusCheck]
+LocalAuthorizationAssessment.statusEvidence [Var] -> [RatifyProtocol.StatusEvidenceEntry]
+LocalAuthorizationAssessment.statusFreshUntil [Var] -> Swift.Int64
+LocalAuthorizationOptions [Struct]
+LocalAuthorizationOptions.claimToken [Var] -> RatifyProtocol.EvaluationToken
+LocalAuthorizationOptions.context [Var] -> RatifyProtocol.ConstraintContext
+LocalAuthorizationOptions.contextPolicy [Var] -> RatifyProtocol.ContextPolicy?
+LocalAuthorizationOptions.expectedChallenge [Var] -> RatifyProtocol.ExpectedChallenge?
+LocalAuthorizationOptions.futureSkewSeconds [Var] -> Swift.Int64
+LocalAuthorizationOptions.init(futureSkewSeconds:requiredScope:trustedRootId:trustedRootKey:trustConfigured:context:tzdbVersion:contextPolicy:expectedChallenge:claimToken:) [Constructor] -> RatifyProtocol.LocalAuthorizationOptions, Swift.Int64, Swift.String, Swift.String, RatifyProtocol.HybridPublicKey, Swift.Bool, RatifyProtocol.ConstraintContext, Swift.String, RatifyProtocol.ContextPolicy?, RatifyProtocol.ExpectedChallenge?, RatifyProtocol.EvaluationToken
+LocalAuthorizationOptions.requiredScope [Var] -> Swift.String
+LocalAuthorizationOptions.trustConfigured [Var] -> Swift.Bool
+LocalAuthorizationOptions.trustedRootId [Var] -> Swift.String
+LocalAuthorizationOptions.trustedRootKey [Var] -> RatifyProtocol.HybridPublicKey
+LocalAuthorizationOptions.tzdbVersion [Var] -> Swift.String
+LocalPolicyFailure [Struct]
+LocalPolicyFailure.detail [Var] -> Swift.String
+LocalPolicyFailure.reason [Var] -> Swift.String
+LocalPolicyFailure.status [Var] -> Swift.String
+LogResult [Enum]
+LogResult.__derived_enum_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.LogResult, RatifyProtocol.LogResult
+LogResult.appended [EnumElement] -> (RatifyProtocol.LogResult.Type) -> RatifyProtocol.LogResult
+LogResult.hash(into:) [Func] -> (), Swift.Hasher
+LogResult.hashValue [Var] -> Swift.Int
+LogResult.replay [EnumElement] -> (RatifyProtocol.LogResult.Type) -> RatifyProtocol.LogResult
+ObjectType [Enum]
+ObjectType.AllCases [TypeAlias]
+ObjectType.RawValue [TypeAlias]
+ObjectType.allCases [Var] -> [RatifyProtocol.ObjectType]
+ObjectType.challengePresentation [EnumElement] -> (RatifyProtocol.ObjectType.Type) -> RatifyProtocol.ObjectType
+ObjectType.delegationCertificate [EnumElement] -> (RatifyProtocol.ObjectType.Type) -> RatifyProtocol.ObjectType
+ObjectType.init(rawValue:) [Constructor] -> RatifyProtocol.ObjectType?, Swift.UInt16
+ObjectType.keyRotationAuthorization [EnumElement] -> (RatifyProtocol.ObjectType.Type) -> RatifyProtocol.ObjectType
+ObjectType.keyRotationProofOfPossession [EnumElement] -> (RatifyProtocol.ObjectType.Type) -> RatifyProtocol.ObjectType
+ObjectType.rawValue [Var] -> Swift.UInt16
+ObjectType.revocationList [EnumElement] -> (RatifyProtocol.ObjectType.Type) -> RatifyProtocol.ObjectType
+ObjectType.revocationPush [EnumElement] -> (RatifyProtocol.ObjectType.Type) -> RatifyProtocol.ObjectType
+ObjectType.transactionPartyStatement [EnumElement] -> (RatifyProtocol.ObjectType.Type) -> RatifyProtocol.ObjectType
+ObjectType.verificationReceipt [EnumElement] -> (RatifyProtocol.ObjectType.Type) -> RatifyProtocol.ObjectType
+ObjectType.witnessEntry [EnumElement] -> (RatifyProtocol.ObjectType.Type) -> RatifyProtocol.ObjectType
+OfflineDeviceBridge [Class]
+OfflineDeviceBridge.acknowledge(logId:sequence:previousEntryHash:entryHash:) [Func] -> RatifyProtocol.OfflineDeviceReplyBridge, Swift.String, Swift.Int64, Foundation.Data, Foundation.Data
+OfflineDeviceBridge.get(logId:sequence:) [Func] -> RatifyProtocol.OfflineDeviceReplyBridge, Swift.String, Swift.Int64
+OfflineDeviceBridge.init(store:replayEpoch:seed:capacity:) [Constructor] -> RatifyProtocol.OfflineDeviceBridge, RatifyProtocol.ReferenceStoreBridge, Swift.Int64, Foundation.Data, Swift.UInt32
+OfflineDeviceBridge.primaryStore() [Func] -> RatifyProtocol.ReferenceStoreBridge
+OfflineDeviceBridge.restore(_:) [Func] -> RatifyProtocol.OfflineDeviceBridge, RatifyProtocol.OfflineDeviceSnapshotBridge
+OfflineDeviceBridge.resubmit(_:) [Func] -> RatifyProtocol.OfflineDeviceReplyBridge, Swift.Int64
+OfflineDeviceBridge.setPowerLoss(_:) [Func] -> (), Swift.String
+OfflineDeviceBridge.snapshot() [Func] -> RatifyProtocol.OfflineDeviceSnapshotBridge
+OfflineDeviceBridge.stageRevocationList(wire:issuerId:epoch:key:policy:now:) [Func] -> (), Foundation.Data, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64
+OfflineDeviceBridge.stageStatusKey(issuerId:epoch:key:) [Func] -> (), Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey
+OfflineDeviceBridge.startup() [Func] -> RatifyProtocol.OfflineDeviceReplyBridge
+OfflineDeviceBridge.submitPending() [Func] -> RatifyProtocol.OfflineDeviceReplyBridge
+OfflineDeviceBridge.upload() [Func] -> RatifyProtocol.OfflineDeviceReplyBridge
+OfflineDeviceReplyBridge [Struct]
+OfflineDeviceReplyBridge.ackTime [Var] -> Swift.Int64?
+OfflineDeviceReplyBridge.acknowledged [Var] -> [Swift.Int64]
+OfflineDeviceReplyBridge.failure [Var] -> Swift.String?
+OfflineDeviceReplyBridge.requiredAcknowledgement() [Func] -> RatifyProtocol.CheckpointAcknowledgement
+OfflineDeviceReplyBridge.status [Var] -> Swift.String?
+OfflineDeviceReplyBridge.uploaded [Var] -> [Swift.Int64]
+OfflineDeviceSnapshotBridge [Class]
+OperationContext [Struct]
+OperationContext.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.OperationContext, RatifyProtocol.OperationContext
+OperationContext.hash(into:) [Func] -> (), Swift.Hasher
+OperationContext.hashValue [Var] -> Swift.Int
+OperationContext.init(requiredScope:operation:resourceId:requestedPath:payloadDigest:) [Constructor] -> RatifyProtocol.OperationContext, Swift.String, Swift.String, Swift.String, Swift.String, Foundation.Data
+OperationContext.operation [Var] -> Swift.String
+OperationContext.payloadDigest [Var] -> Foundation.Data
+OperationContext.requestedPath [Var] -> Swift.String
+OperationContext.requiredScope [Var] -> Swift.String
+OperationContext.resourceId [Var] -> Swift.String
+ParamsValue [Enum]
+ParamsValue.__derived_enum_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ParamsValue, RatifyProtocol.ParamsValue
+ParamsValue.array [EnumElement] -> (RatifyProtocol.ParamsValue.Type) -> ([RatifyProtocol.ParamsValue]) -> RatifyProtocol.ParamsValue
+ParamsValue.bool [EnumElement] -> (RatifyProtocol.ParamsValue.Type) -> (Swift.Bool) -> RatifyProtocol.ParamsValue
+ParamsValue.hash(into:) [Func] -> (), Swift.Hasher
+ParamsValue.hashValue [Var] -> Swift.Int
+ParamsValue.int [EnumElement] -> (RatifyProtocol.ParamsValue.Type) -> (Swift.Int64) -> RatifyProtocol.ParamsValue
+ParamsValue.null [EnumElement] -> (RatifyProtocol.ParamsValue.Type) -> RatifyProtocol.ParamsValue
+ParamsValue.object [EnumElement] -> (RatifyProtocol.ParamsValue.Type) -> ([Swift.String : RatifyProtocol.ParamsValue]) -> RatifyProtocol.ParamsValue
+ParamsValue.string [EnumElement] -> (RatifyProtocol.ParamsValue.Type) -> (Swift.String) -> RatifyProtocol.ParamsValue
+PlatformKey [Struct]
+PlatformKey.init(_:) [Constructor] -> RatifyProtocol.PlatformKey, RatifyProtocol.SecureEnclaveKey @26.0
+PlatformKey.keyId [Var] -> Swift.String
+PreflightRequest [Struct]
+PreflightRequest.bundle [Var] -> Foundation.Data
+PreflightRequest.contextPolicy [Var] -> RatifyProtocol.ContextPolicy?
+PreflightRequest.expected [Var] -> RatifyProtocol.ExpectedChallenge?
+PreflightRequest.futureSkewSeconds [Var] -> Swift.Int64
+PreflightRequest.init(bundle:expected:contextPolicy:requiredScope:verifierNamespace:replayEpoch:verifierId:now:maxChallengeAgeSeconds:futureSkewSeconds:) [Constructor] -> RatifyProtocol.PreflightRequest, Foundation.Data, RatifyProtocol.ExpectedChallenge?, RatifyProtocol.ContextPolicy?, Swift.String, Swift.String, Swift.Int64, Swift.String, Swift.Int64, Swift.Int64, Swift.Int64
+PreflightRequest.maxChallengeAgeSeconds [Var] -> Swift.Int64
+PreflightRequest.now [Var] -> Swift.Int64
+PreflightRequest.replayEpoch [Var] -> Swift.Int64
+PreflightRequest.requiredScope [Var] -> Swift.String
+PreflightRequest.verifierId [Var] -> Swift.String
+PreflightRequest.verifierNamespace [Var] -> Swift.String
+PreflightResult [Class]
+ProofBundle [Struct]
+ProofBundle.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ProofBundle, RatifyProtocol.ProofBundle
+ProofBundle.agentId [Var] -> Swift.String
+ProofBundle.agentPubKey [Var] -> RatifyProtocol.HybridPublicKey
+ProofBundle.challenge [Var] -> Foundation.Data
+ProofBundle.challengeAt [Var] -> Swift.Int64
+ProofBundle.challengeSig [Var] -> RatifyProtocol.HybridSignature
+ProofBundle.delegationDigest [Var] -> Foundation.Data
+ProofBundle.delegations [Var] -> [RatifyProtocol.DelegationCert]
+ProofBundle.hash(into:) [Func] -> (), Swift.Hasher
+ProofBundle.hashValue [Var] -> Swift.Int
+ProofBundle.init(version:verifierId:agentId:agentPubKey:delegations:delegationDigest:challenge:challengeAt:challengeSig:sessionContext:streamId:streamSeq:) [Constructor] -> RatifyProtocol.ProofBundle, Swift.Int64, Swift.String, Swift.String, RatifyProtocol.HybridPublicKey, [RatifyProtocol.DelegationCert], Foundation.Data, Foundation.Data, Swift.Int64, RatifyProtocol.HybridSignature, Foundation.Data?, Foundation.Data?, Swift.Int64?
+ProofBundle.sessionContext [Var] -> Foundation.Data?
+ProofBundle.streamId [Var] -> Foundation.Data?
+ProofBundle.streamSeq [Var] -> Swift.Int64?
+ProofBundle.verifierId [Var] -> Swift.String
+ProofBundle.version [Var] -> Swift.Int64
+RateAtFinalizationClaimStore [Protocol]
+RateReservation [Struct]
+RateReservation.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RateReservation, RatifyProtocol.RateReservation
+RateReservation.certId [Var] -> Swift.String
+RateReservation.hash(into:) [Func] -> (), Swift.Hasher
+RateReservation.hashValue [Var] -> Swift.Int
+RateReservation.init(issuerId:certId:windowSeconds:limit:) [Constructor] -> RatifyProtocol.RateReservation, Swift.String, Swift.String, Swift.Int64, Swift.Int64
+RateReservation.issuerId [Var] -> Swift.String
+RateReservation.limit [Var] -> Swift.Int64
+RateReservation.windowSeconds [Var] -> Swift.Int64
+RateReservationStore [Protocol]
+RateReservationStore.reserve(claimId:ownerToken:bundleHash:batch:) [Func] -> (), Swift.String, Foundation.Data, Swift.String, [RatifyProtocol.RateReservation]
+Ratify [Enum]
+Ratify.acceptKeyRotationStatement(_:journal:now:futureSkew:) [Func] -> (journal: RatifyProtocol.RotationJournal, result: Swift.Result<RatifyProtocol.LogResult, RatifyProtocol.RatifyError>), RatifyProtocol.KeyRotationStatement, RatifyProtocol.RotationJournal, Swift.Int64, Swift.Int64
+Ratify.applyRevocationList(_:_:boundIssuerId:statusKeyEpoch:statusKey:policy:now:) [Func] -> RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationList, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64
+Ratify.applyRevocationListToJournal(store:list:issuerId:epoch:key:policy:now:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.RevocationList, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64, Swift.Duration?
+Ratify.applyRevocationPush(_:_:boundIssuerId:statusKeyEpoch:statusKey:policy:now:) [Func] -> RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationPush, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64
+Ratify.applyRevocationPushToJournal(store:push:issuerId:epoch:key:policy:now:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.RevocationPush, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64, Swift.Duration?
+Ratify.buildSessionContext(_:) [Func] -> Foundation.Data, RatifyProtocol.SessionContextInputs
+Ratify.bundleHash(_:) [Func] -> Swift.String, RatifyProtocol.ProofBundle
+Ratify.canonicalJSON(_:) [Func] -> Foundation.Data, Foundation.Data
+Ratify.challengeClaimDigest(_:) [Func] -> Foundation.Data, Foundation.Data
+Ratify.checkVerificationReceiptBundleBinding(_:bundle:) [Func] -> (), RatifyProtocol.VerificationReceipt, RatifyProtocol.ProofBundle
+Ratify.claimProofBundle(bundle:preflight:namespace:replayEpoch:now:store:timeout:) [Func] -> RatifyProtocol.StagedClaim, Foundation.Data, RatifyProtocol.PreflightResult, Swift.String, Swift.Int64, Swift.Int64, any RatifyProtocol.ClaimStore, Swift.Duration?
+Ratify.configureStatusKeyEpoch(store:issuerId:epoch:key:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, Swift.Duration?
+Ratify.constraintAllowedValues [Var] -> Swift.String
+Ratify.constraintMaxAmount [Var] -> Swift.String
+Ratify.constraintMaxCount [Var] -> Swift.String
+Ratify.constraintMaxRate [Var] -> Swift.String
+Ratify.constraintProfileDigest(_:) [Func] -> Swift.String, RatifyProtocol.ConstraintProfileDescriptor
+Ratify.constraintReceiverAudience [Var] -> Swift.String
+Ratify.constraintResourcePath [Var] -> Swift.String
+Ratify.constraintTimeWindow [Var] -> Swift.String
+Ratify.decodeCheckpointAcknowledgement(_:) [Func] -> RatifyProtocol.CheckpointAcknowledgement, Foundation.Data
+Ratify.decodeDelegationCert(_:) [Func] -> RatifyProtocol.DelegationCert, Foundation.Data
+Ratify.decodeKeyRotationStatement(_:) [Func] -> RatifyProtocol.KeyRotationStatement, Foundation.Data
+Ratify.decodePayloadDigest(_:) [Func] -> Foundation.Data?, Swift.String?
+Ratify.decodeProofBundle(_:) [Func] -> RatifyProtocol.ProofBundle, Foundation.Data
+Ratify.decodeRevocationList(_:) [Func] -> RatifyProtocol.RevocationList, Foundation.Data
+Ratify.decodeRevocationPush(_:) [Func] -> RatifyProtocol.RevocationPush, Foundation.Data
+Ratify.decodeStatusEvidenceBatch(_:) [Func] -> [RatifyProtocol.StatusEvidenceObject], Foundation.Data
+Ratify.decodeTransactionReceipt(_:) [Func] -> RatifyProtocol.TransactionReceipt, Foundation.Data
+Ratify.decodeVerificationReceipt(_:) [Func] -> RatifyProtocol.VerificationReceipt, Foundation.Data
+Ratify.decodeVerificationReceiptBody(_:) [Func] -> RatifyProtocol.VerificationReceipt, Foundation.Data
+Ratify.decodeWitnessEntry(_:) [Func] -> RatifyProtocol.WitnessEntry, Foundation.Data
+Ratify.delegationCertSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.DelegationCert
+Ratify.deviceStateProjectionTestOnly(_:) [Func] -> RatifyProtocol.DeviceStateProjectionBridge, Foundation.Data
+Ratify.emptyRevocationStatusState() [Func] -> RatifyProtocol.RevocationStatusState
+Ratify.emptySecurityJournalSnapshot() [Func] -> RatifyProtocol.SecurityJournalSnapshot
+Ratify.encodeCheckpointAcknowledgement(_:) [Func] -> Foundation.Data, RatifyProtocol.CheckpointAcknowledgement
+Ratify.encodeDelegationCert(_:) [Func] -> Foundation.Data, RatifyProtocol.DelegationCert
+Ratify.encodeKeyRotationStatement(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
+Ratify.encodeProofBundle(_:) [Func] -> Foundation.Data, RatifyProtocol.ProofBundle
+Ratify.encodeRevocationList(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationList
+Ratify.encodeRevocationPush(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationPush
+Ratify.encodeTransactionReceipt(_:) [Func] -> Foundation.Data, RatifyProtocol.TransactionReceipt
+Ratify.encodeVerificationReceipt(_:) [Func] -> Foundation.Data, RatifyProtocol.VerificationReceipt
+Ratify.encodeWitnessEntry(_:) [Func] -> Foundation.Data, RatifyProtocol.WitnessEntry
+Ratify.errorClassSpellings() [Func] -> [Swift.String]
+Ratify.evaluateAllowedValues(_:) [Func] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintEvaluationInput
+Ratify.evaluateLocalAuthorization(bundle:options:) [Func] -> RatifyProtocol.LocalAuthorizationAssessment, Foundation.Data, RatifyProtocol.LocalAuthorizationOptions
+Ratify.evaluateMaxCount(_:) [Func] -> RatifyProtocol.ConstraintEvaluationResult, RatifyProtocol.ConstraintEvaluationInput
+Ratify.expandScopes(_:) [Func] -> [Swift.String], [Swift.String]
+Ratify.externalMu(mlDsaPublicKey:mlDsaContext:message:) [Func] -> Foundation.Data, Foundation.Data, Foundation.Data, Foundation.Data
+Ratify.finalizeClaimProofBundle(token:store:terminalResult:receiptBody:timeout:) [Func] -> Swift.Bool, RatifyProtocol.EvaluationToken, any RatifyProtocol.ClaimStore, Foundation.Data, Foundation.Data, Swift.Duration?
+Ratify.finalizeClaimProofBundle(token:store:terminalResult:receiptBody:timeout:) [Func] -> Swift.Bool, RatifyProtocol.EvaluationToken, any RatifyProtocol.RateAtFinalizationClaimStore, Foundation.Data, Foundation.Data, Swift.Duration?
+Ratify.freshnessUnverified [Var] -> Swift.String
+Ratify.intersectScopes(_:) [Func] -> [Swift.String], [[Swift.String]]
+Ratify.isSensitiveScope(_:) [Func] -> Swift.Bool, Swift.String
+Ratify.issueChallenge(request:clock:store:random:timeout:) [Func] -> RatifyProtocol.ExpectedChallenge, RatifyProtocol.ChallengeIssueRequest, any RatifyProtocol.AuthoritativeClock, any RatifyProtocol.ChallengeIssuanceStore, (any RatifyProtocol.ChallengeRandomSource)?, Swift.Duration?
+Ratify.keyId(_:) [Func] -> Swift.String, RatifyProtocol.HybridPublicKey
+Ratify.keyRotationStatementDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
+Ratify.keyRotationStatementSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.KeyRotationStatement
+Ratify.loadExpectedChallenge(store:namespace:replayEpoch:challenge:timeout:) [Func] -> RatifyProtocol.ExpectedChallenge, any RatifyProtocol.ChallengeIssuanceStore, Swift.String, Swift.Int64, Foundation.Data, Swift.Duration?
+Ratify.maxAllowedValues [Var] -> Swift.Int
+Ratify.maxAudienceIds [Var] -> Swift.Int
+Ratify.maxAudienceMembershipAgeSeconds [Var] -> Swift.Int64
+Ratify.maxChallengeAgeSeconds [Var] -> Swift.Int64
+Ratify.maxCheckpointAcknowledgementBytes [Var] -> Swift.Int
+Ratify.maxConstraintEvaluatorTimeoutSeconds [Var] -> Swift.Int64
+Ratify.maxConstraintEvaluators [Var] -> Swift.Int
+Ratify.maxDelegationCertBytes [Var] -> Swift.Int
+Ratify.maxDelegationLifetimeSeconds [Var] -> Swift.Int64
+Ratify.maxExtensionContextEntries [Var] -> Swift.Int
+Ratify.maxExtensionContextNameBytes [Var] -> Swift.Int
+Ratify.maxExtensionContextValueBytes [Var] -> Swift.Int
+Ratify.maxExtensionTypeBytes [Var] -> Swift.Int
+Ratify.maxFutureSkewSeconds [Var] -> Swift.Int64
+Ratify.maxKeyRotationStatementBytes [Var] -> Swift.Int
+Ratify.maxProfileIdBytes [Var] -> Swift.Int
+Ratify.maxProofBundleBytes [Var] -> Swift.Int
+Ratify.maxRateWindowSeconds [Var] -> Swift.Int64
+Ratify.maxRevocationListBytes [Var] -> Swift.Int
+Ratify.maxRevocationListRefs [Var] -> Swift.Int
+Ratify.maxRevocationPushBytes [Var] -> Swift.Int
+Ratify.maxRevocationPushRefs [Var] -> Swift.Int
+Ratify.maxSafeInteger [Var] -> Swift.Int64
+Ratify.maxSecurityJournalSnapshotBytes [Var] -> Swift.Int
+Ratify.maxStatusEvidenceBatchBytes [Var] -> Swift.Int
+Ratify.maxStatusEvidenceBatchObjects [Var] -> Swift.Int
+Ratify.maxStatusLifetimeSeconds [Var] -> Swift.Int64
+Ratify.maxTimestampSeconds [Var] -> Swift.Int64
+Ratify.maxTransactionParties [Var] -> Swift.Int
+Ratify.maxTransactionReceiptBytes [Var] -> Swift.Int
+Ratify.maxVerificationReceiptBodyBytes [Var] -> Swift.Int
+Ratify.maxVerificationReceiptBytes [Var] -> Swift.Int
+Ratify.maxWitnessEntryBytes [Var] -> Swift.Int
+Ratify.maxWitnessEntryDataBytes [Var] -> Swift.Int
+Ratify.migrateSecurityJournalJSON(_:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, Foundation.Data
+Ratify.mldsaContext(_:) [Func] -> Foundation.Data, RatifyProtocol.ObjectType
+Ratify.newKeyRotationJournal(authorityId:recoveryEpoch:role:genesisKey:) [Func] -> RatifyProtocol.RotationJournal, Swift.String, Swift.Int64, Swift.String, RatifyProtocol.HybridPublicKey
+Ratify.newStatusPublisher(store:issuerKey:statusKey:lifetimeSeconds:timeout:) [Func] -> RatifyProtocol.StatusPublisher, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.HybridPublicKey, RatifyProtocol.SoftwarePrivateKey, Swift.Int64, Swift.Duration?
+Ratify.newStatusPublisher(store:issuerKey:statusSigner:lifetimeSeconds:timeout:) [Func] -> RatifyProtocol.StatusPublisher, any RatifyProtocol.SecurityJournalStore, RatifyProtocol.HybridPublicKey, any RatifyProtocol.ExternalSigner, Swift.Int64, Swift.Duration?
+Ratify.operationContextHash(_:) [Func] -> Foundation.Data, RatifyProtocol.OperationContext
+Ratify.preflightProofBundle(_:) [Func] -> RatifyProtocol.PreflightResult, RatifyProtocol.PreflightRequest
+Ratify.presentationSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.ProofBundle
+Ratify.profileAllowedValues [Var] -> Swift.String
+Ratify.profileMaxCount [Var] -> Swift.String
+Ratify.protocolClaimId(namespace:replayEpoch:challenge:) [Func] -> Swift.String, Swift.String, Swift.Int64, Foundation.Data
+Ratify.protocolClaimId(namespace:replayEpoch:digest:) [Func] -> Swift.String, Swift.String, Swift.Int64, Foundation.Data
+Ratify.publishReceipt(_:using:timeout:) [Func] -> Foundation.Data, RatifyProtocol.CommittedOutcome, any RatifyProtocol.ReceiptPublisher, Swift.Duration?
+Ratify.receiptOutboxDigest(_:) [Func] -> Swift.String, Foundation.Data
+Ratify.recordSecurityKeyRole(store:role:key:timeout:) [Func] -> RatifyProtocol.SecurityJournalSnapshot, any RatifyProtocol.SecurityJournalStore, Swift.String, RatifyProtocol.HybridPublicKey, Swift.Duration?
+Ratify.recoverInterruptedClaim(store:claimId:timeout:) [Func] -> RatifyProtocol.CommittedOutcome, any RatifyProtocol.ClaimStore, Swift.String, Swift.Duration?
+Ratify.recoverKeyRotation(_:newRecoveryEpoch:newGenesisKey:) [Func] -> RatifyProtocol.RotationJournal, RatifyProtocol.RotationJournal, Swift.Int64, RatifyProtocol.HybridPublicKey
+Ratify.releaseDecision(_:signedReceipt:verifierPublicKey:logId:claimStore:checkpoint:timeout:) [Func] -> RatifyProtocol.ReleaseResult, RatifyProtocol.CommittedOutcome, Foundation.Data?, RatifyProtocol.HybridPublicKey, Swift.String, any RatifyProtocol.ReleaseClaimStore, any RatifyProtocol.ReceiptCheckpoint, Swift.Duration?
+Ratify.resolveClaimAfterAudience(token:memberships:) [Func] -> RatifyProtocol.LocalAuthorizationAssessment, RatifyProtocol.EvaluationToken, [RatifyProtocol.AudienceMembership]
+Ratify.resolveClaimAfterRate(token:store:timeout:) [Func] -> RatifyProtocol.LocalAuthorizationAssessment, RatifyProtocol.EvaluationToken, (any RatifyProtocol.RateReservationStore)?, Swift.Duration?
+Ratify.resolveClaimAfterRate(token:store:timeout:) [Func] -> RatifyProtocol.LocalAuthorizationAssessment, RatifyProtocol.EvaluationToken, any RatifyProtocol.RateAtFinalizationClaimStore, Swift.Duration?
+Ratify.resumeCommittedClaim(store:claimId:timeout:) [Func] -> RatifyProtocol.CommittedOutcome, any RatifyProtocol.CommittedClaimStore, Swift.String, Swift.Duration?
+Ratify.revocationListSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationList
+Ratify.revocationPushSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationPush
+Ratify.revocationStatusForCert(_:issuerId:certId:statusKeyEpoch:statusKey:policy:now:) [Func] -> RatifyProtocol.RevocationStatusResult, RatifyProtocol.RevocationStatusState, Swift.String, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64
+Ratify.revocationStatusFromJournal(store:issuerId:certId:epoch:key:policy:now:timeout:) [Func] -> RatifyProtocol.RevocationStatusResult, any RatifyProtocol.SecurityJournalStore, Swift.String, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey, RatifyProtocol.RevocationStatusPolicy, Swift.Int64, Swift.Duration?
+Ratify.scopeVocabulary() [Func] -> [Swift.String]
+Ratify.scopeWildcards() [Func] -> [Swift.String : [Swift.String]]
+Ratify.securityJournalConflictMessage [Var] -> Swift.String
+Ratify.securityJournalSnapshotDigest(_:) [Func] -> Swift.String, Foundation.Data
+Ratify.sessionContextBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.SessionContextInputs
+Ratify.signDelegationCert(_:key:) [Func] -> RatifyProtocol.DelegationCert, RatifyProtocol.DelegationCert, RatifyProtocol.SoftwarePrivateKey
+Ratify.signDelegationCert(_:signer:) [Func] -> RatifyProtocol.DelegationCert, RatifyProtocol.DelegationCert, any RatifyProtocol.ExternalSigner
+Ratify.signDelegationCert(_:with:) [Func] -> RatifyProtocol.DelegationCert, RatifyProtocol.DelegationCert, RatifyProtocol.SigningKey
+Ratify.signKeyRotationStatement(_:oldKey:newKey:) [Func] -> RatifyProtocol.KeyRotationStatement, RatifyProtocol.KeyRotationStatement, RatifyProtocol.SigningKey, RatifyProtocol.SigningKey
+Ratify.signKeyRotationStatement(_:oldKey:newKey:) [Func] -> RatifyProtocol.KeyRotationStatement, RatifyProtocol.KeyRotationStatement, RatifyProtocol.SoftwarePrivateKey, RatifyProtocol.SoftwarePrivateKey
+Ratify.signKeyRotationStatement(_:oldSigner:newSigner:) [Func] -> RatifyProtocol.KeyRotationStatement, RatifyProtocol.KeyRotationStatement, any RatifyProtocol.ExternalSigner, any RatifyProtocol.ExternalSigner
+Ratify.signPreparedVerificationReceipt(_:head:key:) [Func] -> RatifyProtocol.VerificationReceipt, Foundation.Data, RatifyProtocol.ReceiptHead, RatifyProtocol.SoftwarePrivateKey
+Ratify.signPreparedVerificationReceipt(_:head:signer:) [Func] -> RatifyProtocol.VerificationReceipt, Foundation.Data, RatifyProtocol.ReceiptHead, any RatifyProtocol.ExternalSigner
+Ratify.signProofBundle(_:key:) [Func] -> RatifyProtocol.ProofBundle, RatifyProtocol.ProofBundle, RatifyProtocol.SoftwarePrivateKey
+Ratify.signProofBundle(_:signer:) [Func] -> RatifyProtocol.ProofBundle, RatifyProtocol.ProofBundle, any RatifyProtocol.ExternalSigner
+Ratify.signProofBundle(_:with:) [Func] -> RatifyProtocol.ProofBundle, RatifyProtocol.ProofBundle, RatifyProtocol.SigningKey
+Ratify.signRevocationList(_:boundIssuerId:boundStatusKey:key:) [Func] -> RatifyProtocol.RevocationList, RatifyProtocol.RevocationList, Swift.String, RatifyProtocol.HybridPublicKey, RatifyProtocol.SoftwarePrivateKey
+Ratify.signRevocationList(_:boundIssuerId:boundStatusKey:signer:) [Func] -> RatifyProtocol.RevocationList, RatifyProtocol.RevocationList, Swift.String, RatifyProtocol.HybridPublicKey, any RatifyProtocol.ExternalSigner
+Ratify.signRevocationList(_:boundIssuerId:boundStatusKey:with:) [Func] -> RatifyProtocol.RevocationList, RatifyProtocol.RevocationList, Swift.String, RatifyProtocol.HybridPublicKey, RatifyProtocol.SigningKey
+Ratify.signRevocationPush(_:boundIssuerId:boundStatusKey:key:) [Func] -> RatifyProtocol.RevocationPush, RatifyProtocol.RevocationPush, Swift.String, RatifyProtocol.HybridPublicKey, RatifyProtocol.SoftwarePrivateKey
+Ratify.signRevocationPush(_:boundIssuerId:boundStatusKey:signer:) [Func] -> RatifyProtocol.RevocationPush, RatifyProtocol.RevocationPush, Swift.String, RatifyProtocol.HybridPublicKey, any RatifyProtocol.ExternalSigner
+Ratify.signRevocationPush(_:boundIssuerId:boundStatusKey:with:) [Func] -> RatifyProtocol.RevocationPush, RatifyProtocol.RevocationPush, Swift.String, RatifyProtocol.HybridPublicKey, RatifyProtocol.SigningKey
+Ratify.signTransactionReceiptParty(_:partyId:key:) [Func] -> RatifyProtocol.TransactionReceiptSignature, RatifyProtocol.TransactionReceipt, Swift.String, RatifyProtocol.SoftwarePrivateKey
+Ratify.signTransactionReceiptParty(_:partyId:signer:) [Func] -> RatifyProtocol.TransactionReceiptSignature, RatifyProtocol.TransactionReceipt, Swift.String, any RatifyProtocol.ExternalSigner
+Ratify.signTransactionReceiptParty(_:partyId:with:) [Func] -> RatifyProtocol.TransactionReceiptSignature, RatifyProtocol.TransactionReceipt, Swift.String, RatifyProtocol.SigningKey
+Ratify.signVerificationReceipt(_:key:) [Func] -> RatifyProtocol.VerificationReceipt, RatifyProtocol.VerificationReceipt, RatifyProtocol.SoftwarePrivateKey
+Ratify.signVerificationReceipt(_:signer:) [Func] -> RatifyProtocol.VerificationReceipt, RatifyProtocol.VerificationReceipt, any RatifyProtocol.ExternalSigner
+Ratify.signVerificationReceipt(_:with:) [Func] -> RatifyProtocol.VerificationReceipt, RatifyProtocol.VerificationReceipt, RatifyProtocol.SigningKey
+Ratify.signWitnessEntry(_:key:) [Func] -> RatifyProtocol.WitnessEntry, RatifyProtocol.WitnessEntry, RatifyProtocol.SoftwarePrivateKey
+Ratify.signWitnessEntry(_:signer:) [Func] -> RatifyProtocol.WitnessEntry, RatifyProtocol.WitnessEntry, any RatifyProtocol.ExternalSigner
+Ratify.signWitnessEntry(_:with:) [Func] -> RatifyProtocol.WitnessEntry, RatifyProtocol.WitnessEntry, RatifyProtocol.SigningKey
+Ratify.signingMessage(_:signable:) [Func] -> Foundation.Data, RatifyProtocol.ObjectType, Foundation.Data
+Ratify.signingMessageSize [Var] -> Swift.Int
+Ratify.statementBodyDigest(objectTypeCode:signableBody:) [Func] -> Foundation.Data, Swift.UInt16, Foundation.Data
+Ratify.statusEvidenceDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationList
+Ratify.statusEvidenceDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.RevocationPush
+Ratify.statusEvidenceDigest(objectTypeCode:_:) [Func] -> Foundation.Data, Swift.UInt16, RatifyProtocol.StatusObject
+Ratify.transactionContextHash(_:) [Func] -> Foundation.Data, RatifyProtocol.TransactionReceipt
+Ratify.transactionPartyRequestHash(_:requiredScope:) [Func] -> Foundation.Data, Foundation.Data, Swift.String
+Ratify.transactionReceiptSignBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.TransactionReceipt
+Ratify.transitionRevocationStatusEpoch(_:issuerId:nextEpoch:nextStatusKey:) [Func] -> RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationStatusState, Swift.String, Swift.UInt64, RatifyProtocol.HybridPublicKey
+Ratify.tzdbVersion [Var] -> Swift.String
+Ratify.validId(_:) [Func] -> Swift.Bool, Swift.String
+Ratify.validReleaseRecordOutcome(_:reason:) [Func] -> Swift.Bool, RatifyProtocol.ReleaseStatus, Swift.String
+Ratify.validateRequestContext(_:) [Func] -> (), RatifyProtocol.ConstraintContext
+Ratify.validateScopes(_:) [Func] -> (), [Swift.String]
+Ratify.validateSecurityJournalSnapshot(_:head:) [Func] -> (), Foundation.Data, RatifyProtocol.SecurityJournalHead
+Ratify.validateSecurityJournalTransition(current:next:) [Func] -> (), RatifyProtocol.SecurityJournalSnapshot, RatifyProtocol.SecurityJournalSnapshot
+Ratify.verificationReceiptBody(_:) [Func] -> Foundation.Data, RatifyProtocol.VerificationReceipt
+Ratify.verificationReceiptDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.VerificationReceipt
+Ratify.verificationReceiptSignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.VerificationReceipt
+Ratify.verifyArchivalDelegationCert(_:) [Func] -> RatifyProtocol.ArchivalVerification, Foundation.Data
+Ratify.verifyArchivalKeyRotationStatement(_:) [Func] -> RatifyProtocol.ArchivalVerification, Foundation.Data
+Ratify.verifyArchivalProofBundle(_:) [Func] -> RatifyProtocol.ArchivalProofBundleResult, Foundation.Data
+Ratify.verifyArchivalRevocationList(_:issuerId:statusKey:) [Func] -> RatifyProtocol.ArchivalVerification, Foundation.Data, Swift.String, RatifyProtocol.HybridPublicKey
+Ratify.verifyArchivalRevocationPush(_:issuerId:statusKey:) [Func] -> RatifyProtocol.ArchivalVerification, Foundation.Data, Swift.String, RatifyProtocol.HybridPublicKey
+Ratify.verifyArchivalTransactionReceipt(_:) [Func] -> RatifyProtocol.ArchivalVerification, Foundation.Data
+Ratify.verifyArchivalVerificationReceipt(_:verifierKey:) [Func] -> RatifyProtocol.ArchivalVerification, Foundation.Data, RatifyProtocol.HybridPublicKey
+Ratify.verifyArchivalWitnessEntry(_:witnessKey:) [Func] -> RatifyProtocol.ArchivalVerification, Foundation.Data, RatifyProtocol.HybridPublicKey
+Ratify.verifyDelegationCertSignature(_:) [Func] -> (), RatifyProtocol.DelegationCert
+Ratify.verifyKeyRotationStatement(_:state:now:futureSkew:) [Func] -> (), RatifyProtocol.KeyRotationStatement, RatifyProtocol.RotationState, Swift.Int64, Swift.Int64
+Ratify.verifyProofBundle(_:claimStore:receiverBinding:trust:audience:statusEvidence:statusJournal:rate:timeout:) [Func] -> RatifyProtocol.VerifyOutcome, RatifyProtocol.VerifyRequest, any RatifyProtocol.ClaimStore, (any RatifyProtocol.ReceiverBindingHook)?, (any RatifyProtocol.TrustProvider)?, (any RatifyProtocol.AudienceProvider)?, (any RatifyProtocol.StatusEvidenceProvider)?, (any RatifyProtocol.SecurityJournalStore)?, (any RatifyProtocol.RateReservationStore)?, Swift.Duration?
+Ratify.verifyProofBundle(_:claimStore:receiverBinding:trust:audience:statusEvidence:statusJournal:timeout:) [Func] -> RatifyProtocol.VerifyOutcome, RatifyProtocol.VerifyRequest, any RatifyProtocol.RateAtFinalizationClaimStore, (any RatifyProtocol.ReceiverBindingHook)?, (any RatifyProtocol.TrustProvider)?, (any RatifyProtocol.AudienceProvider)?, (any RatifyProtocol.StatusEvidenceProvider)?, (any RatifyProtocol.SecurityJournalStore)?, Swift.Duration?
+Ratify.verifyProofBundleSignatures(_:) [Func] -> (), RatifyProtocol.ProofBundle
+Ratify.verifyProofBundleWithoutClaimStore(_:receiverBinding:timeout:) [Func] -> RatifyProtocol.VerifyOutcome, RatifyProtocol.VerifyRequest, (any RatifyProtocol.ReceiverBindingHook)?, Swift.Duration?
+Ratify.verifyRevocationListSignature(_:trustedIssuerId:statusKey:) [Func] -> (), RatifyProtocol.RevocationList, Swift.String, RatifyProtocol.HybridPublicKey
+Ratify.verifyRevocationPushSignature(_:trustedIssuerId:statusKey:) [Func] -> (), RatifyProtocol.RevocationPush, Swift.String, RatifyProtocol.HybridPublicKey
+Ratify.verifyStatement(_:signable:signature:publicKey:) [Func] -> (), RatifyProtocol.ObjectType, Foundation.Data, RatifyProtocol.HybridSignature, RatifyProtocol.HybridPublicKey
+Ratify.verifyTransactionReceipt(_:trust:statusEvidence:statusJournal:timeout:) [Func] -> RatifyProtocol.TransactionReceiptVerification, RatifyProtocol.TransactionVerifyRequest, (any RatifyProtocol.TrustProvider)?, (any RatifyProtocol.StatusEvidenceProvider)?, (any RatifyProtocol.SecurityJournalStore)?, Swift.Duration?
+Ratify.verifyTransactionReceiptSignatures(_:) [Func] -> (), RatifyProtocol.TransactionReceipt
+Ratify.verifyVerificationReceipt(_:verifierKey:head:) [Func] -> RatifyProtocol.LogResult, RatifyProtocol.VerificationReceipt, RatifyProtocol.HybridPublicKey, RatifyProtocol.ReceiptHead
+Ratify.verifyWitnessEntry(_:head:witnessKey:) [Func] -> RatifyProtocol.LogResult, RatifyProtocol.WitnessEntry, RatifyProtocol.WitnessHead, RatifyProtocol.HybridPublicKey
+Ratify.witnessEntryDigest(_:) [Func] -> Foundation.Data, RatifyProtocol.WitnessEntry
+Ratify.witnessEntrySignableBytes(_:) [Func] -> Foundation.Data, RatifyProtocol.WitnessEntry
+RatifyError [Enum]
+RatifyError.__derived_enum_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RatifyError, RatifyProtocol.RatifyError
+RatifyError.description [Var] -> Swift.String
+RatifyError.errorClass [Var] -> RatifyProtocol.ErrorClass?
+RatifyError.errorDescription [Var] -> Swift.String?
+RatifyError.internal [EnumElement] -> (RatifyProtocol.RatifyError.Type) -> (RatifyProtocol.InternalErrorKind, Swift.String) -> RatifyProtocol.RatifyError
+RatifyError.protocol [EnumElement] -> (RatifyProtocol.RatifyError.Type) -> (RatifyProtocol.ErrorClass, Swift.String) -> RatifyProtocol.RatifyError
+RatifyError.signing [EnumElement] -> (RatifyProtocol.RatifyError.Type) -> (RatifyProtocol.ErrorClass, RatifyProtocol.SigningErrorKind, Swift.String) -> RatifyProtocol.RatifyError
+ReceiptCheckpoint [Protocol]
+ReceiptCheckpoint.acknowledge(logId:sequence:previousEntryHash:entryHash:) [Func] -> RatifyProtocol.CheckpointAcknowledgement, Swift.String, Swift.Int64, Foundation.Data, Foundation.Data
+ReceiptCheckpoint.get(logId:sequence:) [Func] -> RatifyProtocol.CheckpointAcknowledgement, Swift.String, Swift.Int64
+ReceiptHead [Struct]
+ReceiptHead.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.ReceiptHead, RatifyProtocol.ReceiptHead
+ReceiptHead.acceptedDigests [Var] -> [Swift.Int64 : Foundation.Data]
+ReceiptHead.frozen [Var] -> Swift.Bool
+ReceiptHead.hash(into:) [Func] -> (), Swift.Hasher
+ReceiptHead.hashValue [Var] -> Swift.Int
+ReceiptHead.headHash [Var] -> Foundation.Data
+ReceiptHead.init(logId:verifierId:sequence:headHash:acceptedDigests:frozen:) [Constructor] -> RatifyProtocol.ReceiptHead, Swift.String, Swift.String, Swift.Int64, Foundation.Data, [Swift.Int64 : Foundation.Data], Swift.Bool
+ReceiptHead.logId [Var] -> Swift.String
+ReceiptHead.sequence [Var] -> Swift.Int64
+ReceiptHead.verifierId [Var] -> Swift.String
+ReceiptPublisher [Protocol]
+ReceiptPublisher.publish(claimId:receiptBody:) [Func] -> Foundation.Data, Swift.String, Foundation.Data
+ReceiverBindingHook [Protocol]
+ReceiverBindingHook.validate(bundle:expected:) [Func] -> (), RatifyProtocol.ProofBundle, RatifyProtocol.ExpectedChallenge
+ReferenceStoreBridge [Class]
+ReferenceStoreBridge.abandonPendingReceipts() [Func] -> [Swift.String]
+ReferenceStoreBridge.acknowledge(logId:sequence:previousEntryHash:entryHash:) [Func] -> RatifyProtocol.CheckpointAcknowledgement, Swift.String, Swift.Int64, Foundation.Data, Foundation.Data
+ReferenceStoreBridge.authoritativeTime() [Func] -> Swift.Int64
+ReferenceStoreBridge.claim(_:) [Func] -> RatifyProtocol.ClaimResult, RatifyProtocol.ChallengeClaim
+ReferenceStoreBridge.cloneStore() [Func] -> RatifyProtocol.ReferenceStoreBridge
+ReferenceStoreBridge.corruptSealedStateTestOnly(claimId:) [Func] -> (), Swift.String
+ReferenceStoreBridge.enableRateAtFinalization() [Func] -> ()
+ReferenceStoreBridge.finalize(claimId:ownerToken:terminalResult:receiptBody:allowValidUntil:) [Func] -> Swift.Bool, Swift.String, Foundation.Data, Foundation.Data, Foundation.Data, Swift.Int64
+ReferenceStoreBridge.forgedCommittedOutcomeTestOnly() [Func] -> RatifyProtocol.CommittedOutcome
+ReferenceStoreBridge.get(logId:sequence:) [Func] -> RatifyProtocol.CheckpointAcknowledgement, Swift.String, Swift.Int64
+ReferenceStoreBridge.init(now:leaseSeconds:logId:verifierKey:) [Constructor] -> RatifyProtocol.ReferenceStoreBridge, Swift.Int64, Swift.Int64, Swift.String, RatifyProtocol.SoftwarePrivateKey
+ReferenceStoreBridge.loadCommitted(claimId:) [Func] -> RatifyProtocol.CommittedClaim, Swift.String
+ReferenceStoreBridge.loadInterrupted(claimId:) [Func] -> RatifyProtocol.InterruptedClaim, Swift.String
+ReferenceStoreBridge.loadTerminal(claimId:) [Func] -> RatifyProtocol.TerminalClaimRecord, Swift.String
+ReferenceStoreBridge.logLength() [Func] -> Swift.UInt64
+ReferenceStoreBridge.now() [Func] -> Swift.Int64
+ReferenceStoreBridge.plantReleaseTestOnly(claimId:ackTimestamp:) [Func] -> (), Swift.String, Swift.Int64
+ReferenceStoreBridge.publish(claimId:receiptBody:) [Func] -> Foundation.Data, Swift.String, Foundation.Data
+ReferenceStoreBridge.recordProgress(claimId:ownerToken:progress:) [Func] -> (), Swift.String, Foundation.Data, RatifyProtocol.EvaluationProgress
+ReferenceStoreBridge.recordRelease(_:) [Func] -> (), RatifyProtocol.ReleaseRecord
+ReferenceStoreBridge.recoverInterrupted(claimId:terminalResult:receiptBody:) [Func] -> Swift.Bool, Swift.String, Foundation.Data, Foundation.Data
+ReferenceStoreBridge.setAcknowledgementWithheld(_:) [Func] -> (), Swift.Bool
+ReferenceStoreBridge.setSignerFailure(_:) [Func] -> (), Swift.Bool
+ReferenceStoreBridge.setTime(_:) [Func] -> (), Swift.Int64
+ReferenceTrustRegistryBridge [Class]
+ReferenceTrustRegistryBridge.init(records:) [Constructor] -> RatifyProtocol.ReferenceTrustRegistryBridge, [RatifyProtocol.HybridPublicKey]
+ReferenceTrustRegistryBridge.resolve(chain:) [Func] -> RatifyProtocol.TrustResolution, [RatifyProtocol.DelegationCert]
+ReleaseClaimStore [Protocol]
+ReleaseClaimStore.loadTerminal(claimId:) [Func] -> RatifyProtocol.TerminalClaimRecord, Swift.String
+ReleaseClaimStore.recordRelease(_:) [Func] -> (), RatifyProtocol.ReleaseRecord
+ReleaseRecord [Struct]
+ReleaseRecord.ackTimestamp [Var] -> Swift.Int64
+ReleaseRecord.claimId [Var] -> Swift.String
+ReleaseRecord.entryHash [Var] -> Foundation.Data
+ReleaseRecord.init(claimId:entryHash:ackTimestamp:outcome:reason:) [Constructor] -> RatifyProtocol.ReleaseRecord, Swift.String, Foundation.Data, Swift.Int64, RatifyProtocol.ReleaseStatus, Swift.String
+ReleaseRecord.outcome [Var] -> RatifyProtocol.ReleaseStatus
+ReleaseRecord.reason [Var] -> Swift.String
+ReleaseResult [Struct]
+ReleaseResult.decision [Var] -> RatifyProtocol.ReleasedDecision?
+ReleaseResult.reason [Var] -> Swift.String
+ReleaseResult.status [Var] -> RatifyProtocol.ReleaseStatus
+ReleaseStatus [Enum]
+ReleaseStatus.RawValue [TypeAlias]
+ReleaseStatus.init(rawValue:) [Constructor] -> RatifyProtocol.ReleaseStatus?, Swift.String
+ReleaseStatus.pending [EnumElement] -> (RatifyProtocol.ReleaseStatus.Type) -> RatifyProtocol.ReleaseStatus
+ReleaseStatus.rawValue [Var] -> Swift.String
+ReleaseStatus.rejected [EnumElement] -> (RatifyProtocol.ReleaseStatus.Type) -> RatifyProtocol.ReleaseStatus
+ReleaseStatus.released [EnumElement] -> (RatifyProtocol.ReleaseStatus.Type) -> RatifyProtocol.ReleaseStatus
+ReleaseStatus.withheld [EnumElement] -> (RatifyProtocol.ReleaseStatus.Type) -> RatifyProtocol.ReleaseStatus
+ReleasedDecision [Class]
+ReleasedDecision.allowHorizon [Var] -> Swift.Int64?
+ReleasedDecision.challengeExpiresAt [Var] -> Swift.Int64
+ReleasedDecision.claimId [Var] -> Swift.String
+ReleasedDecision.decision [Var] -> Swift.String
+ReleasedDecision.grantedScope [Var] -> [Swift.String]
+ReleasedDecision.identityStatus [Var] -> Swift.String
+ReleasedDecision.isAllowed(clock:timeout:) [Func] -> Swift.Bool, any RatifyProtocol.AuthoritativeClock, Swift.Duration?
+ReleasedDecision.reason [Var] -> Swift.String
+ReleasedDecision.receipt() [Func] -> RatifyProtocol.VerificationReceipt
+ReleasedDecision.receiptWire [Var] -> Foundation.Data
+ReleasedDecision.releaseTime [Var] -> Swift.Int64
+RevocationList [Struct]
+RevocationList.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RevocationList, RatifyProtocol.RevocationList
+RevocationList.hash(into:) [Func] -> (), Swift.Hasher
+RevocationList.hashValue [Var] -> Swift.Int
+RevocationList.init(version:issuerId:updatedAt:nextUpdate:sequence:revoked:signature:) [Constructor] -> RatifyProtocol.RevocationList, Swift.Int64, Swift.String, Swift.Int64, Swift.Int64, Swift.Int64, [Swift.String], RatifyProtocol.HybridSignature
+RevocationList.issuerId [Var] -> Swift.String
+RevocationList.nextUpdate [Var] -> Swift.Int64
+RevocationList.revoked [Var] -> [Swift.String]
+RevocationList.sequence [Var] -> Swift.Int64
+RevocationList.signature [Var] -> RatifyProtocol.HybridSignature
+RevocationList.updatedAt [Var] -> Swift.Int64
+RevocationList.version [Var] -> Swift.Int64
+RevocationObservation [Struct]
+RevocationObservation.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RevocationObservation, RatifyProtocol.RevocationObservation
+RevocationObservation.accepted [Var] -> Swift.Bool
+RevocationObservation.bodyDigest [Var] -> Foundation.Data
+RevocationObservation.evidenceDigest [Var] -> Foundation.Data
+RevocationObservation.fork [Var] -> Swift.Bool
+RevocationObservation.futureDated [Var] -> Swift.Bool
+RevocationObservation.gap [Var] -> Swift.Bool
+RevocationObservation.hash(into:) [Func] -> (), Swift.Hasher
+RevocationObservation.hashValue [Var] -> Swift.Int
+RevocationObservation.objectType [Var] -> Swift.UInt16
+RevocationObservation.revokedCertIds [Var] -> [Swift.String]
+RevocationObservation.revokedSetDigest [Var] -> Foundation.Data
+RevocationObservation.sequence [Var] -> Swift.Int64
+RevocationObservation.statusKeyEpoch [Var] -> Swift.UInt64
+RevocationObservation.statusKeyId [Var] -> Swift.String
+RevocationPush [Struct]
+RevocationPush.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RevocationPush, RatifyProtocol.RevocationPush
+RevocationPush.hash(into:) [Func] -> (), Swift.Hasher
+RevocationPush.hashValue [Var] -> Swift.Int
+RevocationPush.init(version:issuerId:sequence:pushedAt:revoked:signature:) [Constructor] -> RatifyProtocol.RevocationPush, Swift.Int64, Swift.String, Swift.Int64, Swift.Int64, [Swift.String], RatifyProtocol.HybridSignature
+RevocationPush.issuerId [Var] -> Swift.String
+RevocationPush.pushedAt [Var] -> Swift.Int64
+RevocationPush.revoked [Var] -> [Swift.String]
+RevocationPush.sequence [Var] -> Swift.Int64
+RevocationPush.signature [Var] -> RatifyProtocol.HybridSignature
+RevocationPush.version [Var] -> Swift.Int64
+RevocationStatusPolicy [Struct]
+RevocationStatusPolicy.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RevocationStatusPolicy, RatifyProtocol.RevocationStatusPolicy
+RevocationStatusPolicy.clockSkewSeconds [Var] -> Swift.Int64
+RevocationStatusPolicy.hash(into:) [Func] -> (), Swift.Hasher
+RevocationStatusPolicy.hashValue [Var] -> Swift.Int
+RevocationStatusPolicy.init(maxListLifetimeSeconds:maxStatusAgeSeconds:clockSkewSeconds:) [Constructor] -> RatifyProtocol.RevocationStatusPolicy, Swift.Int64, Swift.Int64, Swift.Int64
+RevocationStatusPolicy.maxListLifetimeSeconds [Var] -> Swift.Int64
+RevocationStatusPolicy.maxStatusAgeSeconds [Var] -> Swift.Int64
+RevocationStatusResult [Struct]
+RevocationStatusResult.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RevocationStatusResult, RatifyProtocol.RevocationStatusResult
+RevocationStatusResult.evidence [Var] -> [RatifyProtocol.StatusEvidenceEntry]
+RevocationStatusResult.freshUntil [Var] -> Swift.Int64
+RevocationStatusResult.hash(into:) [Func] -> (), Swift.Hasher
+RevocationStatusResult.hashValue [Var] -> Swift.Int
+RevocationStatusResult.reason [Var] -> Swift.String
+RevocationStatusResult.status [Var] -> Swift.String
+RevocationStatusState [Struct]
+RevocationStatusState.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RevocationStatusState, RatifyProtocol.RevocationStatusState
+RevocationStatusState.acceptedCertIds [Var] -> [Swift.String]
+RevocationStatusState.acceptedSnapshot [Var] -> RatifyProtocol.RevocationList?
+RevocationStatusState.denyUnionCertIds [Var] -> [Swift.String]
+RevocationStatusState.floor [Var] -> Swift.Int64
+RevocationStatusState.forkSequence [Var] -> Swift.Int64
+RevocationStatusState.futureDatedObjectObserved [Var] -> Swift.Bool
+RevocationStatusState.hasFloor [Var] -> Swift.Bool
+RevocationStatusState.hasPrecedingCheckpoint [Var] -> Swift.Bool
+RevocationStatusState.hash(into:) [Func] -> (), Swift.Hasher
+RevocationStatusState.hashValue [Var] -> Swift.Int
+RevocationStatusState.issuerId [Var] -> Swift.String
+RevocationStatusState.maxObservedSequence [Var] -> Swift.Int64
+RevocationStatusState.observations [Var] -> [RatifyProtocol.RevocationObservation]
+RevocationStatusState.precedingAcceptedCertIds [Var] -> [Swift.String]
+RevocationStatusState.precedingFloor [Var] -> Swift.Int64
+RevocationStatusState.reconciliationRequired [Var] -> Swift.Bool
+RevocationStatusState.retiredStatusKeyIds [Var] -> [Swift.String]
+RevocationStatusState.statusKeyEpoch [Var] -> Swift.UInt64
+RevocationStatusState.statusKeyId [Var] -> Swift.String
+RotationAcceptedEntry [Struct]
+RotationAcceptedEntry.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RotationAcceptedEntry, RatifyProtocol.RotationAcceptedEntry
+RotationAcceptedEntry.bodyDigest [Var] -> Foundation.Data
+RotationAcceptedEntry.hash(into:) [Func] -> (), Swift.Hasher
+RotationAcceptedEntry.hashValue [Var] -> Swift.Int
+RotationAcceptedEntry.init(sequence:bodyDigest:oldKey:) [Constructor] -> RatifyProtocol.RotationAcceptedEntry, Swift.Int64, Foundation.Data, RatifyProtocol.HybridPublicKey
+RotationAcceptedEntry.oldKey [Var] -> RatifyProtocol.HybridPublicKey
+RotationAcceptedEntry.sequence [Var] -> Swift.Int64
+RotationJournal [Struct]
+RotationJournal.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RotationJournal, RatifyProtocol.RotationJournal
+RotationJournal.accepted [Var] -> [RatifyProtocol.RotationAcceptedEntry]
+RotationJournal.frozen [Var] -> Swift.Bool
+RotationJournal.hash(into:) [Func] -> (), Swift.Hasher
+RotationJournal.hashValue [Var] -> Swift.Int
+RotationJournal.init(state:accepted:frozen:) [Constructor] -> RatifyProtocol.RotationJournal, RatifyProtocol.RotationState, [RatifyProtocol.RotationAcceptedEntry], Swift.Bool
+RotationJournal.state [Var] -> RatifyProtocol.RotationState
+RotationState [Struct]
+RotationState.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.RotationState, RatifyProtocol.RotationState
+RotationState.authorityId [Var] -> Swift.String
+RotationState.currentKey [Var] -> RatifyProtocol.HybridPublicKey
+RotationState.hash(into:) [Func] -> (), Swift.Hasher
+RotationState.hashValue [Var] -> Swift.Int
+RotationState.headHash [Var] -> Foundation.Data
+RotationState.init(authorityId:recoveryEpoch:role:sequence:headHash:currentKey:usedKeyIds:) [Constructor] -> RatifyProtocol.RotationState, Swift.String, Swift.Int64, Swift.String, Swift.Int64, Foundation.Data, RatifyProtocol.HybridPublicKey, [Swift.String]
+RotationState.recoveryEpoch [Var] -> Swift.Int64
+RotationState.role [Var] -> Swift.String
+RotationState.sequence [Var] -> Swift.Int64
+RotationState.usedKeyIds [Var] -> [Swift.String]
+SecureEnclaveKey [Class] @26.0
+SecureEnclaveKey.Custody [Enum]
+SecureEnclaveKey.Custody.RawValue [TypeAlias] @26.0
+SecureEnclaveKey.Custody.init(rawValue:) [Constructor] -> RatifyProtocol.SecureEnclaveKey.Custody?, Swift.String
+SecureEnclaveKey.Custody.rawValue [Var] -> Swift.String
+SecureEnclaveKey.Custody.secureEnclave [EnumElement] -> (RatifyProtocol.SecureEnclaveKey.Custody.Type) -> RatifyProtocol.SecureEnclaveKey.Custody
+SecureEnclaveKey.Custody.software [EnumElement] -> (RatifyProtocol.SecureEnclaveKey.Custody.Type) -> RatifyProtocol.SecureEnclaveKey.Custody
+SecureEnclaveKey.custody [Var] -> (ed25519: RatifyProtocol.SecureEnclaveKey.Custody, mlDsa65: RatifyProtocol.SecureEnclaveKey.Custody)
+SecureEnclaveKey.defaultAccessControl() [Func] -> Security.SecAccessControl
+SecureEnclaveKey.generate(accessControl:authenticationContext:) [Func] -> RatifyProtocol.SecureEnclaveKey, Security.SecAccessControl, LocalAuthentication.LAContext?
+SecureEnclaveKey.init(storageRecord:authenticationContext:) [Constructor] -> RatifyProtocol.SecureEnclaveKey, Foundation.Data, LocalAuthentication.LAContext?
+SecureEnclaveKey.keyId [Var] -> Swift.String
+SecureEnclaveKey.publicKey [Var] -> RatifyProtocol.HybridPublicKey
+SecureEnclaveKey.storageRecord() [Func] -> Foundation.Data
+SecurityJournalHead [Struct]
+SecurityJournalHead.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SecurityJournalHead, RatifyProtocol.SecurityJournalHead
+SecurityJournalHead.digest [Var] -> Swift.String
+SecurityJournalHead.generation [Var] -> Swift.UInt64
+SecurityJournalHead.hash(into:) [Func] -> (), Swift.Hasher
+SecurityJournalHead.hashValue [Var] -> Swift.Int
+SecurityJournalHead.init(generation:digest:) [Constructor] -> RatifyProtocol.SecurityJournalHead, Swift.UInt64, Swift.String
+SecurityJournalSnapshot [Struct]
+SecurityJournalSnapshot.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SecurityJournalSnapshot, RatifyProtocol.SecurityJournalSnapshot
+SecurityJournalSnapshot.hash(into:) [Func] -> (), Swift.Hasher
+SecurityJournalSnapshot.hashValue [Var] -> Swift.Int
+SecurityJournalSnapshot.head [Var] -> RatifyProtocol.SecurityJournalHead
+SecurityJournalSnapshot.init(snapshot:head:) [Constructor] -> RatifyProtocol.SecurityJournalSnapshot, Foundation.Data, RatifyProtocol.SecurityJournalHead
+SecurityJournalSnapshot.snapshot [Var] -> Foundation.Data
+SecurityJournalStore [Protocol]
+SecurityJournalStore.compareAndSwap(expected:next:) [Func] -> (), RatifyProtocol.SecurityJournalHead, RatifyProtocol.SecurityJournalSnapshot
+SecurityJournalStore.load() [Func] -> RatifyProtocol.SecurityJournalSnapshot
+SecurityJournalStoreError [Enum]
+SecurityJournalStoreError.__derived_enum_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SecurityJournalStoreError, RatifyProtocol.SecurityJournalStoreError
+SecurityJournalStoreError.cancelled [EnumElement] -> (RatifyProtocol.SecurityJournalStoreError.Type) -> RatifyProtocol.SecurityJournalStoreError
+SecurityJournalStoreError.conflict [EnumElement] -> (RatifyProtocol.SecurityJournalStoreError.Type) -> RatifyProtocol.SecurityJournalStoreError
+SecurityJournalStoreError.hash(into:) [Func] -> (), Swift.Hasher
+SecurityJournalStoreError.hashValue [Var] -> Swift.Int
+SessionContextInputs [Struct]
+SessionContextInputs.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SessionContextInputs, RatifyProtocol.SessionContextInputs
+SessionContextInputs.agentId [Var] -> Swift.String
+SessionContextInputs.hash(into:) [Func] -> (), Swift.Hasher
+SessionContextInputs.hashValue [Var] -> Swift.Int
+SessionContextInputs.init(verifierId:workspaceId:agentId:sessionId:invocationId:requestHash:) [Constructor] -> RatifyProtocol.SessionContextInputs, Swift.String, Swift.String, Swift.String, Swift.String, Swift.String, Foundation.Data
+SessionContextInputs.invocationId [Var] -> Swift.String
+SessionContextInputs.requestHash [Var] -> Foundation.Data
+SessionContextInputs.sessionId [Var] -> Swift.String
+SessionContextInputs.verifierId [Var] -> Swift.String
+SessionContextInputs.workspaceId [Var] -> Swift.String
+SignRequest [Struct]
+SignRequest.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SignRequest, RatifyProtocol.SignRequest
+SignRequest.hash(into:) [Func] -> (), Swift.Hasher
+SignRequest.hashValue [Var] -> Swift.Int
+SignRequest.keyId [Var] -> Swift.String
+SignRequest.message [Var] -> Foundation.Data
+SignRequest.mlDsaContext [Var] -> Foundation.Data?
+SignRequest.mlDsaMu [Var] -> Foundation.Data?
+SignRequest.mode [Var] -> RatifyProtocol.SignerMode
+SignRequest.publicKey [Var] -> RatifyProtocol.HybridPublicKey
+SignerMode [Enum]
+SignerMode.__derived_enum_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.SignerMode, RatifyProtocol.SignerMode
+SignerMode.direct [EnumElement] -> (RatifyProtocol.SignerMode.Type) -> RatifyProtocol.SignerMode
+SignerMode.externalMu [EnumElement] -> (RatifyProtocol.SignerMode.Type) -> RatifyProtocol.SignerMode
+SignerMode.hash(into:) [Func] -> (), Swift.Hasher
+SignerMode.hashValue [Var] -> Swift.Int
+SigningErrorKind [Enum]
+SigningErrorKind.AllCases [TypeAlias]
+SigningErrorKind.RawValue [TypeAlias]
+SigningErrorKind.allCases [Var] -> [RatifyProtocol.SigningErrorKind]
+SigningErrorKind.cancelled [EnumElement] -> (RatifyProtocol.SigningErrorKind.Type) -> RatifyProtocol.SigningErrorKind
+SigningErrorKind.init(rawValue:) [Constructor] -> RatifyProtocol.SigningErrorKind?, Swift.String
+SigningErrorKind.invalidObject [EnumElement] -> (RatifyProtocol.SigningErrorKind.Type) -> RatifyProtocol.SigningErrorKind
+SigningErrorKind.invalidSignerKey [EnumElement] -> (RatifyProtocol.SigningErrorKind.Type) -> RatifyProtocol.SigningErrorKind
+SigningErrorKind.issuerDuty [EnumElement] -> (RatifyProtocol.SigningErrorKind.Type) -> RatifyProtocol.SigningErrorKind
+SigningErrorKind.keyBinding [EnumElement] -> (RatifyProtocol.SigningErrorKind.Type) -> RatifyProtocol.SigningErrorKind
+SigningErrorKind.provider [EnumElement] -> (RatifyProtocol.SigningErrorKind.Type) -> RatifyProtocol.SigningErrorKind
+SigningErrorKind.rawValue [Var] -> Swift.String
+SigningErrorKind.signatureRejected [EnumElement] -> (RatifyProtocol.SigningErrorKind.Type) -> RatifyProtocol.SigningErrorKind
+SigningErrorKind.unsupportedMode [EnumElement] -> (RatifyProtocol.SigningErrorKind.Type) -> RatifyProtocol.SigningErrorKind
+SigningKey [Enum]
+SigningKey.external [EnumElement] -> (RatifyProtocol.SigningKey.Type) -> (any RatifyProtocol.ExternalSigner) -> RatifyProtocol.SigningKey
+SigningKey.platform [EnumElement] -> (RatifyProtocol.SigningKey.Type) -> (RatifyProtocol.PlatformKey) -> RatifyProtocol.SigningKey
+SigningKey.software [EnumElement] -> (RatifyProtocol.SigningKey.Type) -> (RatifyProtocol.SoftwarePrivateKey) -> RatifyProtocol.SigningKey
+SoftwarePrivateKey [Class]
+SoftwarePrivateKey.generate() [Func] -> RatifyProtocol.SoftwarePrivateKey
+SoftwarePrivateKey.init(ed25519Seed:mlDsa65Seed:) [Constructor] -> RatifyProtocol.SoftwarePrivateKey, Foundation.Data, Foundation.Data
+SoftwarePrivateKey.init(storageRecord:) [Constructor] -> RatifyProtocol.SoftwarePrivateKey, Foundation.Data
+SoftwarePrivateKey.keyId [Var] -> Swift.String
+SoftwarePrivateKey.publicKey [Var] -> RatifyProtocol.HybridPublicKey
+SoftwarePrivateKey.storageRecord() [Func] -> Foundation.Data
+StagedClaim [Struct]
+StagedClaim.claim [Var] -> RatifyProtocol.ChallengeClaim
+StagedClaim.disposition [Var] -> RatifyProtocol.ClaimDisposition
+StagedClaim.evaluationToken [Var] -> RatifyProtocol.EvaluationToken?
+StatusEvidenceEntry [Struct]
+StatusEvidenceEntry.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.StatusEvidenceEntry, RatifyProtocol.StatusEvidenceEntry
+StatusEvidenceEntry.digest [Var] -> Swift.String
+StatusEvidenceEntry.hash(into:) [Func] -> (), Swift.Hasher
+StatusEvidenceEntry.hashValue [Var] -> Swift.Int
+StatusEvidenceEntry.init(issuerId:statusKeyId:sequence:objectType:digest:) [Constructor] -> RatifyProtocol.StatusEvidenceEntry, Swift.String, Swift.String, Swift.Int64, Swift.UInt16, Swift.String
+StatusEvidenceEntry.issuerId [Var] -> Swift.String
+StatusEvidenceEntry.objectType [Var] -> Swift.UInt16
+StatusEvidenceEntry.sequence [Var] -> Swift.Int64
+StatusEvidenceEntry.statusKeyId [Var] -> Swift.String
+StatusEvidenceObject [Struct]
+StatusEvidenceObject.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.StatusEvidenceObject, RatifyProtocol.StatusEvidenceObject
+StatusEvidenceObject.hash(into:) [Func] -> (), Swift.Hasher
+StatusEvidenceObject.hashValue [Var] -> Swift.Int
+StatusEvidenceObject.init(objectType:wire:) [Constructor] -> RatifyProtocol.StatusEvidenceObject, Swift.UInt16, Foundation.Data
+StatusEvidenceObject.objectType [Var] -> Swift.UInt16
+StatusEvidenceObject.wire [Var] -> Foundation.Data
+StatusEvidenceProvider [Protocol]
+StatusEvidenceProvider.provide(_:) [Func] -> [RatifyProtocol.StatusEvidenceObject], RatifyProtocol.StatusEvidenceRequest
+StatusEvidenceRequest [Struct]
+StatusEvidenceRequest.issuerId [Var] -> Swift.String
+StatusEvidenceRequest.refs [Var] -> [RatifyProtocol.CertificateRef]
+StatusEvidenceRequest.statusKeyEpoch [Var] -> Swift.UInt64
+StatusEvidenceRequest.statusKeyId [Var] -> Swift.String
+StatusKeyConfig [Struct]
+StatusKeyConfig.epoch [Var] -> Swift.UInt64
+StatusKeyConfig.init(epoch:key:) [Constructor] -> RatifyProtocol.StatusKeyConfig, Swift.UInt64, RatifyProtocol.HybridPublicKey
+StatusKeyConfig.key [Var] -> RatifyProtocol.HybridPublicKey
+StatusObject [Enum]
+StatusObject.__derived_enum_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.StatusObject, RatifyProtocol.StatusObject
+StatusObject.hash(into:) [Func] -> (), Swift.Hasher
+StatusObject.hashValue [Var] -> Swift.Int
+StatusObject.list [EnumElement] -> (RatifyProtocol.StatusObject.Type) -> (RatifyProtocol.RevocationList) -> RatifyProtocol.StatusObject
+StatusObject.push [EnumElement] -> (RatifyProtocol.StatusObject.Type) -> (RatifyProtocol.RevocationPush) -> RatifyProtocol.StatusObject
+StatusPublication [Struct]
+StatusPublication.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.StatusPublication, RatifyProtocol.StatusPublication
+StatusPublication.hash(into:) [Func] -> (), Swift.Hasher
+StatusPublication.hashValue [Var] -> Swift.Int
+StatusPublication.list [Var] -> RatifyProtocol.RevocationList
+StatusPublication.push [Var] -> RatifyProtocol.RevocationPush?
+StatusPublication.state [Var] -> RatifyProtocol.StatusPublisherState
+StatusPublisher [Class]
+StatusPublisher.genesis(updatedAt:timeout:) [Func] -> RatifyProtocol.StatusPublication, Swift.Int64, Swift.Duration?
+StatusPublisher.heartbeat(state:updatedAt:timeout:) [Func] -> RatifyProtocol.StatusPublication, RatifyProtocol.StatusPublisherState, Swift.Int64, Swift.Duration?
+StatusPublisher.issuerId [Var] -> Swift.String
+StatusPublisher.revoke(state:certIds:at:timeout:) [Func] -> RatifyProtocol.StatusPublication, RatifyProtocol.StatusPublisherState, [Swift.String], Swift.Int64, Swift.Duration?
+StatusPublisher.statusKey [Var] -> RatifyProtocol.HybridPublicKey
+StatusPublisherState [Struct]
+StatusPublisherState.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.StatusPublisherState, RatifyProtocol.StatusPublisherState
+StatusPublisherState.hash(into:) [Func] -> (), Swift.Hasher
+StatusPublisherState.hashValue [Var] -> Swift.Int
+StatusPublisherState.init(issuerId:statusKeyId:sequence:updatedAt:revoked:) [Constructor] -> RatifyProtocol.StatusPublisherState, Swift.String, Swift.String, Swift.Int64, Swift.Int64, [Swift.String]
+StatusPublisherState.issuerId [Var] -> Swift.String
+StatusPublisherState.revoked [Var] -> [Swift.String]
+StatusPublisherState.sequence [Var] -> Swift.Int64
+StatusPublisherState.statusKeyId [Var] -> Swift.String
+StatusPublisherState.updatedAt [Var] -> Swift.Int64
+StoreError [Enum]
+StoreError.acknowledgementNotFound [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.challengeIssuanceConflict [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.challengeIssuanceNotFound [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.claimProofConflict [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.classified [EnumElement] -> (RatifyProtocol.StoreError.Type) -> (RatifyProtocol.ErrorClass, Swift.String) -> RatifyProtocol.StoreError
+StoreError.errorClass [Var] -> RatifyProtocol.ErrorClass?
+StoreError.rateLimitExceeded [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.releaseStateMismatch [EnumElement] -> (RatifyProtocol.StoreError.Type) -> RatifyProtocol.StoreError
+StoreError.unavailable [EnumElement] -> (RatifyProtocol.StoreError.Type) -> (Swift.String) -> RatifyProtocol.StoreError
+TerminalClaimRecord [Struct]
+TerminalClaimRecord.allowHorizon [Var] -> Swift.Int64
+TerminalClaimRecord.challengeExpiresAt [Var] -> Swift.Int64
+TerminalClaimRecord.finalizedAt [Var] -> Swift.Int64
+TerminalClaimRecord.init(terminal:receiptOutboxDigest:challengeExpiresAt:allowHorizon:finalizedAt:receiptAbandoned:release:) [Constructor] -> RatifyProtocol.TerminalClaimRecord, Swift.Bool, Swift.String, Swift.Int64, Swift.Int64, Swift.Int64, Swift.Bool, RatifyProtocol.ReleaseRecord?
+TerminalClaimRecord.receiptAbandoned [Var] -> Swift.Bool
+TerminalClaimRecord.receiptOutboxDigest [Var] -> Swift.String
+TerminalClaimRecord.release [Var] -> RatifyProtocol.ReleaseRecord?
+TerminalClaimRecord.terminal [Var] -> Swift.Bool
+TransactionPartyVerification [Struct]
+TransactionPartyVerification.agentId [Var] -> Swift.String
+TransactionPartyVerification.delegationAssessment [Var] -> Swift.String
+TransactionPartyVerification.delegationExpiresAt [Var] -> Swift.Int64?
+TransactionPartyVerification.freshness [Var] -> Swift.String
+TransactionPartyVerification.partyId [Var] -> Swift.String
+TransactionPartyVerification.requiredScope [Var] -> Swift.String
+TransactionPartyVerification.scopeAssessment [Var] -> Swift.String
+TransactionPartyVerification.statusAssessment [Var] -> Swift.String
+TransactionPartyVerification.statusEvidence [Var] -> [RatifyProtocol.StatusEvidenceEntry]
+TransactionPartyVerification.trustAssessment [Var] -> Swift.String
+TransactionReceipt [Struct]
+TransactionReceipt.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.TransactionReceipt, RatifyProtocol.TransactionReceipt
+TransactionReceipt.createdAt [Var] -> Swift.Int64
+TransactionReceipt.hash(into:) [Func] -> (), Swift.Hasher
+TransactionReceipt.hashValue [Var] -> Swift.Int
+TransactionReceipt.init(version:transactionId:createdAt:termsSchemaUri:termsCanonicalJson:parties:partySignatures:) [Constructor] -> RatifyProtocol.TransactionReceipt, Swift.Int64, Swift.String, Swift.Int64, Swift.String, Foundation.Data, [RatifyProtocol.TransactionReceiptParty], [RatifyProtocol.TransactionReceiptSignature]
+TransactionReceipt.parties [Var] -> [RatifyProtocol.TransactionReceiptParty]
+TransactionReceipt.partySignatures [Var] -> [RatifyProtocol.TransactionReceiptSignature]
+TransactionReceipt.termsCanonicalJson [Var] -> Foundation.Data
+TransactionReceipt.termsSchemaUri [Var] -> Swift.String
+TransactionReceipt.transactionId [Var] -> Swift.String
+TransactionReceipt.version [Var] -> Swift.Int64
+TransactionReceiptParty [Struct]
+TransactionReceiptParty.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.TransactionReceiptParty, RatifyProtocol.TransactionReceiptParty
+TransactionReceiptParty.agentId [Var] -> Swift.String
+TransactionReceiptParty.agentPubKey [Var] -> RatifyProtocol.HybridPublicKey
+TransactionReceiptParty.hash(into:) [Func] -> (), Swift.Hasher
+TransactionReceiptParty.hashValue [Var] -> Swift.Int
+TransactionReceiptParty.init(partyId:role:agentId:agentPubKey:verifierId:workspaceId:sessionId:invocationId:requiredScope:proofBundleHash:proofBundle:) [Constructor] -> RatifyProtocol.TransactionReceiptParty, Swift.String, Swift.String, Swift.String, RatifyProtocol.HybridPublicKey, Swift.String, Swift.String, Swift.String, Swift.String, Swift.String, Swift.String, RatifyProtocol.ProofBundle?
+TransactionReceiptParty.invocationId [Var] -> Swift.String
+TransactionReceiptParty.partyId [Var] -> Swift.String
+TransactionReceiptParty.proofBundle [Var] -> RatifyProtocol.ProofBundle?
+TransactionReceiptParty.proofBundleHash [Var] -> Swift.String
+TransactionReceiptParty.requiredScope [Var] -> Swift.String
+TransactionReceiptParty.role [Var] -> Swift.String
+TransactionReceiptParty.sessionId [Var] -> Swift.String
+TransactionReceiptParty.verifierId [Var] -> Swift.String
+TransactionReceiptParty.workspaceId [Var] -> Swift.String
+TransactionReceiptSignature [Struct]
+TransactionReceiptSignature.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.TransactionReceiptSignature, RatifyProtocol.TransactionReceiptSignature
+TransactionReceiptSignature.hash(into:) [Func] -> (), Swift.Hasher
+TransactionReceiptSignature.hashValue [Var] -> Swift.Int
+TransactionReceiptSignature.init(partyId:signature:) [Constructor] -> RatifyProtocol.TransactionReceiptSignature, Swift.String, RatifyProtocol.HybridSignature
+TransactionReceiptSignature.partyId [Var] -> Swift.String
+TransactionReceiptSignature.signature [Var] -> RatifyProtocol.HybridSignature
+TransactionReceiptVerification [Struct]
+TransactionReceiptVerification.actionable [Var] -> Swift.Bool
+TransactionReceiptVerification.parties [Var] -> [RatifyProtocol.TransactionPartyVerification]
+TransactionReceiptVerification.transactionId [Var] -> Swift.String
+TransactionVerifyRequest [Struct]
+TransactionVerifyRequest.futureSkewSeconds [Var] -> Swift.Int64
+TransactionVerifyRequest.init(receipt:now:futureSkewSeconds:statusKeys:statusPolicy:) [Constructor] -> RatifyProtocol.TransactionVerifyRequest, Foundation.Data, Swift.Int64, Swift.Int64, [Swift.String : RatifyProtocol.StatusKeyConfig], RatifyProtocol.RevocationStatusPolicy
+TransactionVerifyRequest.now [Var] -> Swift.Int64
+TransactionVerifyRequest.receipt [Var] -> Foundation.Data
+TransactionVerifyRequest.statusKeys [Var] -> [Swift.String : RatifyProtocol.StatusKeyConfig]
+TransactionVerifyRequest.statusPolicy [Var] -> RatifyProtocol.RevocationStatusPolicy
+TrustOutcome [Enum]
+TrustOutcome.RawValue [TypeAlias]
+TrustOutcome.ambiguous [EnumElement] -> (RatifyProtocol.TrustOutcome.Type) -> RatifyProtocol.TrustOutcome
+TrustOutcome.init(rawValue:) [Constructor] -> RatifyProtocol.TrustOutcome?, Swift.String
+TrustOutcome.rawValue [Var] -> Swift.String
+TrustOutcome.trusted [EnumElement] -> (RatifyProtocol.TrustOutcome.Type) -> RatifyProtocol.TrustOutcome
+TrustOutcome.unavailable [EnumElement] -> (RatifyProtocol.TrustOutcome.Type) -> RatifyProtocol.TrustOutcome
+TrustOutcome.untrusted [EnumElement] -> (RatifyProtocol.TrustOutcome.Type) -> RatifyProtocol.TrustOutcome
+TrustProvider [Protocol]
+TrustProvider.resolve(chain:) [Func] -> RatifyProtocol.TrustResolution, [RatifyProtocol.DelegationCert]
+TrustResolution [Struct]
+TrustResolution.init(outcome:rootKey:) [Constructor] -> RatifyProtocol.TrustResolution, RatifyProtocol.TrustOutcome, RatifyProtocol.HybridPublicKey
+TrustResolution.outcome [Var] -> RatifyProtocol.TrustOutcome
+TrustResolution.rootKey [Var] -> RatifyProtocol.HybridPublicKey
+VerificationReceipt [Struct]
+VerificationReceipt.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.VerificationReceipt, RatifyProtocol.VerificationReceipt
+VerificationReceipt.agentId [Var] -> Swift.String
+VerificationReceipt.bundleHash [Var] -> Swift.String
+VerificationReceipt.challengeAssessment [Var] -> Swift.String
+VerificationReceipt.constraintEvaluators [Var] -> [RatifyProtocol.ConstraintEvaluatorRef]
+VerificationReceipt.contextAssessment [Var] -> Swift.String
+VerificationReceipt.contextPolicyDigest [Var] -> Swift.String?
+VerificationReceipt.decision [Var] -> Swift.String
+VerificationReceipt.decisionReason [Var] -> Swift.String
+VerificationReceipt.grantedScope [Var] -> [Swift.String]
+VerificationReceipt.hash(into:) [Func] -> (), Swift.Hasher
+VerificationReceipt.hashValue [Var] -> Swift.Int
+VerificationReceipt.humanId [Var] -> Swift.String
+VerificationReceipt.identityStatus [Var] -> Swift.String
+VerificationReceipt.init(version:logId:sequence:verifierId:agentId:humanId:bundleHash:issuerIds:decision:decisionReason:identityStatus:trustAssessment:statusAssessment:challengeAssessment:constraintEvaluators:contextAssessment:contextPolicyDigest:verifiedAt:requiredScope:grantedScope:statusEvidence:previousReceiptHash:signature:) [Constructor] -> RatifyProtocol.VerificationReceipt, Swift.Int64, Swift.String, Swift.Int64, Swift.String, Swift.String, Swift.String, Swift.String, [Swift.String], Swift.String, Swift.String, Swift.String, Swift.String, Swift.String, Swift.String, [RatifyProtocol.ConstraintEvaluatorRef], Swift.String, Swift.String?, Swift.Int64, Swift.String, [Swift.String], [RatifyProtocol.StatusEvidenceEntry], Foundation.Data, RatifyProtocol.HybridSignature
+VerificationReceipt.issuerIds [Var] -> [Swift.String]
+VerificationReceipt.logId [Var] -> Swift.String
+VerificationReceipt.previousReceiptHash [Var] -> Foundation.Data
+VerificationReceipt.requiredScope [Var] -> Swift.String
+VerificationReceipt.sequence [Var] -> Swift.Int64
+VerificationReceipt.signature [Var] -> RatifyProtocol.HybridSignature
+VerificationReceipt.statusAssessment [Var] -> Swift.String
+VerificationReceipt.statusEvidence [Var] -> [RatifyProtocol.StatusEvidenceEntry]
+VerificationReceipt.trustAssessment [Var] -> Swift.String
+VerificationReceipt.verifiedAt [Var] -> Swift.Int64
+VerificationReceipt.verifierId [Var] -> Swift.String
+VerificationReceipt.version [Var] -> Swift.Int64
+VerifyOutcome [Struct]
+VerifyOutcome.claim [Var] -> RatifyProtocol.ChallengeClaim
+VerifyOutcome.committed [Var] -> RatifyProtocol.CommittedOutcome?
+VerifyOutcome.disposition [Var] -> RatifyProtocol.ClaimDisposition?
+VerifyOutcome.errorClass [Var] -> RatifyProtocol.ErrorClass?
+VerifyOutcome.errorDetail [Var] -> Swift.String?
+VerifyOutcome.stage [Var] -> RatifyProtocol.VerifyStage
+VerifyRequest [Struct]
+VerifyRequest.bundle [Var] -> Foundation.Data
+VerifyRequest.constraintEvaluators [Var] -> RatifyProtocol.ConstraintEvaluatorRegistry?
+VerifyRequest.context [Var] -> RatifyProtocol.ConstraintContext
+VerifyRequest.contextPolicy [Var] -> RatifyProtocol.ContextPolicy?
+VerifyRequest.expected [Var] -> RatifyProtocol.ExpectedChallenge?
+VerifyRequest.futureSkewSeconds [Var] -> Swift.Int64
+VerifyRequest.init(bundle:expected:contextPolicy:requiredScope:verifierNamespace:replayEpoch:verifierId:now:maxChallengeAgeSeconds:futureSkewSeconds:context:tzdbVersion:statusKeys:statusPolicy:constraintEvaluators:) [Constructor] -> RatifyProtocol.VerifyRequest, Foundation.Data, RatifyProtocol.ExpectedChallenge?, RatifyProtocol.ContextPolicy?, Swift.String, Swift.String, Swift.Int64, Swift.String, Swift.Int64, Swift.Int64, Swift.Int64, RatifyProtocol.ConstraintContext, Swift.String, [Swift.String : RatifyProtocol.StatusKeyConfig], RatifyProtocol.RevocationStatusPolicy, RatifyProtocol.ConstraintEvaluatorRegistry?
+VerifyRequest.maxChallengeAgeSeconds [Var] -> Swift.Int64
+VerifyRequest.now [Var] -> Swift.Int64
+VerifyRequest.replayEpoch [Var] -> Swift.Int64
+VerifyRequest.requiredScope [Var] -> Swift.String
+VerifyRequest.statusKeys [Var] -> [Swift.String : RatifyProtocol.StatusKeyConfig]
+VerifyRequest.statusPolicy [Var] -> RatifyProtocol.RevocationStatusPolicy
+VerifyRequest.tzdbVersion [Var] -> Swift.String
+VerifyRequest.verifierId [Var] -> Swift.String
+VerifyRequest.verifierNamespace [Var] -> Swift.String
+VerifyStage [Enum]
+VerifyStage.RawValue [TypeAlias]
+VerifyStage.committed [EnumElement] -> (RatifyProtocol.VerifyStage.Type) -> RatifyProtocol.VerifyStage
+VerifyStage.evaluating [EnumElement] -> (RatifyProtocol.VerifyStage.Type) -> RatifyProtocol.VerifyStage
+VerifyStage.init(rawValue:) [Constructor] -> RatifyProtocol.VerifyStage?, Swift.String
+VerifyStage.preflight [EnumElement] -> (RatifyProtocol.VerifyStage.Type) -> RatifyProtocol.VerifyStage
+VerifyStage.rawValue [Var] -> Swift.String
+VerifyStage.replay [EnumElement] -> (RatifyProtocol.VerifyStage.Type) -> RatifyProtocol.VerifyStage
+WitnessEntry [Struct]
+WitnessEntry.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.WitnessEntry, RatifyProtocol.WitnessEntry
+WitnessEntry.entryData [Var] -> Foundation.Data
+WitnessEntry.hash(into:) [Func] -> (), Swift.Hasher
+WitnessEntry.hashValue [Var] -> Swift.Int
+WitnessEntry.init(version:logId:sequence:prevHash:entryData:timestamp:witnessId:signature:) [Constructor] -> RatifyProtocol.WitnessEntry, Swift.Int64, Swift.String, Swift.Int64, Foundation.Data, Foundation.Data, Swift.Int64, Swift.String, RatifyProtocol.HybridSignature
+WitnessEntry.logId [Var] -> Swift.String
+WitnessEntry.prevHash [Var] -> Foundation.Data
+WitnessEntry.sequence [Var] -> Swift.Int64
+WitnessEntry.signature [Var] -> RatifyProtocol.HybridSignature
+WitnessEntry.timestamp [Var] -> Swift.Int64
+WitnessEntry.version [Var] -> Swift.Int64
+WitnessEntry.witnessId [Var] -> Swift.String
+WitnessHead [Struct]
+WitnessHead.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.WitnessHead, RatifyProtocol.WitnessHead
+WitnessHead.acceptedDigests [Var] -> [Swift.Int64 : Foundation.Data]
+WitnessHead.frozen [Var] -> Swift.Bool
+WitnessHead.hash(into:) [Func] -> (), Swift.Hasher
+WitnessHead.hashValue [Var] -> Swift.Int
+WitnessHead.headHash [Var] -> Foundation.Data
+WitnessHead.init(logId:sequence:headHash:acceptedDigests:frozen:) [Constructor] -> RatifyProtocol.WitnessHead, Swift.String, Swift.Int64, Foundation.Data, [Swift.Int64 : Foundation.Data], Swift.Bool
+WitnessHead.logId [Var] -> Swift.String
+WitnessHead.sequence [Var] -> Swift.Int64

@@ -79,7 +79,7 @@ use crate::crypto::{derive_id, hybrid_keypair_from_seeds};
 use crate::types::{HybridPrivateKey, HybridPublicKey, HybridSignature, ParamsValue};
 
 /// SDK names a cross-SDK fixture file may carry (`cross-sdk/<sdk>.json`).
-pub const CROSS_SDK_NAMES_V2: [&str; 5] = ["go", "typescript", "python", "rust", "c"];
+pub const CROSS_SDK_NAMES_V2: [&str; 7] = ["go", "typescript", "python", "rust", "c", "swift", "kotlin"];
 
 /// Key names every cross-SDK fixture defines, in file order.
 pub const CROSS_SDK_KEY_NAMES_V2: [&str; 11] = [

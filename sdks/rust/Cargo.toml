@@ -15,6 +15,7 @@ categories = ["cryptography", "authentication"]
 [features]
 default = ["std"]
 std = ["serde_json", "sha3"]
+test-hooks = []
 
 [dependencies]
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }

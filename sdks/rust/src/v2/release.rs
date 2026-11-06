@@ -87,6 +87,20 @@ impl CommittedV2Outcome {
     }
 }
 
+/// A deliberately invalid handoff for SDK conformance tests. Ordinary builds
+/// do not expose a constructor for committed outcomes.
+#[doc(hidden)]
+#[cfg(feature = "test-hooks")]
+pub fn forged_committed_outcome_test_only() -> CommittedV2Outcome {
+    CommittedV2Outcome {
+        claim_id: String::new(),
+        verifier_id: String::new(),
+        receipt_body: Vec::new(),
+        challenge_expires_at: 0,
+        allow_horizon: 0,
+    }
+}
+
 /// `"sha384:" + hex(SHA-384("ratify-protocol-receipt-outbox-v2" || 0x00 || body))`.
 pub fn receipt_outbox_digest_v2(body: &[u8]) -> String {
     format!(
@@ -574,7 +588,7 @@ mod tests {
     use crate::v2::reference::Store;
 
     // lifecycle-scenarios.json `release_forged`: an outcome the verifier never
-    // produced (the Go zero value) is always rejected. Callers cannot build
+    // produced (the Go zero value) is always rejected. Ordinary callers cannot build
     // one, so this crate-internal test is where the vector's expectation runs.
     #[test]
     fn forged_zero_value_outcome_is_rejected() {

@@ -1,0 +1,21 @@
+[advisories]
+# UniFFI 0.32.2's bindgen pulls basic-toml through askama_derive. RustSec
+# marks it unmaintained, with no safe upgrade; it is not runtime SDK code.
+# Revisit the pinned toolchain before the next release; new findings still fail.
+ignore = [{ id = "RUSTSEC-2026-0374", reason = "UniFFI bindgen-only dependency; no safe upgrade exists" }]
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-1-Clause",
+    "BSD-3-Clause",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -22,7 +22,7 @@ const SCENARIO_MEMBERS: [&str; 2] = ["scenario_configuration", "scenarios"];
 /// Fixtures that must carry the verifier and release scenarios. The others
 /// are replayed whenever present; one that predates the scenarios is
 /// reported as not meeting SPEC-v2 §8.1 for its producer.
-const SCENARIO_REQUIRED: [&str; 5] = ["c", "go", "python", "rust", "typescript"];
+const SCENARIO_REQUIRED: [&str; 7] = ["c", "go", "kotlin", "python", "rust", "swift", "typescript"];
 const KEY_FIELDS: [&str; 6] =
     ["name", "ed25519_seed_hex", "ml_dsa_65_seed_hex", "public_key", "key_id_v2", "v1_key_id_128"];
 const OBJECT_FIELDS: [&str; 7] = ["name", "kind", "description", "wire_b64", "verify", "signatures", "digests"];
@@ -482,7 +482,7 @@ fn v2_cross_sdk_fixtures() {
     }
     verified.sort();
     println!("COVERAGE cross-sdk fixtures verified: {verified:?}");
-    for required in ["go", "python", "rust", "typescript", "c"] {
+    for required in ["go", "python", "rust", "typescript", "c", "swift", "kotlin"] {
         assert!(verified.iter().any(|v| v == required), "{required}.json is missing");
     }
 }

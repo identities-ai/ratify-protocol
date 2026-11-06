@@ -42,3 +42,14 @@ sdks/python-native/target/
 sdks/python-native/dist/
 sdks/python-native-v2/target/
 sdks/python-native-v2/dist/
+
+# Swift and Kotlin SDK build outputs
+/.build/
+/.swiftpm/
+/sdks/ffi/target/
+/sdks/swift/build/
+/sdks/kotlin/.gradle/
+/sdks/kotlin/.kotlin/
+/sdks/kotlin/**/build/
+/sdks/kotlin/local.properties
+/sdks/swift/HostApp/RatifyHost.xcodeproj/

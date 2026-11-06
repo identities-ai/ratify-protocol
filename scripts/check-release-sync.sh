@@ -135,6 +135,18 @@ def semver_to_py(v: str) -> str:
 # other.
 v2_version = ts_version
 v1_version = native_version
+ffi_toml = read("sdks/ffi/Cargo.toml")
+ffi_version = re.search(r'^version = "([^"]+)"$', ffi_toml, re.M)
+ffi_pin = re.search(r'^ratify-protocol = \{ path = "\.\./rust", version = "=([^"]+)" \}$', ffi_toml, re.M)
+if not ffi_version or ffi_version.group(1) != v2_version or not ffi_pin or ffi_pin.group(1) != v2_version:
+    fail("mobile FFI crate version and exact Rust dependency must match the v2 line")
+kotlin_props = read("sdks/kotlin/gradle.properties")
+kotlin_version = re.search(r'^VERSION_NAME=([^\s]+)$', kotlin_props, re.M)
+kotlin_group = re.search(r'^GROUP=([^\s]+)$', kotlin_props, re.M)
+if not kotlin_version or kotlin_version.group(1) != v2_version:
+    fail("Kotlin Maven version must match the v2 line")
+if not kotlin_group or kotlin_group.group(1) != "com.ratifyprotocol":
+    fail("Kotlin Maven group must be com.ratifyprotocol")
 v1_py_version = semver_to_py(v1_version)
 if not v2_version.startswith("2."):
     fail(f"TypeScript version {v2_version} is not on the v2 line")

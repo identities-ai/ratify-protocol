@@ -85,6 +85,9 @@ SDK_TAGS=(
   "sdk-rust-$VERSION"
   "sdk-c-$VERSION"
 )
+if [[ "$RELEASE_LINE" == "v2" ]]; then
+  SDK_TAGS+=("sdk-swift-$VERSION" "sdk-kotlin-$VERSION")
+fi
 
 require_clean() {
   if [[ -n "$(git status --porcelain)" ]]; then
@@ -192,6 +195,18 @@ lock_path.write_text(json.dumps(lock, indent=2, ensure_ascii=False) + "\n")
 rust_toml = read("sdks/rust/Cargo.toml")
 write("sdks/rust/Cargo.toml", re.sub(r'^version = "[^"]+"$', f'version = "{npm_version}"', rust_toml, count=1, flags=re.M))
 bump_lock("sdks/rust/Cargo.lock", ("ratify-protocol",))
+
+ffi_toml = read("sdks/ffi/Cargo.toml")
+ffi_toml = re.sub(r'^version = "[^"]+"$', f'version = "{npm_version}"', ffi_toml, count=1, flags=re.M)
+ffi_toml = re.sub(r'(ratify-protocol = \{ path = "\.\./rust", version = "=)[^"]+(" \})',
+                   rf'\g<1>{npm_version}\2', ffi_toml, count=1)
+write("sdks/ffi/Cargo.toml", ffi_toml)
+bump_lock("sdks/ffi/Cargo.lock", ("ratify-protocol", "ratify-protocol-ffi"))
+kotlin_props = read("sdks/kotlin/gradle.properties")
+write("sdks/kotlin/gradle.properties", re.sub(r'^VERSION_NAME=\S+$',
+    f'VERSION_NAME={npm_version}', kotlin_props, count=1, flags=re.M))
+for mobile_readme in ("sdks/swift/README.md", "sdks/kotlin/README.md"):
+    write(mobile_readme, read(mobile_readme).replace(old_npm, npm_version))
 
 # C SDK: crate version, the ratify-protocol dependency pin (used by
 # cargo publish to substitute the path dependency), the cbindgen header
@@ -558,14 +573,23 @@ PY
 
   if command -v gh >/dev/null 2>&1; then
     echo "==> Opening release PR"
+    local pr_body="Coordinated version bump for $VERSION across all SDK manifests. Full cross-SDK gate passed locally; CI re-runs it here."
+    if [[ "$RELEASE_LINE" == "v2" ]]; then
+      pr_body+=" Stage the CI-built mobile assets and Package.swift on this PR before merge."
+    fi
+    pr_body+=" After merge, run: make release-tag VERSION=$VERSION."
     gh pr create --base main \
       --title "chore: release $VERSION" \
-      --body "Coordinated version bump for $VERSION across all SDK manifests. Full cross-SDK gate passed locally; CI re-runs it here. After merge, run: \`make release-tag VERSION=$VERSION\`."
+      --body "$pr_body"
   else
     echo "==> gh not found — open the PR manually for branch $branch"
   fi
 
-  echo "release-prepare: ok ($VERSION) — merge the PR, then run: make release-tag VERSION=$VERSION"
+  if [[ "$RELEASE_LINE" == "v2" ]]; then
+    echo "release-prepare: stage the CI-built mobile assets and Package.swift on this PR before merge"
+  else
+    echo "release-prepare: ok ($VERSION) — merge the PR, then run: make release-tag VERSION=$VERSION"
+  fi
 }
 
 # Break-glass manual publish: for when the tag exists but the CI release
@@ -620,6 +644,18 @@ tag_release() {
   fi
   ./scripts/check-release-sync.sh
   require_all_tags_absent
+  if [[ "$RELEASE_LINE" == "v2" ]]; then
+    (
+      stage_dir="$(mktemp -d)"
+      trap 'rm -rf "$stage_dir"' EXIT
+      gh release download "$VERSION" -D "$stage_dir"
+      python3 scripts/verify-mobile-staging.py "$VERSION" "$stage_dir"
+      run_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["workflow_run"])' "$stage_dir/manifest.json")"
+      commit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$stage_dir/manifest.json")"
+      [[ "$(gh run view "$run_id" --json headSha --jq .headSha)" == "$commit" ]]
+      [[ "$(gh run view "$run_id" --json conclusion --jq .conclusion)" == success ]]
+    )
+  fi
 
   echo "==> Creating coordinated tags"
   git tag "$VERSION"
@@ -629,7 +665,7 @@ tag_release() {
 
   echo "==> Pushing tags"
   # Push the protocol tag on its own: GitHub does not create push events
-  # when more than three tags arrive in a single push, so pushing all six
+  # when more than three tags arrive in a single push, so pushing the protocol
   # tags together silently suppresses the tag-triggered release workflow.
   # The sdk-* tags carry no workflow trigger and can go together after.
   git push origin "$VERSION"

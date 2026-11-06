@@ -1,0 +1,110 @@
+import Foundation
+
+/// Internal bridge for the separately packaged reference store.
+@_spi(TestSupport) public final class ReferenceStoreBridge: Sendable {
+    let handle: FfiReferenceStore
+
+    public static func forgedCommittedOutcomeTestOnly() throws(RatifyError) -> CommittedOutcome {
+        try CommittedOutcome(ffi { try ffiForgedCommittedOutcomeTestOnly() })
+    }
+
+    public init(now: Int64, leaseSeconds: Int64, logId: String, verifierKey: SoftwarePrivateKey) throws(RatifyError) {
+        handle = try ffi { try FfiReferenceStore(now: now, leaseSeconds: leaseSeconds, logId: logId, verifierKey: verifierKey.handle) }
+    }
+
+    init(_ handle: FfiReferenceStore) { self.handle = handle }
+
+    public func cloneStore() throws(RatifyError) -> ReferenceStoreBridge {
+        try ReferenceStoreBridge(ffi { try handle.cloneStore() })
+    }
+
+    public func enableRateAtFinalization() throws(RatifyError) {
+        try ffi { try handle.enableRateAtFinalization() }
+    }
+
+    public func setTime(_ now: Int64) throws(RatifyError) { try ffi { try handle.setTime(now: now) } }
+    public func corruptSealedStateTestOnly(claimId: String) throws(RatifyError) {
+        try ffi { try handle.corruptSealedStateTestOnly(claimId: claimId) }
+    }
+    public func now() throws(RatifyError) -> Int64 { try ffi { try handle.now() } }
+    public func setSignerFailure(_ failing: Bool) throws(RatifyError) { try ffi { try handle.setSignerFailure(failing: failing) } }
+    public func setAcknowledgementWithheld(_ withheld: Bool) throws(RatifyError) { try ffi { try handle.setAcknowledgementWithheld(withheld: withheld) } }
+    public func logLength() throws(RatifyError) -> UInt64 { try ffi { try handle.logLength() } }
+    public func plantReleaseTestOnly(claimId: String, ackTimestamp: Int64) throws(RatifyError) {
+        try ffi { try handle.plantReleaseTestOnly(claimId: claimId, ackTimestamp: ackTimestamp) }
+    }
+    public func abandonPendingReceipts() throws(RatifyError) -> [String] { try ffi { try handle.abandonPendingReceipts() } }
+
+    static func error(_ failure: FfiReferenceStoreFailure) -> Error {
+        switch failure.kind {
+        case "classified":
+            guard let cls = ErrorClass(rawValue: failure.`class`) else {
+                return RatifyError.internal(.panic, message: "unknown reference store error class")
+            }
+            return StoreError.classified(cls, detail: failure.detail)
+        case "unavailable": return StoreError.unavailable(failure.detail)
+        case "claim_proof_conflict": return StoreError.claimProofConflict
+        case "rate_limit_exceeded": return StoreError.rateLimitExceeded
+        case "release_state_mismatch": return StoreError.releaseStateMismatch
+        case "acknowledgement_not_found": return StoreError.acknowledgementNotFound
+        case "challenge_issuance_conflict": return StoreError.challengeIssuanceConflict
+        case "challenge_issuance_not_found": return StoreError.challengeIssuanceNotFound
+        default: return RatifyError.internal(.panic, message: "unknown reference store failure kind")
+        }
+    }
+
+    private func check(_ reply: FfiReferenceStoreReply) throws {
+        if let failure = reply.failure { throw Self.error(failure) }
+    }
+
+    private func value<T>(_ reply: FfiReferenceStoreReply, _ field: KeyPath<FfiReferenceStoreReply, T?>) throws -> T {
+        try check(reply)
+        guard let value = reply[keyPath: field] else {
+            throw RatifyError.internal(.panic, message: "reference store omitted a success value")
+        }
+        return value
+    }
+
+    public func authoritativeTime() throws -> Int64 {
+        try value(ffi { try handle.authoritativeTime() }, \.time)
+    }
+    public func claim(_ claim: ChallengeClaim) throws -> ClaimResult {
+        ClaimResult(try value(ffi { try handle.claim(claim: claim.ffi) }, \.claim))
+    }
+    public func finalize(claimId: String, ownerToken: Data, terminalResult: Data, receiptBody: Data,
+                         allowValidUntil: Int64) throws -> Bool {
+        try value(ffi { try handle.finalize(claimId: claimId, ownerToken: ownerToken,
+            terminalResult: terminalResult, receiptBody: receiptBody, allowValidUntil: allowValidUntil) }, \.boolean)
+    }
+    public func recordProgress(claimId: String, ownerToken: Data, progress: EvaluationProgress) throws {
+        try check(ffi { try handle.recordProgress(claimId: claimId, ownerToken: ownerToken, progress: progress.ffi) })
+    }
+    public func loadInterrupted(claimId: String) throws -> InterruptedClaim {
+        InterruptedClaim(try value(ffi { try handle.loadInterrupted(claimId: claimId) }, \.interrupted))
+    }
+    public func recoverInterrupted(claimId: String, terminalResult: Data, receiptBody: Data) throws -> Bool {
+        try value(ffi { try handle.recoverInterrupted(claimId: claimId, terminalResult: terminalResult,
+            receiptBody: receiptBody) }, \.boolean)
+    }
+
+    public func loadCommitted(claimId: String) throws -> CommittedClaim {
+        CommittedClaim(try value(ffi { try handle.loadCommitted(claimId: claimId) }, \.committed))
+    }
+    public func loadTerminal(claimId: String) throws -> TerminalClaimRecord {
+        TerminalClaimRecord(try value(ffi { try handle.loadTerminal(claimId: claimId) }, \.terminal))
+    }
+    public func recordRelease(_ record: ReleaseRecord) throws {
+        try check(ffi { try handle.recordRelease(record: record.ffi) })
+    }
+    public func publish(claimId: String, receiptBody: Data) throws -> Data {
+        try value(ffi { try handle.publishReceipt(claimId: claimId, receiptBody: receiptBody) }, \.receipt)
+    }
+    public func acknowledge(logId: String, sequence: Int64, previousEntryHash: Data,
+                            entryHash: Data) throws -> CheckpointAcknowledgement {
+        CheckpointAcknowledgement(try value(ffi { try handle.acknowledgeReceipt(logId: logId, sequence: sequence,
+            previousEntryHash: previousEntryHash, entryHash: entryHash) }, \.acknowledgement))
+    }
+    public func get(logId: String, sequence: Int64) throws -> CheckpointAcknowledgement {
+        CheckpointAcknowledgement(try value(ffi { try handle.getAcknowledgement(logId: logId, sequence: sequence) }, \.acknowledgement))
+    }
+}

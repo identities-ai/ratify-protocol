@@ -17,9 +17,9 @@ const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
 
 test("cross-sdk: the directory holds exactly the five <sdk>.json fixtures", () => {
   const all = readdirSync(dir);
-  assert.deepEqual(all.filter((f) => !/^(go|typescript|python|rust|c)\.json$/.test(f)), []);
+  assert.deepEqual(all.filter((f) => !/^(go|typescript|python|rust|c|swift|kotlin)\.json$/.test(f)), []);
   assert.ok(files.includes("typescript.json"), "run npm run generate:cross-sdk");
-  assert.deepEqual(files, ["c.json", "go.json", "python.json", "rust.json", "typescript.json"]);
+  assert.deepEqual(files, ["c.json", "go.json", "kotlin.json", "python.json", "rust.json", "swift.json", "typescript.json"]);
 });
 
 for (const name of files) {

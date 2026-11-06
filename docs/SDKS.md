@@ -14,7 +14,7 @@ A protocol with one SDK is a product. A protocol with SDKs everywhere is a proto
 
 ## 2. Current status
 
-All five reference SDKs are shipped and passing conformance. The C/C++ SDK is the newest addition, targeting embedded Linux, RTOS, and any language that FFIs against a C ABI.
+Five reference SDKs are published. Swift and Kotlin are in-tree Protocol v2 release candidates; their publication gates and exact evidence are tracked in the [compatibility ledger](V2_REFERENCE_COMPATIBILITY.md).
 
 | Language | Package | Location | Test status |
 |---|---|---|---|
@@ -23,8 +23,8 @@ All five reference SDKs are shipped and passing conformance. The C/C++ SDK is th
 | **Python** | `ratify-protocol` (PyPI; v2 at `ratify_protocol.v2` through the `protocol-v2` extra) | `sdks/python/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite; full `testvectors/v2` through the stateful v2 C ABI over the Rust implementation (also run on armv7 Linux, Raspberry Pi 2: 7152 checks, 0 failures, `2.0.0-beta.1`, 2026-10-27) |
-| Swift (iOS, macOS) | n/a | planned: full v2 SDK built over the Rust SDK | n/a |
-| Kotlin (Android) | n/a | planned: full v2 SDK built over the Rust SDK | n/a |
+| **Swift (iOS, macOS)** | `RatifyProtocol` SwiftPM candidate | `sdks/swift/` | In-tree v2 corpus and seven-file cross-SDK suite; release CI and hardware evidence gate publication |
+| **Kotlin (Android)** | `com.ratifyprotocol:ratify-protocol:2.0.0-beta.1` candidate | `sdks/kotlin/` | In-tree v2 corpus and seven-file cross-SDK suite; release CI and hardware evidence gate publication |
 
 This tree carries two release lines. The v2 line (`2.0.0-beta.1`) covers Go
 (module path `/v2`), TypeScript, Rust, C/C++, and Python: the `ratify-protocol`
@@ -62,12 +62,14 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 
 **FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration: Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 
-## 3. Planned mobile SDKs
+## 3. Mobile SDK release candidates
 
-Five SDKs are shipped. Swift (iOS, macOS) and Kotlin (Android) are planned
-as SDKs six and seven, Protocol v2 only, with full parity: each will expose
-every v2 operation, including the stateful verifier and the Part B
-interfaces, and meet every SDK gate in SPEC-v2 §8.
+Swift (iOS, macOS) and Kotlin (Android) are Protocol v2 only SDKs six and
+seven. Their hand-written APIs expose the stateful verifier and Part B
+interfaces. The public API inventory, shared corpus, seven cross-SDK fixtures,
+mobile CI, artifact staging, and provider evidence are release gates in
+SPEC-v2 §8. See the [Swift](../sdks/swift/README.md) and
+[Kotlin](../sdks/kotlin/README.md) source setup instructions.
 
 **Built over the Rust SDK, like C.** The protocol logic (canonical
 encoding, typed signing, checks, the verifier) stays in one implementation,
@@ -79,12 +81,13 @@ Secure Enclave and Keychain or the Android Keystore run through the
 platform's own APIs as external signers (SPEC-v2 §3.2), and the SDK checks
 every signature they return before using it.
 
-**Planned targets:** SwiftPM (XCFramework) for iOS 17+ and macOS; an AAR on
-Maven Central for Android 9 (API 28)+. Which key components are
+**Targets:** SwiftPM (XCFramework) for iOS 17+ and macOS 14+; an AAR on
+Maven Central for Android 9 (API 28)+. These artifacts are staged locally
+until the release gates pass and the release is approved. Which key components are
 hardware-backed depends on the OS version, and each SDK reports it per
 component. A JVM server SDK is not part of this plan.
 
-SPEC-v2 §1.3 and §8 will list Swift and Kotlin when these SDKs land.
+SPEC-v2 §1.3 and §8 define the Swift and Kotlin requirements.
 
 ## 4. The conformance contract
 

@@ -146,8 +146,9 @@ This is not a protocol gap; the chain verification handles it. It is a scope and
 
 Protocol v2 is a breaking, separately versioned line with its own corpus
 (`testvectors/v2/`) and its own packages next to v1. The `2.0.0-beta.1`
-prerelease freezes the wire format and SDK API across Go, TypeScript,
-Python, Rust and C. It brings verify-then-release decisions, signed status
+prerelease froze the wire format and SDK API across Go, TypeScript,
+Python, Rust and C. The published `2.0.0-beta.2` adds Swift for iOS and macOS
+and Kotlin for Android, bringing the coordinated SDK set to seven. It brings verify-then-release decisions, signed status
 under a separate status key, stored and atomically claimed challenges,
 receipts in an acknowledged log, exact `custom:` scopes, extension evaluator
 profiles, integer-only numbers, wire limits, 49 error classes, typed and
@@ -157,6 +158,7 @@ external signers, and deployment profiles. See
 | Milestone | Gate |
 |---------|------|
 | `2.0.0-beta.1` | Every SDK passes the beta gates of SPEC-v2 §8.1, and the pre-release security review is closed and recorded. External independent review is not a beta gate; the beta carries no production security claim. |
+| `2.0.0-beta.2` | SwiftPM and Maven Central mobile artifacts published with the other five SDKs at one version; all seven run the shared v2 corpus and cross-SDK fixtures. The mobile test support packages remain separate from production stores. |
 | `2.0.0` | Interoperability with at least one implementation outside this repository, an external independent review with every critical and high finding fixed, and a recorded soak (SPEC-v2 §8.2). |
 
 v1 remains available and pinned while v2 matures. Released v1 artifacts are

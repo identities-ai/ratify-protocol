@@ -28,5 +28,5 @@ release:
 	@echo "Releases now go through a PR like every other change:"
 	@echo "  1. make release-prepare VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]   # branch + bump + gate + PR"
 	@echo "  2. merge the release PR"
-	@echo "  3. make release-tag VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]        # tags -> CI publishes"
+	@echo "  3. make release-tag VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]        # tags, CI, draft publication"
 	@exit 1

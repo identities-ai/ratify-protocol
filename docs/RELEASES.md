@@ -1,6 +1,6 @@
 # Release Process
 
-**How the Ratify Protocol, its test vectors, and every SDK stay in lockstep, and how the two-phase `make release-prepare` → PR merge → `make release-tag` flow creates coordinated protocol / SDK tags without ever pushing to main directly. Registry publishing is CI-driven off the tag; manual publishing (`make release-publish`, gated on `RELEASE_CI_FAILED=1`) is break-glass only.**
+**How the Ratify Protocol, its test vectors, and every SDK stay in lockstep, and how the `make release-prepare` → PR merge → `make release-tag` flow creates coordinated protocol / SDK tags without pushing to main directly. Registry publishing is CI-driven; v2 dispatches the workflow with a verified mobile candidate run. Manual registry publishing (`make release-publish`, gated on `RELEASE_CI_FAILED=1`) is break-glass only.**
 
 Companion to [`SPEC.md`](../SPEC.md), [`SDKS.md`](SDKS.md), and [`TEST_PLAN.md`](TEST_PLAN.md).
 
@@ -336,7 +336,7 @@ The release logic lives in:
 
 - `scripts/check-release-sync.sh` fails if package versions, lockfiles, docs, or SDK constants drift.
 - `scripts/test-all.sh` runs the same conformance and determinism gates as CI, with stricter local Go race tests.
-- `scripts/release.sh`: `prepare` bumps versions, runs all gates, commits to a release branch and opens the PR; `tag` verifies the merged bump, then creates and pushes the protocol + SDK tags; `publish` is the isolated break-glass registry publish (requires `RELEASE_CI_FAILED=1` so it cannot race the tag-triggered CI publish).
+- `scripts/release.sh`: `prepare` bumps versions, runs all gates, commits to a release branch and opens the PR; `tag` verifies the merged bump, creates the protocol and SDK tags, then dispatches and finalizes the v2 release; `publish` is the isolated break-glass registry path (requires `RELEASE_CI_FAILED=1`).
 
 ## 6. Continuous integration
 
@@ -441,6 +441,9 @@ This is a stronger trust model than the manual flow for three reasons:
 3. **Tests gate every publish, every time.** Even if you skipped tests locally, the runner re-runs them on a fresh checkout and refuses to publish on red.
 
 ### 5.1 The release flow, end-to-end
+
+The tag-triggered flow below describes v1. Protocol v2 mobile releases use the
+draft-independent handoff in §5.8.
 
 ```
 [ make release-prepare VERSION=v1.0.0-alpha.12 ]  ←  on your laptop
@@ -566,3 +569,22 @@ requirements into the base `dependencies` of `sdks/python/pyproject.toml`
 resolve), announce v1 support terms, and switch the developer docs and site
 to lead with v2. Import paths do not change (see
 [`PROTOCOL_V2_MIGRATION.md`](PROTOCOL_V2_MIGRATION.md#what-changes-at-200)).
+
+### 5.8 Protocol v2 mobile release handoff
+
+After the release PR has merged, run `make release-tag VERSION=v2.X.Y` from
+clean, current `main`. The command verifies the five draft mobile assets and
+their successful candidate run, creates and pushes the protocol and seven SDK
+tags, then dispatches the release workflow with that candidate run ID. The
+workflow downloads the immutable CI artifact instead of asking its default
+GitHub token to read an account-created draft. Maven Central validates the
+signed Kotlin bundle before the other v2 registries publish. After all jobs
+succeed, the command downloads and checks the six C archives and testvector
+archive, attaches them to the draft, and publishes it as a prerelease.
+
+If the command stops after tags were pushed, do not recreate or move the tags.
+Inspect the release run. When it has succeeded, resume the final step with
+`scripts/finalize-v2-release.sh v2.X.Y <candidate-run-id> <release-run-id>`.
+The candidate ID is in the draft's `manifest.json`; the release run ID is in
+the Actions URL. A failed run must be repaired and rerun before finalizing.
+The v2 tag push itself does not trigger a second publish run.

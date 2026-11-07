@@ -19,12 +19,12 @@ usage:
 
   make release-tag VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N]
       After the release PR is merged, from clean, up-to-date main: creates
-      the protocol + sdk-* tags and pushes them. The tag push triggers the
-      CI publish workflow — registry publishing is CI's job on this path.
+      the protocol + sdk-* tags and pushes them, dispatches CI with the verified
+      mobile candidate, and publishes the draft after CI succeeds.
 
   make release-publish VERSION=vX.Y.Z[-alpha.N|-beta.N|-rc.N] RELEASE_CI_FAILED=1 [GITHUB_RELEASE=1]
       Break-glass ONLY: manually publish to the registries after the
-      tag-triggered CI release run has definitively failed. Refuses to run
+      coordinated CI release run has definitively failed. Refuses to run
       without RELEASE_CI_FAILED=1 so it can never race the CI publish.
 
 Releases go through a PR like every other change to main. There is no
@@ -606,12 +606,12 @@ PY
 }
 
 # Break-glass manual publish: for when the tag exists but the CI release
-# run has definitively failed. Isolated from the tag push so it can never
-# race the tag-triggered workflow — requires the operator to assert the
+# run has definitively failed. Isolated from the coordinated release so it cannot
+# race the normal workflow — requires the operator to assert the
 # CI failure explicitly.
 publish_release() {
   if [[ "${RELEASE_CI_FAILED:-0}" != "1" ]]; then
-    echo "release: manual publishing races the tag-triggered CI release unless that run" >&2
+    echo "release: manual publishing races the coordinated CI release unless that run" >&2
     echo "  has already failed. Confirm it (gh run list --workflow=release.yml) and" >&2
     echo "  re-run with RELEASE_CI_FAILED=1." >&2
     exit 1
@@ -641,7 +641,7 @@ publish_release() {
 tag_release() {
   if [[ "$PUBLISH" == "1" || "$GITHUB_RELEASE" == "1" ]]; then
     echo "release: PUBLISH=1 / GITHUB_RELEASE=1 no longer run during release-tag —" >&2
-    echo "  the tag push already triggers the CI publish, so a local publish here" >&2
+    echo "  release-tag dispatches CI publishing, so a local publish here" >&2
     echo "  races it. Use: make release-publish VERSION=$VERSION RELEASE_CI_FAILED=1" >&2
     exit 1
   fi
@@ -657,17 +657,18 @@ tag_release() {
   fi
   ./scripts/check-release-sync.sh
   require_all_tags_absent
+  local mobile_run_id=""
   if [[ "$RELEASE_LINE" == "v2" ]]; then
-    (
-      stage_dir="$(mktemp -d)"
-      trap 'rm -rf "$stage_dir"' EXIT
-      gh release download "$VERSION" -D "$stage_dir"
-      python3 scripts/verify-mobile-staging.py "$VERSION" "$stage_dir"
-      run_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["workflow_run"])' "$stage_dir/manifest.json")"
-      commit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$stage_dir/manifest.json")"
-      [[ "$(gh run view "$run_id" --json headSha --jq .headSha)" == "$commit" ]]
-      [[ "$(gh run view "$run_id" --json conclusion --jq .conclusion)" == success ]]
-    )
+    stage_dir="$(mktemp -d)"
+    trap 'rm -rf "$stage_dir"' EXIT
+    [[ "$(gh release view "$VERSION" --json isDraft --jq .isDraft)" == true ]]
+    gh release download "$VERSION" -D "$stage_dir"
+    python3 scripts/verify-mobile-staging.py "$VERSION" "$stage_dir"
+    mobile_run_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["workflow_run"])' "$stage_dir/manifest.json")"
+    commit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$stage_dir/manifest.json")"
+    [[ "$(gh run view "$mobile_run_id" --json headSha --jq .headSha)" == "$commit" ]]
+    [[ "$(gh run view "$mobile_run_id" --json conclusion --jq .conclusion)" == success ]]
+    rm -rf "$stage_dir"
   fi
 
   echo "==> Creating coordinated tags"
@@ -677,18 +678,11 @@ tag_release() {
   done
 
   echo "==> Pushing tags"
-  # Push the protocol tag on its own: GitHub does not create push events
-  # when more than three tags arrive in a single push, so pushing the protocol
-  # tags together silently suppresses the tag-triggered release workflow.
-  # The sdk-* tags carry no workflow trigger and can go together after.
+  # Push the protocol tag separately so each remote ref is reviewable.
   git push origin "$VERSION"
   git push origin "${SDK_TAGS[@]}"
-  echo "==> Verify the Release workflow started: gh run list --workflow=release.yml --limit 1"
-  echo "    If it did not, dispatch it manually: gh workflow run release.yml -f tag=$VERSION"
-
-  echo "==> Registry publishing is CI-driven off the tag push (normal path)."
-  echo "    Break-glass manual publish (only after the CI release run has"
-  echo "    definitively failed): make release-publish VERSION=$VERSION RELEASE_CI_FAILED=1"
+  echo "==> Dispatching and finalizing the coordinated release"
+  ./scripts/finalize-v2-release.sh "$VERSION" "$mobile_run_id"
 
   echo "release-tag: ok ($VERSION)"
   cat <<'EOF'

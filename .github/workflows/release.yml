@@ -9,16 +9,14 @@ run-name: >-
       && format('Dry run {0}{1} — verifies artifacts, publishes nothing', inputs.tag, inputs.ref != '' && format(' at {0}', inputs.ref) || '')
       || format('Release {0}', github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name) }}
 
-# Tag-driven publishing. Push a tag matching v* (e.g. v1.0.0-alpha.6) and this
-# workflow runs the full CI matrix, then publishes each SDK to its registry
-# only if all tests pass. A v2 release also validates the Kotlin bundle in
-# Maven Central before registry publication. See docs/RELEASES.md for the
-# release process and recovery from partial-publish states.
+# v1 tags trigger publishing. For v2, make release-tag dispatches this workflow
+# with the verified mobile candidate run ID; the default Actions token cannot
+# read an account-created draft release. See docs/RELEASES.md.
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v1.*'
   # Manual trigger for cases where the tag-push didn't fire (e.g. bypassed
   # branch protection). Pass the exact tag to publish, e.g. v1.0.0-alpha.8.
   workflow_dispatch:

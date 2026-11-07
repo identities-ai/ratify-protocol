@@ -23,8 +23,8 @@ The Protocol v2 tree contains seven SDKs. Their publication gates and exact evid
 | **Python** | `ratify-protocol` (PyPI; v2 at `ratify_protocol.v2` through the `protocol-v2` extra) | `sdks/python/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **Rust** | `ratify-protocol` (crates.io) | `sdks/rust/` | ✅ 79/79 fixtures; full `testvectors/v2` |
 | **C / C++ via C ABI** | `libratify_c` (GitHub Releases) | `sdks/c/` | ✅ 79/79 fixtures + API test suite; full `testvectors/v2` through the stateful v2 C ABI over the Rust implementation (also run on armv7 Linux, Raspberry Pi 2: 7152 checks, 0 failures, `2.0.0-beta.1`, 2026-10-27) |
-| **Swift (iOS, macOS)** | `RatifyProtocol` SwiftPM candidate | `sdks/swift/` | In-tree v2 corpus and seven-file cross-SDK suite; release CI and hardware evidence gate publication |
-| **Kotlin (Android)** | `com.ratifyprotocol:ratify-protocol:2.0.0-beta.2` candidate | `sdks/kotlin/` | In-tree v2 corpus and seven-file cross-SDK suite; release CI and hardware evidence gate publication |
+| **Swift (iOS, macOS)** | `RatifyProtocol` SwiftPM product at `2.0.0-beta.2` | `sdks/swift/` | Published v2 SDK; shared corpus and seven-file cross-SDK suite |
+| **Kotlin (Android)** | `com.ratifyprotocol:ratify-protocol:2.0.0-beta.2` on Maven Central | `sdks/kotlin/` | Published v2 SDK; shared corpus and seven-file cross-SDK suite |
 
 This tree carries two release lines. The v2 line (`2.0.0-beta.2`) covers Go
 (module path `/v2`), TypeScript, Rust, C/C++, and Python: the `ratify-protocol`
@@ -62,7 +62,7 @@ The C SDK wraps the Rust SDK via a stable C ABI (`cbindgen`-generated header). I
 
 **FFI languages:** any language that can link a C shared library (`libratify_c.so`) can use the C SDK as its Ratify integration: Swift (via bridging header), Zig, Lua, Julia, Ruby, Elixir, and others.
 
-## 3. Mobile SDK release candidates
+## 3. Published mobile SDKs
 
 Swift (iOS, macOS) and Kotlin (Android) are Protocol v2 only SDKs six and
 seven. Their hand-written APIs expose the stateful verifier and Part B
@@ -82,8 +82,10 @@ platform's own APIs as external signers (SPEC-v2 §3.2), and the SDK checks
 every signature they return before using it.
 
 **Targets:** SwiftPM (XCFramework) for iOS 17+ and macOS 14+; an AAR on
-Maven Central for Android 9 (API 28)+. These artifacts are staged locally
-until the release gates pass and the release is approved. Which key components are
+Maven Central for Android 9 (API 28)+. Both are published at `2.0.0-beta.2`.
+`RatifyProtocolTestSupport` and `ratify-protocol-testing` contain reference
+stores for tests; applications must provide durable production stores.
+Which key components are
 hardware-backed depends on the OS version, and each SDK reports it per
 component. A JVM server SDK is not part of this plan.
 
@@ -91,7 +93,7 @@ SPEC-v2 §1.3 and §8 define the Swift and Kotlin requirements.
 
 ## 4. The conformance contract
 
-**Every Ratify SDK, in every language, MUST pass all fixtures at `testvectors/v1/` byte-for-byte.** That is the contract. Without it, an SDK may appear to work locally but silently diverge from the reference, producing signatures that fail to verify across ecosystems or verifying forgeries that the reference would reject.
+**Every Protocol v1 SDK MUST pass all fixtures at `testvectors/v1/` byte-for-byte. Every Protocol v2 SDK, including the v2-only Swift and Kotlin packages, MUST pass the shared `testvectors/v2/` corpus and cross-SDK fixtures.** Without the relevant line's corpus, an SDK may appear to work locally but silently diverge from the reference, producing signatures that fail to verify across ecosystems or verifying forgeries that the reference would reject.
 
 ### What conformance means, concretely
 

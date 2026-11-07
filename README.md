@@ -94,6 +94,10 @@ HTTP and registry bindings, and the geo and speed constraints.
 | Python | `pip install "ratify-protocol[protocol-v2]==2.0.0b2"` (import `ratify_protocol.v2`) | `pip install ratify-protocol==1.0.0a21` |
 | Rust | `cargo add ratify-protocol@2.0.0-beta.2` (module `ratify_protocol::v2`) | `ratify-protocol = "=1.0.0-alpha.21"` |
 | C/C++ | `ratify-c` 2.0.0-beta.2 release archive (`ratify_v2_*` ABI in `ratify.h`), or build `sdks/c` | the `1.0.0-alpha.21` release archive |
+| Swift (iOS 17+, macOS 14+) | Add `https://github.com/identities-ai/ratify-protocol.git` in SwiftPM at exact version `2.0.0-beta.2`; select `RatifyProtocol` | Protocol v2 only |
+| Kotlin (Android API 28+) | `implementation("com.ratifyprotocol:ratify-protocol:2.0.0-beta.2")` from Maven Central | Protocol v2 only |
+
+The [Swift setup](sdks/swift/README.md) uses the checksummed XCFramework attached to the release. The [Kotlin setup](sdks/kotlin/README.md) uses `ratify-protocol` in the app; `com.ratifyprotocol:ratify-protocol-testing` is a separate test dependency with reference stores for conformance and integration tests. Applications provide production stores that meet SPEC-v2 Part B.
 
 Start here:
 
@@ -513,6 +517,8 @@ The 79 fixtures in `testvectors/v1/` are the canonical Protocol v1 conformance s
 | `sdks/c/` (`libratify_c`) | C / C++ | ✅ full v1 C ABI conformance; full `testvectors/v2` through the `ratify_v2_*` ABI, including the stateful verifier (also run on armv7 Linux) | pre-built archives or build from source: `sdks/c/` (Apache-2.0) |
 | [`RatifyProtocol`](sdks/swift/README.md) (iOS, macOS) | Swift | Full shared corpus and seven cross-SDK fixtures | SwiftPM package from this repository at exact version `2.0.0-beta.2` |
 | [`com.ratifyprotocol:ratify-protocol`](sdks/kotlin/README.md) (Android) | Kotlin | Full shared corpus and seven cross-SDK fixtures | `com.ratifyprotocol:ratify-protocol:2.0.0-beta.2` on Maven Central |
+
+Swift and Kotlin are published Protocol v2 SDKs at the same beta.2 tag as the other five. Their separate test support products are for development and conformance, not application persistence.
 
 The Conformance column describes `main`; a published release's exact fixture set is in its [release notes](https://github.com/identities-ai/ratify-protocol/releases). Between a feature merging and the next tag, `main` may be ahead of what the install commands deliver.
 

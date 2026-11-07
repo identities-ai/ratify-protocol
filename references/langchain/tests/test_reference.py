@@ -434,7 +434,7 @@ def test_large_presentation_header_parses_when_split_across_reads():
 
 @pytest.mark.asyncio
 async def test_signed_revocation_reaches_the_receiver_through_the_local_status_feed():
-    authority = issue_authority()
+    authority = issue_authority(now=int(time.time()) - 1)
     with running_receiver(authority) as (url, token, status_dir):
         tool = (await build_mcp_tools(authority, receiver_url=url, transport_token=token))[0]
         args = {"region": "us-central1", "instance_type": "n2-standard-4", "count": 1}

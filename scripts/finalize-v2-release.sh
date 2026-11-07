@@ -11,9 +11,17 @@ release_run="${3:-}"
 [[ "$(gh release view "$version" --json isDraft --jq .isDraft)" == true ]]
 
 if [[ -z "$release_run" ]]; then
-  url="$(gh workflow run release.yml --ref main -f "tag=$version" -f dry_run=false -f "mobile_candidate_run=$candidate_run")"
-  [[ "$url" =~ /actions/runs/([0-9]+)$ ]]
-  release_run="${BASH_REMATCH[1]}"
+  dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  output="$(gh workflow run release.yml --ref main -f "tag=$version" -f dry_run=false -f "mobile_candidate_run=$candidate_run")"
+  if [[ "$output" =~ /actions/runs/([0-9]+) ]]; then
+    release_run="${BASH_REMATCH[1]}"
+  else
+    for _ in {1..30}; do
+      release_run="$(gh run list --workflow release.yml --event workflow_dispatch --branch main --limit 30 --json databaseId,displayTitle,createdAt | python3 -c 'import json,sys; runs=json.load(sys.stdin); match=next((run for run in runs if run["displayTitle"] == "Release " + sys.argv[1] and run["createdAt"] >= sys.argv[2]), None); print(match["databaseId"] if match else "")' "$version" "$dispatched_at")"
+      [[ -n "$release_run" ]] && break
+      sleep 2
+    done
+  fi
 fi
 [[ "$release_run" =~ ^[0-9]+$ ]]
 echo "Release workflow: https://github.com/identities-ai/ratify-protocol/actions/runs/$release_run"

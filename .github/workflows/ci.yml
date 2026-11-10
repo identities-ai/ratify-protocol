@@ -16,7 +16,7 @@ permissions:
 jobs:
   go:
     name: Go tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -46,7 +46,7 @@ jobs:
 
   testvector-determinism:
     name: Test vectors regenerate byte-identical
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -63,7 +63,7 @@ jobs:
 
   release-sync:
     name: Release metadata stays in sync
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -97,7 +97,7 @@ jobs:
 
   typescript:
     name: TypeScript SDK conformance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: sdks/typescript
@@ -128,7 +128,7 @@ jobs:
 
   python:
     name: Python SDK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: sdks/python
@@ -188,7 +188,7 @@ jobs:
   # suite runs against the pure-Python verification fallback.
   python-v2:
     name: Python v2 SDK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: sdks/python
@@ -258,10 +258,10 @@ jobs:
           # those legs prove the build only. Both macOS targets build on the
           # Apple Silicon runner, matching how this repo already builds its C
           # binaries: the Intel `macos-13` label queues indefinitely.
-          - { os: ubuntu-latest,  target: x86_64,               py: '3.10', test: true  }
-          - { os: ubuntu-latest,  target: aarch64,              py: '3.12', test: false }
-          - { os: macos-latest,   target: aarch64-apple-darwin, py: '3.12', test: true  }
-          - { os: macos-latest,   target: x86_64-apple-darwin,  py: '3.12', test: false }
+          - { os: ubuntu-24.04,  target: x86_64,               py: '3.10', test: true  }
+          - { os: ubuntu-24.04,  target: aarch64,              py: '3.12', test: false }
+          - { os: macos-15,   target: aarch64-apple-darwin, py: '3.12', test: true  }
+          - { os: macos-15,   target: x86_64-apple-darwin,  py: '3.12', test: false }
           - { os: windows-latest, target: x64,                  py: '3.12', test: true  }
     runs-on: ${{ matrix.os }}
     steps:
@@ -306,7 +306,7 @@ jobs:
           RATIFY_REQUIRE_NATIVE=1 pytest -q
   a2a-reference:
     name: A2A reference, Protocol v2 (in-tree SDK, wire gate, no skips)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -331,7 +331,7 @@ jobs:
 
   nooa-reference:
     name: NVIDIA NOOA reference, Protocol v2 (integration required, not skipped)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -364,7 +364,7 @@ jobs:
   # differs from the one it declares.
   google-adk-reference:
     name: Google ADK reference, Protocol v2 (in-tree SDK, no skips)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -381,7 +381,7 @@ jobs:
 
   langchain-reference:
     name: LangChain reference, Protocol v2 (in-tree SDK, no skips)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -401,7 +401,7 @@ jobs:
   # on a test count that differs from ratify-reference.json.
   github-copilot-reference:
     name: GitHub Copilot reference, Protocol v2 (in-tree SDK, no skips)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -423,7 +423,7 @@ jobs:
   # sdks/c/Cargo.toml and fails on a row count other than ratify-reference.json.
   edge-sentinel-reference:
     name: Physical AI edge sentinel reference, Protocol v2 (macOS deterministic matrix)
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
@@ -450,7 +450,7 @@ jobs:
 
   rust:
     name: Rust SDK conformance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: sdks/rust
@@ -486,7 +486,7 @@ jobs:
 
   c-sdk:
     name: C/C++ SDK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: sdks/c
@@ -547,7 +547,7 @@ jobs:
   # ship OpenSSL 3.0, so this job runs on macOS with Homebrew's openssl@3.
   c-examples:
     name: C v2 examples
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
@@ -574,7 +574,7 @@ jobs:
 
   dco:
     name: DCO sign-off
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v7

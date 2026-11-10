@@ -73,7 +73,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   gate-tests:
     name: Gate — all tests must pass
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       line: ${{ steps.line.outputs.line }}
     steps:
@@ -351,7 +351,7 @@ jobs:
     name: Validate Kotlin bundle in Maven Central
     needs: [gate-tests, mobile-candidates]
     if: ${{ always() && needs.gate-tests.result == 'success' && (needs.gate-tests.outputs.line != 'v2' || needs.mobile-candidates.result == 'success') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       deployment: ${{ steps.stage.outputs.deployment }}
     steps:
@@ -409,7 +409,7 @@ jobs:
     name: Publish to PyPI
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.outputs.line == 'v1' }}
     needs: gate-tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: pypi-publish
       url: https://pypi.org/project/ratify-protocol/
@@ -503,10 +503,10 @@ jobs:
           # Both macOS targets build on the Apple Silicon runner, matching how
           # this repo already builds its C binaries. The Intel `macos-13` label
           # queues indefinitely, so depending on it would stall every release.
-          - { os: ubuntu-latest,  target: x86_64,               manylinux: auto }
-          - { os: ubuntu-latest,  target: aarch64,              manylinux: auto }
-          - { os: macos-latest,   target: aarch64-apple-darwin, manylinux: auto }
-          - { os: macos-latest,   target: x86_64-apple-darwin,  manylinux: auto }
+          - { os: ubuntu-24.04,  target: x86_64,               manylinux: auto }
+          - { os: ubuntu-24.04,  target: aarch64,              manylinux: auto }
+          - { os: macos-15,   target: aarch64-apple-darwin, manylinux: auto }
+          - { os: macos-15,   target: x86_64-apple-darwin,  manylinux: auto }
           - { os: windows-latest, target: x64,                  manylinux: auto }
     runs-on: ${{ matrix.os }}
     steps:
@@ -559,7 +559,7 @@ jobs:
   verify-pypi-native:
     name: Verify the native wheel set
     needs: build-pypi-native
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -627,7 +627,7 @@ jobs:
     # environment and requests no token.
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     needs: verify-pypi-native
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: pypi-publish
       url: https://pypi.org/project/ratify-protocol-native/
@@ -697,7 +697,7 @@ jobs:
     # The [protocol-v2] extra pins ratify-protocol-native-v2 exactly, so the
     # native package must be on PyPI first or the extra is uninstallable.
     needs: [gate-tests, central-ready, publish-pypi-native-v2]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: pypi-publish
       url: https://pypi.org/project/ratify-protocol/
@@ -764,10 +764,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  target: x86_64,               manylinux: auto }
-          - { os: ubuntu-latest,  target: aarch64,              manylinux: auto }
-          - { os: macos-latest,   target: aarch64-apple-darwin, manylinux: auto }
-          - { os: macos-latest,   target: x86_64-apple-darwin,  manylinux: auto }
+          - { os: ubuntu-24.04,  target: x86_64,               manylinux: auto }
+          - { os: ubuntu-24.04,  target: aarch64,              manylinux: auto }
+          - { os: macos-15,   target: aarch64-apple-darwin, manylinux: auto }
+          - { os: macos-15,   target: x86_64-apple-darwin,  manylinux: auto }
           - { os: windows-latest, target: x64,                  manylinux: auto }
     runs-on: ${{ matrix.os }}
     steps:
@@ -815,7 +815,7 @@ jobs:
   verify-pypi-native-v2:
     name: Verify the v2 native wheel set
     needs: build-pypi-native-v2
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -875,7 +875,7 @@ jobs:
     name: Publish v2 native extra to PyPI
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     needs: [verify-pypi-native-v2, central-ready]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: pypi-publish
       url: https://pypi.org/project/ratify-protocol-native-v2/
@@ -930,7 +930,7 @@ jobs:
     name: Publish to crates.io
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     needs: [gate-tests, central-ready]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: crates-publish
       url: https://crates.io/crates/ratify-protocol
@@ -1014,7 +1014,7 @@ jobs:
   publish-npm:
     name: Publish to npm
     needs: [gate-tests, central-ready]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && vars.NPM_PUBLISH_ENABLED == 'true' }}
     environment:
       name: npm-publish
@@ -1122,7 +1122,7 @@ jobs:
     name: Publish Go (auto via pkg.go.dev)
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     needs: [gate-tests, central-ready]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: trigger pkg.go.dev index refresh
         # Fetching the module against the new tag is the documented way to
@@ -1152,11 +1152,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: x86_64-unknown-linux-gnu,      os: ubuntu-latest,  cross: false, archive: linux-x86_64   }
-          - { target: aarch64-unknown-linux-gnu,     os: ubuntu-latest,  cross: true,  archive: linux-aarch64  }
-          - { target: armv7-unknown-linux-gnueabihf, os: ubuntu-latest,  cross: true,  archive: linux-armv7    }
-          - { target: x86_64-apple-darwin,           os: macos-latest,   cross: false, archive: macos-x86_64   }
-          - { target: aarch64-apple-darwin,          os: macos-latest,   cross: false, archive: macos-aarch64  }
+          - { target: x86_64-unknown-linux-gnu,      os: ubuntu-24.04,  cross: false, archive: linux-x86_64   }
+          - { target: aarch64-unknown-linux-gnu,     os: ubuntu-24.04,  cross: true,  archive: linux-aarch64  }
+          - { target: armv7-unknown-linux-gnueabihf, os: ubuntu-24.04,  cross: true,  archive: linux-armv7    }
+          - { target: x86_64-apple-darwin,           os: macos-15,   cross: false, archive: macos-x86_64   }
+          - { target: aarch64-apple-darwin,          os: macos-15,   cross: false, archive: macos-aarch64  }
           - { target: x86_64-pc-windows-msvc,        os: windows-latest, cross: false, archive: windows-x86_64 }
     runs-on: ${{ matrix.os }}
     steps:
@@ -1240,7 +1240,7 @@ jobs:
     name: Publish Kotlin to Maven Central
     needs: [gate-tests, central-ready, publish-pypi-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go]
     if: ${{ always() && needs.gate-tests.outputs.line == 'v2' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.central-ready.result == 'success' && needs.publish-pypi-v2.result == 'success' && needs.publish-pypi-native-v2.result == 'success' && needs.publish-crates.result == 'success' && needs.publish-npm.result == 'success' && needs.publish-go.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1258,7 +1258,7 @@ jobs:
     name: Create GitHub Release
     needs: [gate-tests, mobile-candidates, central-ready, central-publish, publish-pypi, build-pypi-native, verify-pypi-native, publish-pypi-native, publish-pypi-v2, build-pypi-native-v2, verify-pypi-native-v2, publish-pypi-native-v2, publish-crates, publish-npm, publish-go, build-c-binaries]
     if: ${{ always() && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && needs.gate-tests.result == 'success' && (needs.gate-tests.outputs.line != 'v2' || needs.central-publish.result == 'success') && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

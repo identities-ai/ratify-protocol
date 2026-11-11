@@ -17,12 +17,14 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/identities-ai/ratify-protocol.svg)](https://pkg.go.dev/github.com/identities-ai/ratify-protocol)
 [![PyPI](https://img.shields.io/pypi/v/ratify-protocol?label=pypi&color=informational)](https://pypi.org/project/ratify-protocol/)
 [![Crates.io](https://img.shields.io/crates/v/ratify-protocol?label=crates.io)](https://crates.io/crates/ratify-protocol)
-[![npm](https://img.shields.io/npm/v/@identities-ai/ratify-protocol?label=npm&color=informational)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
+[![npm v2 beta](https://img.shields.io/npm/v/@identities-ai/ratify-protocol/next?label=npm%20v2%20beta&color=informational)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
 
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/ratify-protocol?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/ratify-protocol)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/ratify-protocol?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=PyPI%20downloads)](https://pepy.tech/projects/ratify-protocol)
 [![Crates.io Downloads](https://img.shields.io/crates/d/ratify-protocol?label=crates.io%20downloads&color=informational)](https://crates.io/crates/ratify-protocol)
 [![npm Downloads](https://img.shields.io/npm/dt/@identities-ai/ratify-protocol?label=npm%20downloads&color=informational)](https://www.npmjs.com/package/@identities-ai/ratify-protocol)
 [![C/C++ Downloads](https://img.shields.io/github/downloads/identities-ai/ratify-protocol/total?label=c%2Fc%2B%2B%20downloads&color=informational)](https://github.com/identities-ai/ratify-protocol/releases)
+
+**TypeScript v2 beta:** `npm install @identities-ai/ratify-protocol@next`, then import from `@identities-ai/ratify-protocol/v2`. An unpinned npm install currently resolves to v1.
 
 When a human authorizes an AI agent, or when one agent transacts with another, Ratify produces a signed, verifiable proof that says exactly *who* authorized *what*, *within which bounds*, and *for how long*. The receiving side checks that proof itself, without calling back to whoever issued it, across voice, video, API, and Physical AI. Per-SDK latency and wire sizes are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 

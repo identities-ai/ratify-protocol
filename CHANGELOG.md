@@ -18,6 +18,12 @@ For the release process and SDK coordination, see [`docs/RELEASES.md`](docs/RELE
 - Added fresh-key, hedged-signature Swift and Kotlin cross-SDK fixtures.
   All seven implementations verified all seven fixtures and their four verifier
   and release scenarios in-tree on 2026-11-05.
+- Added the Ratify Verify customer tools as source: `ratify-keys`,
+  `ratify-reference-receiver`, `ratify-iam-bridge` and reference status
+  sources for Okta, Microsoft Entra ID and Google Workspace, built on the
+  new `verifyclient` packages. These packages are outside the Protocol v2
+  specification and experimental until 2.0.0. See
+  [`docs/tools/`](docs/tools/README.md).
 
 ## v2.0.0-beta.1 (2026-10-30)
 

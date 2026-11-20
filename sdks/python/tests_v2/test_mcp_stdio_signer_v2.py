@@ -116,6 +116,7 @@ def fake_service(tls_cert):
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(*tls_cert)
     httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
     t = threading.Thread(target=httpd.serve_forever, daemon=True)

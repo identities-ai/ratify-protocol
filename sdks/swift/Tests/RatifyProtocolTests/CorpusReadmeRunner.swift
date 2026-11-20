@@ -9,11 +9,11 @@ enum CorpusReadmeRunner {
         for file in files {
             tally.check("files", file, text.contains("`\(file)`"), "missing corpus file")
         }
-        for section in ["# Protocol v2 test vectors", "## cross-sdk/", "## provider-evidence/"] {
+        for section in ["# Protocol v2 test vectors", "## cross-sdk/", "## provider-evidence/", "## mcp/"] {
             tally.check("sections", section, text.contains(section), "missing corpus section")
         }
         tally.check("script", "derive-external-mu.py", text.contains("derive-external-mu.py"),
                     "missing generator script")
-        tally.finish([("files", files.count), ("sections", 3), ("script", 1)])
+        tally.finish([("files", files.count), ("sections", 4), ("script", 1)])
     }
 }

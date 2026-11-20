@@ -12,6 +12,7 @@ final class CorpusTests: XCTestCase {
         "annex-a.json": AnnexARunner.run,
         "keys.json": KeysRunner.run,
         "limits.json": LimitsRunner.run,
+        "mcp": MCPRunner.run,
         "operation-session-context.json": OperationContextRunner.run,
         "objects.json": ObjectsRunner.objects,
         "object-negatives.json": ObjectsRunner.negatives,

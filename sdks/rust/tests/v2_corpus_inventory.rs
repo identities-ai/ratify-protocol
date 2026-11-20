@@ -31,6 +31,7 @@ const CONSUMED: &[(&str, &str, &str)] = &[
     ("lifecycle-scenarios.json", "v2_lifecycle.rs", "lifecycle-scenarios.json"),
     ("limits.json", "v2_objects.rs", "limits.json"),
     ("log-sequences.json", "v2_logs.rs", "log-sequences.json"),
+    ("mcp", "v2_mcp_signer.rs", "const CORPUS_DIR: &str = \"mcp\";"),
     ("object-negatives.json", "v2_objects.rs", "object-negatives.json"),
     ("objects.json", "v2_objects.rs", "objects.json"),
     ("operation-session-context.json", "operation_context_v2.rs", "operation-session-context.json"),
@@ -42,6 +43,9 @@ const CONSUMED: &[(&str, &str, &str)] = &[
     ("transaction-verification.json", "v2_transaction_verification.rs", "transaction-verification.json"),
     ("verifier-ordering.json", "v2_verifier_ordering.rs", "verifier-ordering.json"),
 ];
+
+/// The files of testvectors/v2/mcp that `v2_mcp_signer.rs` consumes.
+const MCP_FILES: &[&str] = &["README.md", "binding.json", "client-config.json", "connect.json", "tool-call.json"];
 
 /// The cross-SDK fixtures `v2_cross_sdk_fixtures` must verify.
 const CROSS_SDK_FIXTURES: &[&str] = &["c.json", "go.json", "kotlin.json", "python.json", "rust.json", "swift.json", "typescript.json"];
@@ -74,6 +78,15 @@ fn every_v2_corpus_entry_has_a_rust_runner() {
     let fixtures = names(corpus.join("cross-sdk"));
     let expected: BTreeSet<String> = CROSS_SDK_FIXTURES.iter().map(|s| s.to_string()).collect();
     assert_eq!(fixtures, expected, "cross-sdk fixtures differ from those v2_cross_sdk_fixtures requires");
+    // The preview MCP signer directory: exactly these files, and the runner
+    // names each JSON file it loads.
+    let mcp = names(corpus.join("mcp"));
+    let mcp_expected: BTreeSet<String> = MCP_FILES.iter().map(|s| s.to_string()).collect();
+    assert_eq!(mcp, mcp_expected, "testvectors/v2/mcp differs from the files v2_mcp_signer.rs consumes");
+    let mcp_runner = fs::read_to_string(manifest().join("tests/v2_mcp_signer.rs")).unwrap();
+    for file in MCP_FILES.iter().filter(|f| f.ends_with(".json")) {
+        assert!(mcp_runner.contains(&format!("load(\"{file}\")")), "v2_mcp_signer.rs does not load {file}");
+    }
     let cross = fs::read_to_string(manifest().join("tests/v2_cross_sdk.rs")).unwrap();
     for fixture in CROSS_SDK_FIXTURES {
         let stem = fixture.trim_end_matches(".json");

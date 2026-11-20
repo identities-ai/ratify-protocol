@@ -50,6 +50,9 @@ pub use cross_sdk::*;
 pub mod checkpoint_ack;
 pub mod journal;
 pub mod journal_snapshot;
+/// Preview client of the managed Ratify Verify MCP service; not part of
+/// SPEC-v2 conformance.
+pub mod mcp;
 pub mod reference;
 pub mod status_batch;
 pub mod status_provenance;

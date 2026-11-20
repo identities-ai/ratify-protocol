@@ -1180,6 +1180,7 @@ pub fn ratify_protocol::v2::V2SignError::class(&self) -> ratify_protocol::v2::V2
 pub fn ratify_protocol::v2::V2SignError::clone(&self) -> Self
 pub fn ratify_protocol::v2::V2SignError::eq(&self, &Self) -> bool
 pub fn ratify_protocol::v2::V2SignError::from(ratify_protocol::v2::V2Error) -> Self
+pub fn ratify_protocol::v2::mcp::McpError::from(ratify_protocol::v2::V2SignError) -> Self
 pub fn ratify_protocol::v2::V2SignError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn ratify_protocol::v2::V2SignError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct ratify_protocol::v2::errors::V2Error
@@ -1193,6 +1194,7 @@ pub fn ratify_protocol::v2::V2Error::eq(&self, &Self) -> bool
 pub fn ratify_protocol::v2::SecurityJournalStoreErrorV2::from(ratify_protocol::v2::V2Error) -> Self
 pub fn ratify_protocol::v2::V2SignError::from(ratify_protocol::v2::V2Error) -> Self
 pub fn ratify_protocol::v2::V2StoreError::from(ratify_protocol::v2::V2Error) -> Self
+pub fn ratify_protocol::v2::mcp::McpError::from(ratify_protocol::v2::V2Error) -> Self
 pub fn ratify_protocol::v2::V2Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn ratify_protocol::v2::V2Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn ratify_protocol::v2::errors::v2_error_class_of<T>(&ratify_protocol::v2::V2Result<T>) -> core::option::Option<ratify_protocol::v2::V2ErrorClass>
@@ -1426,6 +1428,103 @@ pub const ratify_protocol::v2::limits::V2_MAX_SAFE_INTEGER: i64
 pub const ratify_protocol::v2::limits::V2_MAX_STATUS_LIFETIME_SECONDS: i64
 pub const ratify_protocol::v2::limits::V2_MAX_TIMESTAMP_SECONDS: i64
 pub fn ratify_protocol::v2::limits::valid_v2_timestamp(i64) -> bool
+pub mod ratify_protocol::v2::mcp
+pub enum ratify_protocol::v2::mcp::McpError
+pub ratify_protocol::v2::mcp::McpError::AgentNotDelegated
+pub ratify_protocol::v2::mcp::McpError::ChallengeRefused
+pub ratify_protocol::v2::mcp::McpError::InvalidArguments
+pub ratify_protocol::v2::mcp::McpError::InvalidConfig
+pub ratify_protocol::v2::mcp::McpError::InvalidConnectToken
+pub ratify_protocol::v2::mcp::McpError::Protocol(ratify_protocol::v2::V2Error)
+pub ratify_protocol::v2::mcp::McpError::Signing(ratify_protocol::v2::V2SignError)
+pub fn ratify_protocol::v2::mcp::McpError::clone(&self) -> Self
+pub fn ratify_protocol::v2::mcp::McpError::from(ratify_protocol::v2::V2Error) -> Self
+pub fn ratify_protocol::v2::mcp::McpError::from(ratify_protocol::v2::V2SignError) -> Self
+pub fn ratify_protocol::v2::mcp::McpError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn ratify_protocol::v2::mcp::McpError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct ratify_protocol::v2::mcp::Challenge
+pub fn ratify_protocol::v2::mcp::Challenge::challenge(&self) -> &[u8]
+pub fn ratify_protocol::v2::mcp::Challenge::expires_at(&self) -> i64
+pub fn ratify_protocol::v2::mcp::Challenge::invocation_id(&self) -> &str
+pub fn ratify_protocol::v2::mcp::Challenge::issued_at(&self) -> i64
+pub fn ratify_protocol::v2::mcp::Challenge::tool(&self) -> &str
+pub fn ratify_protocol::v2::mcp::Challenge::clone(&self) -> Self
+pub fn ratify_protocol::v2::mcp::Challenge::eq(&self, &Self) -> bool
+pub fn ratify_protocol::v2::mcp::Challenge::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct ratify_protocol::v2::mcp::ClientConfig
+pub ratify_protocol::v2::mcp::ClientConfig::audience: alloc::string::String
+pub ratify_protocol::v2::mcp::ClientConfig::connection_id: alloc::string::String
+pub ratify_protocol::v2::mcp::ClientConfig::delegations: alloc::vec::Vec<ratify_protocol::v2::DelegationCertV2>
+pub ratify_protocol::v2::mcp::ClientConfig::endpoint: alloc::string::String
+pub ratify_protocol::v2::mcp::ClientConfig::verifier_id: alloc::string::String
+pub ratify_protocol::v2::mcp::ClientConfig::workspace_id: alloc::string::String
+pub fn ratify_protocol::v2::mcp::ClientConfig::challenge_request(&self, &ratify_protocol::v2::mcp::ToolCall) -> core::result::Result<alloc::vec::Vec<u8>, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::ClientConfig::check_challenge(&self, &str, impl core::convert::AsRef<[u8]>, i64) -> core::result::Result<ratify_protocol::v2::mcp::Challenge, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::ClientConfig::clone(&self) -> Self
+pub fn ratify_protocol::v2::mcp::ClientConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct ratify_protocol::v2::mcp::ConnectToken
+pub ratify_protocol::v2::mcp::ConnectToken::audience: alloc::string::String
+pub ratify_protocol::v2::mcp::ConnectToken::challenge: alloc::vec::Vec<u8>
+pub ratify_protocol::v2::mcp::ConnectToken::challenge_id: alloc::string::String
+pub ratify_protocol::v2::mcp::ConnectToken::issued_at: i64
+pub ratify_protocol::v2::mcp::ConnectToken::receiver_id: alloc::string::String
+pub ratify_protocol::v2::mcp::ConnectToken::verifier_id: alloc::string::String
+pub ratify_protocol::v2::mcp::ConnectToken::workspace_id: alloc::string::String
+pub fn ratify_protocol::v2::mcp::ConnectToken::clone(&self) -> Self
+pub fn ratify_protocol::v2::mcp::ConnectToken::eq(&self, &Self) -> bool
+pub fn ratify_protocol::v2::mcp::ConnectToken::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct ratify_protocol::v2::mcp::PossessionProof
+pub ratify_protocol::v2::mcp::PossessionProof::connect_challenge_id: alloc::string::String
+pub ratify_protocol::v2::mcp::PossessionProof::possession_proof: alloc::string::String
+pub fn ratify_protocol::v2::mcp::PossessionProof::clone(&self) -> Self
+pub fn ratify_protocol::v2::mcp::PossessionProof::eq(&self, &Self) -> bool
+pub fn ratify_protocol::v2::mcp::PossessionProof::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn ratify_protocol::v2::mcp::PossessionProof::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub struct ratify_protocol::v2::mcp::ProofEnvelope
+pub ratify_protocol::v2::mcp::ProofEnvelope::bundle: alloc::string::String
+pub ratify_protocol::v2::mcp::ProofEnvelope::challenge: alloc::string::String
+pub ratify_protocol::v2::mcp::ProofEnvelope::connection_id: alloc::string::String
+pub ratify_protocol::v2::mcp::ProofEnvelope::invocation_id: alloc::string::String
+pub fn ratify_protocol::v2::mcp::ProofEnvelope::clone(&self) -> Self
+pub fn ratify_protocol::v2::mcp::ProofEnvelope::eq(&self, &Self) -> bool
+pub fn ratify_protocol::v2::mcp::ProofEnvelope::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn ratify_protocol::v2::mcp::ProofEnvelope::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub struct ratify_protocol::v2::mcp::Tool
+pub ratify_protocol::v2::mcp::Tool::name: &'static str
+pub ratify_protocol::v2::mcp::Tool::scope: &'static str
+pub fn ratify_protocol::v2::mcp::Tool::clone(&self) -> Self
+pub fn ratify_protocol::v2::mcp::Tool::eq(&self, &Self) -> bool
+pub fn ratify_protocol::v2::mcp::Tool::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct ratify_protocol::v2::mcp::ToolCall
+pub fn ratify_protocol::v2::mcp::ToolCall::canonical_arguments(&self) -> &[u8]
+pub fn ratify_protocol::v2::mcp::ToolCall::new(&str, impl core::convert::AsRef<[u8]>) -> core::result::Result<ratify_protocol::v2::mcp::ToolCall, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::ToolCall::payload_digest(&self) -> &[u8; 32]
+pub fn ratify_protocol::v2::mcp::ToolCall::tool(&self) -> &str
+pub fn ratify_protocol::v2::mcp::ToolCall::clone(&self) -> Self
+pub fn ratify_protocol::v2::mcp::ToolCall::eq(&self, &Self) -> bool
+pub fn ratify_protocol::v2::mcp::ToolCall::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const ratify_protocol::v2::mcp::ACTION: &str
+pub const ratify_protocol::v2::mcp::CONNECT_POSSESSION_DOMAIN: &str
+pub const ratify_protocol::v2::mcp::CONNECT_TOKEN_PREFIX: &str
+pub const ratify_protocol::v2::mcp::MAX_ARGUMENT_DEPTH: usize
+pub const ratify_protocol::v2::mcp::MAX_CONNECT_TOKEN_LENGTH: usize
+pub const ratify_protocol::v2::mcp::MIN_CHALLENGE_SECONDS_LEFT: i64
+pub const ratify_protocol::v2::mcp::PROOF_META_KEY: &str
+pub const ratify_protocol::v2::mcp::PROTOCOL_VERSION: &str
+pub const ratify_protocol::v2::mcp::TOOLS: &[ratify_protocol::v2::mcp::Tool]
+pub fn ratify_protocol::v2::mcp::canonical_arguments(impl core::convert::AsRef<[u8]>) -> core::result::Result<alloc::vec::Vec<u8>, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::connect_possession_context(&str, &str, &str, &str, &str) -> [u8; 32]
+pub fn ratify_protocol::v2::mcp::parse_client_config(impl core::convert::AsRef<[u8]>) -> core::result::Result<ratify_protocol::v2::mcp::ClientConfig, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::parse_connect_token(&str) -> core::result::Result<ratify_protocol::v2::mcp::ConnectToken, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::payload_digest(&[u8]) -> [u8; 32]
+pub fn ratify_protocol::v2::mcp::payload_digest_text(&[u8]) -> alloc::string::String
+pub fn ratify_protocol::v2::mcp::prove_possession(&str, &ratify_protocol::types::HybridPrivateKey) -> core::result::Result<ratify_protocol::v2::mcp::PossessionProof, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::prove_possession_with_signer(&ratify_protocol::v2::V2Context, &str, &dyn ratify_protocol::v2::SignerV2) -> core::result::Result<ratify_protocol::v2::mcp::PossessionProof, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::request_hash(&str, &str, &str, &[u8]) -> core::result::Result<alloc::vec::Vec<u8>, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::session_context(&str, &str, &str, &str, &str, &[u8]) -> core::result::Result<alloc::vec::Vec<u8>, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::sign_tool_call(&ratify_protocol::v2::mcp::ClientConfig, &ratify_protocol::types::HybridPrivateKey, &ratify_protocol::v2::mcp::ToolCall, &ratify_protocol::v2::mcp::Challenge) -> core::result::Result<ratify_protocol::v2::mcp::ProofEnvelope, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::sign_tool_call_with_signer(&ratify_protocol::v2::V2Context, &ratify_protocol::v2::mcp::ClientConfig, &dyn ratify_protocol::v2::SignerV2, &ratify_protocol::v2::mcp::ToolCall, &ratify_protocol::v2::mcp::Challenge) -> core::result::Result<ratify_protocol::v2::mcp::ProofEnvelope, ratify_protocol::v2::mcp::McpError>
+pub fn ratify_protocol::v2::mcp::tool_scope(&str) -> core::option::Option<&'static str>
 pub mod ratify_protocol::v2::operation_context
 pub struct ratify_protocol::v2::operation_context::OperationContextV2
 pub ratify_protocol::v2::operation_context::OperationContextV2::operation: alloc::string::String
@@ -2710,6 +2809,7 @@ pub fn ratify_protocol::v2::V2SignError::class(&self) -> ratify_protocol::v2::V2
 pub fn ratify_protocol::v2::V2SignError::clone(&self) -> Self
 pub fn ratify_protocol::v2::V2SignError::eq(&self, &Self) -> bool
 pub fn ratify_protocol::v2::V2SignError::from(ratify_protocol::v2::V2Error) -> Self
+pub fn ratify_protocol::v2::mcp::McpError::from(ratify_protocol::v2::V2SignError) -> Self
 pub fn ratify_protocol::v2::V2SignError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn ratify_protocol::v2::V2SignError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum ratify_protocol::v2::V2StoreError
@@ -3556,6 +3656,7 @@ pub fn ratify_protocol::v2::V2Error::eq(&self, &Self) -> bool
 pub fn ratify_protocol::v2::SecurityJournalStoreErrorV2::from(ratify_protocol::v2::V2Error) -> Self
 pub fn ratify_protocol::v2::V2SignError::from(ratify_protocol::v2::V2Error) -> Self
 pub fn ratify_protocol::v2::V2StoreError::from(ratify_protocol::v2::V2Error) -> Self
+pub fn ratify_protocol::v2::mcp::McpError::from(ratify_protocol::v2::V2Error) -> Self
 pub fn ratify_protocol::v2::V2Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn ratify_protocol::v2::V2Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct ratify_protocol::v2::V2EvaluationProgress

@@ -1,4 +1,9 @@
 {
+ "ACTION": {
+  "kind": "const",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "ApprovalErrorTestOnly": {
   "kind": "enum",
   "status": "rust-idiom",
@@ -299,6 +304,16 @@
   "status": "mapped",
   "swift": "ArchivalVerification.signerKeyIds"
  },
+ "CONNECT_POSSESSION_DOMAIN": {
+  "kind": "const",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "CONNECT_TOKEN_PREFIX": {
+  "kind": "const",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "CONSTRAINT_ALLOWED_VALUES_V2": {
   "kind": "const",
   "kotlin": "CONSTRAINT_ALLOWED_VALUES_V2",
@@ -419,6 +434,51 @@
   "reason": "PartialOrd impl; no ordering is part of the protocol API",
   "status": "rust-idiom"
  },
+ "Challenge": {
+  "kind": "struct",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Challenge::challenge": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Challenge::clone": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Challenge::eq": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Challenge::expires_at": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Challenge::fmt": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Challenge::invocation_id": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Challenge::issued_at": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Challenge::tool": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "ClaimStoreV2": {
   "kind": "trait",
   "kotlin": "ClaimStore",
@@ -460,6 +520,61 @@
   "status": "mapped",
   "swift": "ClaimStore.recoverInterrupted"
  },
+ "ClientConfig": {
+  "kind": "struct",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::audience": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::challenge_request": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::check_challenge": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::clone": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::connection_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::delegations": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::endpoint": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::fmt": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::verifier_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ClientConfig::workspace_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "CommittedV2Outcome": {
   "kind": "struct",
   "kotlin": "CommittedOutcome",
@@ -500,6 +615,61 @@
   "kotlin": "CommittedOutcome.receiptBodyDigest",
   "status": "mapped",
   "swift": "CommittedOutcome.receiptBodyDigest"
+ },
+ "ConnectToken": {
+  "kind": "struct",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::audience": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::challenge": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::challenge_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::clone": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::eq": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::fmt": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::issued_at": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::receiver_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::verifier_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ConnectToken::workspace_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "ConstraintContextV2": {
   "kind": "struct",
@@ -3168,6 +3338,11 @@
   "status": "mapped",
   "swift": "Ratify.maxAllowedValues"
  },
+ "MAX_ARGUMENT_DEPTH": {
+  "kind": "const",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "MAX_AUDIENCE_IDS_V2": {
   "kind": "const",
   "kotlin": "MAX_AUDIENCE_IDS_V2",
@@ -3179,6 +3354,11 @@
   "kotlin": "MAX_CHECKPOINT_ACKNOWLEDGEMENT_BYTES_V2",
   "status": "mapped",
   "swift": "Ratify.maxCheckpointAcknowledgementBytes"
+ },
+ "MAX_CONNECT_TOKEN_LENGTH": {
+  "kind": "const",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "MAX_CONSTRAINT_EVALUATORS_V2": {
   "kind": "const",
@@ -3330,6 +3510,66 @@
   "status": "mapped",
   "swift": "Ratify.maxWitnessEntryDataBytes"
  },
+ "MIN_CHALLENGE_SECONDS_LEFT": {
+  "kind": "const",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError": {
+  "kind": "enum",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::AgentNotDelegated": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::ChallengeRefused": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::InvalidArguments": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::InvalidConfig": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::InvalidConnectToken": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::Protocol": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::Signing": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::clone": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::fmt": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "McpError::from": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "OperationContextV2": {
   "kind": "struct",
   "kotlin": "OperationContext",
@@ -3397,6 +3637,16 @@
   "kotlin": "PROFILE_MAX_COUNT_V2",
   "status": "mapped",
   "swift": "Ratify.profileMaxCount"
+ },
+ "PROOF_META_KEY": {
+  "kind": "const",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "PROTOCOL_VERSION": {
+  "kind": "const",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "ParamsValue": {
   "kind": "enum",
@@ -3505,6 +3755,41 @@
   "reason": "Debug/Display impl; Swift CustomStringConvertible, Kotlin toString",
   "status": "rust-idiom"
  },
+ "PossessionProof": {
+  "kind": "struct",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "PossessionProof::clone": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "PossessionProof::connect_challenge_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "PossessionProof::eq": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "PossessionProof::fmt": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "PossessionProof::possession_proof": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "PossessionProof::serialize": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "ProofBundleV2": {
   "kind": "struct",
   "kotlin": "ProofBundle",
@@ -3592,6 +3877,51 @@
   "kotlin": "ProofBundle.version",
   "status": "mapped",
   "swift": "ProofBundle.version"
+ },
+ "ProofEnvelope": {
+  "kind": "struct",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ProofEnvelope::bundle": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ProofEnvelope::challenge": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ProofEnvelope::clone": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ProofEnvelope::connection_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ProofEnvelope::eq": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ProofEnvelope::fmt": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ProofEnvelope::invocation_id": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ProofEnvelope::serialize": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "RateAtFinalizationStore": {
   "kind": "struct",
@@ -4785,6 +5115,11 @@
   "status": "rust-idiom",
   "reason": "Rust reference implementation; mobile conformance uses the separate RatifyProtocolTestSupport and ratify-protocol-testing products through typed wrappers, outside the production SDK API"
  },
+ "TOOLS": {
+  "kind": "const",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "TZDB_VERSION_V2": {
   "kind": "const",
   "kotlin": "TZDB_VERSION_V2",
@@ -4835,6 +5170,76 @@
   "kind": "fn",
   "status": "rust-idiom",
   "reason": "Rust test-only offline device model; mobile conformance uses typed wrappers in the separate TestSupport products, outside the production SDK API"
+ },
+ "Tool": {
+  "kind": "struct",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Tool::clone": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Tool::eq": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Tool::fmt": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Tool::name": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "Tool::scope": {
+  "kind": "member",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ToolCall": {
+  "kind": "struct",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ToolCall::canonical_arguments": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ToolCall::clone": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ToolCall::eq": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ToolCall::fmt": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ToolCall::new": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ToolCall::payload_digest": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "ToolCall::tool": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "TransactionPartyVerificationV2": {
   "kind": "struct",
@@ -8946,6 +9351,11 @@
   "status": "mapped",
   "swift": "Ratify.bundleHash"
  },
+ "canonical_arguments": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "canonical_json_v2": {
   "kind": "fn",
   "kotlin": "canonicalJson",
@@ -8985,6 +9395,11 @@
   "kotlin": "configureStatusKeyEpoch",
   "status": "mapped",
   "swift": "Ratify.configureStatusKeyEpoch"
+ },
+ "connect_possession_context": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "constraint_profile_digest_v2": {
   "kind": "fn",
@@ -9309,6 +9724,26 @@
   "status": "mapped",
   "swift": "Ratify.operationContextHash"
  },
+ "parse_client_config": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "parse_connect_token": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "payload_digest": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "payload_digest_text": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "preflight_proof_bundle_v2": {
   "kind": "fn",
   "kotlin": "preflightProofBundle",
@@ -9332,6 +9767,16 @@
   "kotlin": "protocolClaimId",
   "status": "mapped",
   "swift": "Ratify.protocolClaimId"
+ },
+ "prove_possession": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "prove_possession_with_signer": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "public_key_v2": {
   "kind": "fn",
@@ -9382,6 +9827,11 @@
   "status": "mapped",
   "swift": "Ratify.releaseDecision",
   "kotlin": "releaseDecision"
+ },
+ "request_hash": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "resolve_claim_proof_bundle_v2_after_audience": {
   "kind": "fn",
@@ -9436,6 +9886,11 @@
   "kotlin": "securityJournalSnapshotDigest",
   "status": "mapped",
   "swift": "Ratify.securityJournalSnapshotDigest"
+ },
+ "session_context": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "session_context_v2_bytes": {
   "kind": "fn",
@@ -9515,6 +9970,16 @@
   "status": "mapped",
   "swift": "Ratify.signRevocationPush"
  },
+ "sign_tool_call": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
+ "sign_tool_call_with_signer": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
+ },
  "sign_transaction_receipt_party_v2": {
   "kind": "fn",
   "kotlin": "signTransactionReceiptParty",
@@ -9586,6 +10051,11 @@
   "kotlin": "statusEvidenceDigest",
   "status": "mapped",
   "swift": "Ratify.statusEvidenceDigest"
+ },
+ "tool_scope": {
+  "kind": "fn",
+  "status": "rust-idiom",
+  "reason": "Verify MCP signer (preview), a client of the managed Verify service outside SPEC-v2: Swift (MCP) and Kotlin provide hand-written MCP signer APIs over mapped core functions, not bindings of this module"
  },
  "transaction_context_hash_v2": {
   "kind": "fn",

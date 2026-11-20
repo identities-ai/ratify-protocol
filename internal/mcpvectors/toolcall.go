@@ -37,6 +37,18 @@ type refusedChallenge struct {
 	ChallengeResponse string `json:"challenge_response"`
 }
 
+// refusedSigning is a challenge that was checked and accepted for one call
+// and configuration but must not sign another.
+type refusedSigning struct {
+	Name                 string `json:"name"`
+	CheckedTool          string `json:"checked_tool"`
+	Now                  int64  `json:"now"`
+	ChallengeResponse    string `json:"challenge_response"`
+	SigningTool          string `json:"signing_tool"`
+	SigningArgumentsJSON string `json:"signing_arguments_json"`
+	SigningConfigJSON    string `json:"signing_config_json"`
+}
+
 type toolCallFile struct {
 	Version           int                `json:"version"`
 	Description       string             `json:"description"`
@@ -45,6 +57,7 @@ type toolCallFile struct {
 	ClientConfigJSON  string             `json:"client_config_json"`
 	Cases             []toolCallCase     `json:"cases"`
 	RefusedChallenges []refusedChallenge `json:"refused_challenges"`
+	RefusedSignings   []refusedSigning   `json:"refused_signings"`
 }
 
 func challengeBytes(seed byte) []byte {
@@ -75,25 +88,37 @@ func (g *gen) toolCall() (any, error) {
 			"envelope.bundle is the standard base64 of the SPEC-v2 proof bundle wire. ML-DSA-65 signing is hedged in SDKs, so compare " +
 			"the produced wire with the ml_dsa_65 component of challenge_sig replaced by the expected one: the rest, including the " +
 			"deterministic Ed25519 signature, must be identical; the produced and expected bundles must both verify. " +
+			"The configuration's delegations are root side first; the signed bundle carries them leaf first. " +
 			"Every refused_challenges response must be refused, and signing with wrong_agent_key must fail because the last " +
-			"delegation is not issued to it.",
+			"delegation is not issued to it. For each refused_signings entry: check challenge_response for checked_tool under " +
+			"client_config_json at now (it is accepted), then signing a call to signing_tool with signing_arguments_json under " +
+			"signing_config_json (client_config_json when empty) must fail: a checked challenge signs only the tool and the " +
+			"configuration it was checked for.",
 		AgentKey: g.agent.entry(), WrongAgentKey: g.other.entry(), ClientConfigJSON: cfgText,
 	}
 	for i, c := range []struct {
 		name, tool, args, invocation string
 		now                          int64
-		extra                        bool
+		extra                        string
 	}{
-		{"metrics", "get_metrics", `{}`, invocationID, now, false},
-		{"decisions-reordered", "list_decisions", `{ "limit": 20, "decision": "deny" }`, "0b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e", now, false},
-		{"events-unicode", "list_events", `{"types":["café \"q\" \\ b"],"limit":5}`, "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", now, false},
-		{"exactly-minimum-lifetime-left", "get_metrics", `null`, "2d3e4f5a-6b7c-4d8e-9fa0-1b2c3d4e5f60", expiresAt - mcp.MinChallengeSecondsLeft, false},
-		{"unknown-response-field-ignored", "list_agents", `{"limit":3}`, "3e4f5a6b-7c8d-4e9f-a0b1-2c3d4e5f6071", now, true},
+		{"metrics", "get_metrics", `{}`, invocationID, now, ""},
+		{"decisions-reordered", "list_decisions", `{ "limit": 20, "decision": "deny" }`, "0b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e", now, ""},
+		{"events-unicode", "list_events", `{"types":["café \"q\" \\ b"],"limit":5}`, "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", now, ""},
+		{"exactly-minimum-lifetime-left", "get_metrics", `null`, "2d3e4f5a-6b7c-4d8e-9fa0-1b2c3d4e5f60", expiresAt - mcp.MinChallengeSecondsLeft, ""},
+		{"unknown-response-field-ignored", "list_agents", `{"limit":3}`, "3e4f5a6b-7c8d-4e9f-a0b1-2c3d4e5f6071", now, "unknown"},
+		{"server-supplied-hashes-ignored", "get_decision", `{"decision_id":"d-1"}`, "4f5a6b7c-8d9e-4fa0-b1c2-3d4e5f607182", now, "hashes"},
 	} {
 		scope, _ := mcp.ToolScope(c.tool)
 		resp := challengeResponse(scope, c.invocation, challengeBytes(byte(0x10*(i+1))), issuedAt, expiresAt)
-		if c.extra {
+		switch c.extra {
+		case "unknown":
 			resp["retry_hint"] = "none"
+		case "hashes":
+			// A signer never uses hashes a server suggests: the expected
+			// proof is computed from the call and the pinned values only.
+			resp["request_hash"] = strings.Repeat("00", 32)
+			resp["session_context"] = strings.Repeat("ff", 32)
+			resp["payload_digest"] = "sha256:" + strings.Repeat("ab", 32)
 		}
 		respText := compact(resp)
 		call, err := mcp.NewToolCall(c.tool, []byte(c.args))
@@ -116,8 +141,12 @@ func (g *gen) toolCall() (any, error) {
 		if err := checkBundle(env.Bundle, g.agent.id, sess, len(cfg.Delegations)); err != nil {
 			return nil, fmt.Errorf("%s: %w", c.name, err)
 		}
+		reqBody, err := cfg.ChallengeRequest(call)
+		if err != nil {
+			return nil, err
+		}
 		f.Cases = append(f.Cases, toolCallCase{c.name, c.tool, c.args, c.now, respText, string(call.CanonicalArguments),
-			string(cfg.ChallengeRequest(call)), hex.EncodeToString(req), hex.EncodeToString(sess),
+			string(reqBody), hex.EncodeToString(req), hex.EncodeToString(sess),
 			&envelope{env.ConnectionID, env.InvocationID, env.Challenge, env.Bundle}})
 	}
 	metrics, _ := mcp.ToolScope("get_metrics")
@@ -153,6 +182,40 @@ func (g *gen) toolCall() (any, error) {
 			return nil, fmt.Errorf("refused challenge %s was accepted", c.name)
 		}
 		f.RefusedChallenges = append(f.RefusedChallenges, refusedChallenge{c.name, "get_metrics", c.now, text})
+	}
+	decisions, _ := mcp.ToolScope("list_decisions")
+	decisionsResp := compact(challengeResponse(decisions, invocationID, challengeBytes(0x70), issuedAt, expiresAt))
+	otherConnection := compact(with(g.baseConfig(), "connection_id", "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e60"))
+	otherVerifier := compact(with(g.baseConfig(), "verifier_id", strings.Repeat("3", 64)))
+	for _, c := range []refusedSigning{
+		{Name: "same-scope-other-tool", CheckedTool: "list_decisions", ChallengeResponse: decisionsResp,
+			SigningTool: "get_decision", SigningArgumentsJSON: `{}`},
+		{Name: "other-scope-tool", CheckedTool: "list_decisions", ChallengeResponse: decisionsResp,
+			SigningTool: "list_agents", SigningArgumentsJSON: `{}`},
+		{Name: "other-connection", CheckedTool: "list_decisions", ChallengeResponse: decisionsResp,
+			SigningTool: "list_decisions", SigningArgumentsJSON: `{}`, SigningConfigJSON: otherConnection},
+		{Name: "other-verifier", CheckedTool: "list_decisions", ChallengeResponse: decisionsResp,
+			SigningTool: "list_decisions", SigningArgumentsJSON: `{}`, SigningConfigJSON: otherVerifier},
+	} {
+		c.Now = now
+		ch, err := cfg.CheckChallenge(c.CheckedTool, []byte(c.ChallengeResponse), c.Now)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", c.Name, err)
+		}
+		signCfg := cfg
+		if c.SigningConfigJSON != "" {
+			if signCfg, err = mcp.ParseClientConfig([]byte(c.SigningConfigJSON)); err != nil {
+				return nil, fmt.Errorf("%s: %w", c.Name, err)
+			}
+		}
+		call, err := mcp.NewToolCall(c.SigningTool, []byte(c.SigningArgumentsJSON))
+		if err != nil {
+			return nil, err
+		}
+		if _, err := mcp.SignToolCall(signCfg, g.agent.priv, call, ch); err == nil {
+			return nil, fmt.Errorf("refused signing %s was signed", c.Name)
+		}
+		f.RefusedSignings = append(f.RefusedSignings, c)
 	}
 	return f, nil
 }

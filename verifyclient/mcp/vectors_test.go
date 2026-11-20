@@ -184,9 +184,18 @@ func TestToolCallVectors(t *testing.T) {
 			Now               int64  `json:"now"`
 			ChallengeResponse string `json:"challenge_response"`
 		} `json:"refused_challenges"`
+		RefusedSignings []struct {
+			Name                 string `json:"name"`
+			CheckedTool          string `json:"checked_tool"`
+			Now                  int64  `json:"now"`
+			ChallengeResponse    string `json:"challenge_response"`
+			SigningTool          string `json:"signing_tool"`
+			SigningArgumentsJSON string `json:"signing_arguments_json"`
+			SigningConfigJSON    string `json:"signing_config_json"`
+		} `json:"refused_signings"`
 	}
 	vectorFile(t, "tool-call.json", &f)
-	if len(f.Cases) == 0 || len(f.Refused) == 0 {
+	if len(f.Cases) == 0 || len(f.Refused) == 0 || len(f.RefusedSignings) == 0 {
 		t.Fatal("tool-call.json shape")
 	}
 	cases, refused := f.Cases, f.Refused
@@ -200,8 +209,9 @@ func TestToolCallVectors(t *testing.T) {
 		if err != nil || string(call.CanonicalArguments) != c.CanonicalArguments {
 			t.Fatalf("%s: arguments: %v", c.Name, err)
 		}
-		if string(cfg.ChallengeRequest(call)) != c.ChallengeRequest {
-			t.Fatalf("%s: challenge request %s", c.Name, cfg.ChallengeRequest(call))
+		body, err := cfg.ChallengeRequest(call)
+		if err != nil || string(body) != c.ChallengeRequest {
+			t.Fatalf("%s: challenge request %s, %v", c.Name, body, err)
 		}
 		ch, err := cfg.CheckChallenge(c.Tool, []byte(c.ChallengeResponse), c.Now)
 		if err != nil {
@@ -222,6 +232,25 @@ func TestToolCallVectors(t *testing.T) {
 	for _, c := range refused {
 		if _, err := cfg.CheckChallenge(c.Tool, []byte(c.ChallengeResponse), c.Now); err == nil {
 			t.Fatalf("%s: accepted", c.Name)
+		}
+	}
+	for _, c := range f.RefusedSignings {
+		ch, err := cfg.CheckChallenge(c.CheckedTool, []byte(c.ChallengeResponse), c.Now)
+		if err != nil {
+			t.Fatalf("%s: %v", c.Name, err)
+		}
+		signCfg := cfg
+		if c.SigningConfigJSON != "" {
+			if signCfg, err = ParseClientConfig([]byte(c.SigningConfigJSON)); err != nil {
+				t.Fatalf("%s: %v", c.Name, err)
+			}
+		}
+		call, err := NewToolCall(c.SigningTool, []byte(c.SigningArgumentsJSON))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := SignToolCall(signCfg, agent, call, ch); err == nil {
+			t.Fatalf("%s: signed", c.Name)
 		}
 	}
 }

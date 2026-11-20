@@ -597,3 +597,35 @@ def test_keyring_store_roundtrip(monkeypatch, tmp_path, agent_keys):
     finally:
         from keyring.backends import fail
         keyring.set_keyring(fail.Keyring())
+
+
+def test_stdio_refuses_ambiguous_or_non_object_calls(signer, fake_service):
+    # Each of these would otherwise sign a call other than the one on the
+    # wire: a JSON-text string taken as arguments, a repeated tool name
+    # (last one wins), or -0 normalized to 0.
+    stdin = io.BytesIO(b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_metrics","arguments":"{}"}}\n'
+                       b'{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_agents","name":"get_metrics"}}\n'
+                       b'{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_agents","arguments":{"limit":-0}}}\n'
+                       b'{"jsonrpc":"2.0","id":4,"id":5,"method":"ping"}\n')
+    stdout = io.BytesIO()
+    StdioServer(signer, stdin, stdout).serve()
+    out = [json.loads(line) for line in stdout.getvalue().splitlines()]
+    assert [m.get("error", {}).get("code") for m in out] == [-32602, -32600, -32602, -32600]
+    assert fake_service.requests == []
+
+
+def test_prove_possession_honours_nested_client_config_pins(private_dir, key_file, capsys):
+    # serve reads pins from a client_config object, so prove-possession must
+    # refuse a token for another deployment the same way.
+    import base64 as b64
+    path = private_dir / "nested.json"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    os.write(fd, json.dumps({"key": {"kind": "file", "path": str(key_file)},
+                             "client_config": {"audience": "https://verify.example/mcp"}}).encode())
+    os.close(fd)
+    payload = {"challenge_id": "8b1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f", "challenge": b64.b64encode(bytes(32)).decode(),
+               "issued_at": 1790000000, "workspace_id": WORKSPACE_ID, "receiver_id": "7a1c2d3e-4a5b-5c6d-8e9f-0a1b2c3d4e5f",
+               "audience": "https://other.example/mcp", "verifier_id": VERIFIER_ID}
+    token = "ratify-mcp-connect-1." + b64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    assert cli.main(["prove-possession", "--config", str(path), "--challenge", token]) == 2
+    assert "does not match" in capsys.readouterr().err

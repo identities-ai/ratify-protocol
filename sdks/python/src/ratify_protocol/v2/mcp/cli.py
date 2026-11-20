@@ -146,9 +146,11 @@ def cmd_prove_possession(a: argparse.Namespace) -> int:
     if not isinstance(raw, dict) or not isinstance(raw.get("key"), dict):
         raise ConfigError("config file has no key reference (run ratify-mcp-signer init first)")
     token = parse_connect_token(a.challenge)
-    # A config that is already pinned proves only for its own deployment.
+    # A config that is already pinned proves only for its own deployment. The
+    # pins are read the way serve reads them (a client_config object wins).
+    pins = raw["client_config"] if isinstance(raw.get("client_config"), dict) else raw
     for field in ("workspace_id", "audience", "verifier_id"):
-        if field in raw and raw[field] != getattr(token, field):
+        if field in pins and pins[field] != getattr(token, field):
             raise ConfigError(f"the challenge's {field} does not match this configuration; refusing to sign")
     pub, priv = keys.load_key(raw["key"])
     out = prove_possession(a.challenge, priv)

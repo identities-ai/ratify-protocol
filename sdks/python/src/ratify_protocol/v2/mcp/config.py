@@ -38,9 +38,18 @@ def decode_std_base64(text: Any) -> bytes | None:
     return raw if base64.b64encode(raw).decode() == text else None
 
 
+def _reject_constant(name: str) -> Any:
+    raise ValueError(f"invalid JSON constant {name}")
+
+
 def load_json(data: Union[str, bytes, bytearray], error: type) -> Any:
+    """Parse UTF-8 JSON text; NaN and Infinity are refused."""
     try:
-        return json.loads(data)
+        if isinstance(data, (bytes, bytearray)):
+            data = bytes(data).decode("utf-8")
+        if not isinstance(data, str):
+            raise ValueError("not text")
+        return json.loads(data, parse_constant=_reject_constant)
     except (ValueError, UnicodeDecodeError, RecursionError):
         raise error("not valid JSON") from None
 
@@ -49,7 +58,7 @@ def load_json(data: Union[str, bytes, bytearray], error: type) -> Any:
 class ClientConfig:
     """Pinned endpoint and audience, verifier, workspace, connection, and the
     delegation chain (root side first; the last certificate is issued to the
-    agent key)."""
+    agent key; a proof bundle carries them leaf first)."""
 
     endpoint: str
     audience: str
@@ -61,8 +70,9 @@ class ClientConfig:
     def challenge_request(self, call) -> bytes:
         """The JSON body of ``POST <endpoint>/challenge`` for ``call``."""
         from .binding import payload_digest_text
+        from .toolcall import verified_digest
         return json.dumps({"connection_id": self.connection_id, "tool": call.tool,
-                           "payload_digest": payload_digest_text(call.payload_digest)},
+                           "payload_digest": payload_digest_text(verified_digest(call))},
                           separators=(",", ":")).encode()
 
     def check_challenge(self, tool: str, response: Union[str, bytes, bytearray], now: int):
@@ -80,7 +90,8 @@ def parse_client_config(data: Union[str, bytes, bytearray, dict]) -> ClientConfi
     - verifier_id: 64 lowercase hex characters
     - workspace_id, connection_id: lowercase UUIDs
     - delegations: a non-empty list of canonical standard base64 SPEC-v2
-      delegation certificates
+      delegation certificates, root side first: each certificate's subject
+      (ID and key) is the next one's issuer
 
     Raises :class:`InvalidConfigError`."""
     raw = data if isinstance(data, dict) else load_json(data, InvalidConfigError)
@@ -110,5 +121,10 @@ def parse_client_config(data: Union[str, bytes, bytearray, dict]) -> ClientConfi
             certs.append(decode_delegation_cert_v2(wire))
         except Exception:
             raise InvalidConfigError("a delegation is not a v2 delegation certificate") from None
+    for parent, child in zip(certs, certs[1:]):
+        if (parent.subject_id != child.issuer_id
+                or bytes(parent.subject_pub_key.ed25519) != bytes(child.issuer_pub_key.ed25519)
+                or bytes(parent.subject_pub_key.ml_dsa_65) != bytes(child.issuer_pub_key.ml_dsa_65)):
+            raise InvalidConfigError("delegations must be root side first, each issued by the previous subject")
     return ClientConfig(raw["endpoint"], raw["audience"], raw["verifier_id"], raw["workspace_id"],
                         raw["connection_id"], tuple(certs))

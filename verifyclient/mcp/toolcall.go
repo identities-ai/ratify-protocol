@@ -1,11 +1,13 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"unicode/utf8"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
@@ -35,19 +37,48 @@ func NewToolCall(tool string, arguments []byte) (*ToolCall, error) {
 	return &ToolCall{Tool: tool, CanonicalArguments: canonical, PayloadDigest: PayloadDigest(canonical)}, nil
 }
 
+// verifiedDigest re-derives the payload digest from the call's canonical
+// arguments, so a ToolCall whose fields were changed after NewToolCall can
+// never make the signer bind one argument set and send another.
+func (call *ToolCall) verifiedDigest() ([]byte, error) {
+	if call == nil {
+		return nil, ErrInvalidArguments
+	}
+	if _, ok := ToolScope(call.Tool); !ok {
+		return nil, ErrInvalidArguments
+	}
+	canonical, err := CanonicalArguments(call.CanonicalArguments)
+	if err != nil || !bytes.Equal(canonical, call.CanonicalArguments) || len(call.CanonicalArguments) == 0 {
+		return nil, ErrInvalidArguments
+	}
+	digest := PayloadDigest(canonical)
+	if !bytes.Equal(digest, call.PayloadDigest) {
+		return nil, ErrInvalidArguments
+	}
+	return digest, nil
+}
+
 // ChallengeRequest is the JSON body of POST <endpoint>/challenge for call.
-func (c *ClientConfig) ChallengeRequest(call *ToolCall) []byte {
-	body, _ := json.Marshal(struct {
+func (c *ClientConfig) ChallengeRequest(call *ToolCall) ([]byte, error) {
+	digest, err := call.verifiedDigest()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct {
 		ConnectionID  string `json:"connection_id"`
 		Tool          string `json:"tool"`
 		PayloadDigest string `json:"payload_digest"`
-	}{c.ConnectionID, call.Tool, PayloadDigestText(call.PayloadDigest)})
-	return body
+	}{c.ConnectionID, call.Tool, PayloadDigestText(digest)})
 }
 
-// Challenge is a challenge response that CheckChallenge accepted.
+// Challenge is a challenge response that CheckChallenge accepted. It can
+// sign only a call to the tool, and under the configuration (verifier,
+// workspace, connection), it was checked for.
 type Challenge struct {
 	tool         string
+	verifierID   string
+	workspaceID  string
+	connectionID string
 	challenge    []byte
 	invocationID string
 	issuedAt     int64
@@ -60,7 +91,7 @@ func (ch *Challenge) InvocationID() string { return ch.invocationID }
 // ExpiresAt is the challenge expiry in Unix seconds.
 func (ch *Challenge) ExpiresAt() int64 { return ch.expiresAt }
 
-// CheckChallenge accepts the JSON response of POST <endpoint>/challenge only
+// CheckChallenge accepts the JSON response (valid UTF-8) of POST <endpoint>/challenge only
 // if verifier_id and workspace_id equal the pinned values, required_scope is
 // the tool's scope, invocation_id is a lowercase UUID, challenge is 32 bytes
 // in canonical standard base64, issued_at and expires_at are integers with
@@ -72,7 +103,7 @@ func (c *ClientConfig) CheckChallenge(tool string, response []byte, now int64) (
 		return nil, ErrChallengeRefused
 	}
 	var msg map[string]json.RawMessage
-	if json.Unmarshal(response, &msg) != nil || msg == nil {
+	if !utf8.Valid(response) || json.Unmarshal(response, &msg) != nil || msg == nil {
 		return nil, ErrChallengeRefused
 	}
 	verifier, ok1 := jsonString(msg["verifier_id"])
@@ -92,10 +123,12 @@ func (c *ClientConfig) CheckChallenge(tool string, response []byte, now int64) (
 	if !ok || len(challenge) != 32 {
 		return nil, ErrChallengeRefused
 	}
-	if issued <= 0 || issued > expires || expires-now < MinChallengeSecondsLeft {
+	// expires is within the safe range here, so the subtraction cannot wrap.
+	if issued <= 0 || issued > expires || now > expires-MinChallengeSecondsLeft {
 		return nil, ErrChallengeRefused
 	}
-	return &Challenge{tool: tool, challenge: challenge, invocationID: invocation, issuedAt: issued, expiresAt: expires}, nil
+	return &Challenge{tool: tool, verifierID: c.VerifierID, workspaceID: c.WorkspaceID, connectionID: c.ConnectionID,
+		challenge: challenge, invocationID: invocation, issuedAt: issued, expiresAt: expires}, nil
 }
 
 // ProofEnvelope is the value of params._meta[ProofMetaKey] on tools/call.
@@ -122,8 +155,13 @@ func SignToolCallWithSigner(ctx context.Context, c *ClientConfig, signer ratify.
 
 func signToolCall(c *ClientConfig, pub ratify.HybridPublicKey, call *ToolCall, ch *Challenge,
 	sign func(*ratify.ProofBundleV2) (*ratify.ProofBundleV2, error)) (*ProofEnvelope, error) {
-	if c == nil || call == nil || ch == nil || ch.tool != call.Tool || len(c.Delegations) == 0 {
+	if c == nil || call == nil || ch == nil || ch.tool != call.Tool || len(c.Delegations) == 0 ||
+		ch.verifierID != c.VerifierID || ch.workspaceID != c.WorkspaceID || ch.connectionID != c.ConnectionID {
 		return nil, ErrChallengeRefused
+	}
+	digest, err := call.verifiedDigest()
+	if err != nil {
+		return nil, err
 	}
 	agentID, err := ratify.KeyIDV2(pub)
 	if err != nil {
@@ -132,7 +170,7 @@ func signToolCall(c *ClientConfig, pub ratify.HybridPublicKey, call *ToolCall, c
 	if c.Delegations[len(c.Delegations)-1].SubjectID != agentID {
 		return nil, errors.New("mcp: the last delegation certificate is not issued to this agent key")
 	}
-	requestHash, err := RequestHash(call.Tool, c.ConnectionID, c.Audience, call.PayloadDigest)
+	requestHash, err := RequestHash(call.Tool, c.ConnectionID, c.Audience, digest)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +178,13 @@ func signToolCall(c *ClientConfig, pub ratify.HybridPublicKey, call *ToolCall, c
 	if err != nil {
 		return nil, err
 	}
-	wire, err := signPresentation(c.VerifierID, agentID, pub, c.Delegations, ch.challenge, ch.issuedAt, session, sign)
+	// The configuration lists the chain root side first; a SPEC-v2 bundle
+	// carries it leaf first.
+	leafFirst := make([]ratify.DelegationCertV2, len(c.Delegations))
+	for i, cert := range c.Delegations {
+		leafFirst[len(c.Delegations)-1-i] = cert
+	}
+	wire, err := signPresentation(c.VerifierID, agentID, pub, leafFirst, ch.challenge, ch.issuedAt, session, sign)
 	if err != nil {
 		return nil, err
 	}

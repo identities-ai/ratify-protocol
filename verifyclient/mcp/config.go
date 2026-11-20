@@ -7,6 +7,7 @@ import (
 	"errors"
 	"regexp"
 	"strconv"
+	"unicode/utf8"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
@@ -32,7 +33,8 @@ type ClientConfig struct {
 	WorkspaceID  string
 	ConnectionID string
 	// Delegations are the decoded certificates, root side first; the last
-	// one is issued to the agent key.
+	// one is issued to the agent key. A proof bundle carries them in the
+	// reverse order (leaf first).
 	Delegations []ratify.DelegationCertV2
 }
 
@@ -48,9 +50,15 @@ type ClientConfig struct {
 //   - verifier_id: 64 lowercase hex characters
 //   - workspace_id, connection_id: lowercase UUIDs
 //   - delegations: a non-empty array of canonical standard base64 strings,
-//     each a SPEC-v2 delegation certificate
+//     each a SPEC-v2 delegation certificate, root side first: each
+//     certificate's subject is the next one's issuer (ID and key)
+//
+// The input must be valid UTF-8.
 func ParseClientConfig(data []byte) (*ClientConfig, error) {
 	var top map[string]json.RawMessage
+	if !utf8.Valid(data) {
+		return nil, ErrInvalidConfig
+	}
 	if err := json.Unmarshal(data, &top); err != nil || top == nil {
 		return nil, ErrInvalidConfig
 	}
@@ -100,6 +108,13 @@ func ParseClientConfig(data []byte) (*ClientConfig, error) {
 			return nil, ErrInvalidConfig
 		}
 		cfg.Delegations = append(cfg.Delegations, *cert)
+	}
+	for i := 0; i+1 < len(cfg.Delegations); i++ {
+		parent, child := cfg.Delegations[i], cfg.Delegations[i+1]
+		if parent.SubjectID != child.IssuerID || !bytes.Equal(parent.SubjectPubKey.Ed25519, child.IssuerPubKey.Ed25519) ||
+			!bytes.Equal(parent.SubjectPubKey.MLDSA65, child.IssuerPubKey.MLDSA65) {
+			return nil, ErrInvalidConfig
+		}
 	}
 	return cfg, nil
 }

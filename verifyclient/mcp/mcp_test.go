@@ -43,3 +43,43 @@ func TestUnknownToolIsRefusedBeforeAnyRequest(t *testing.T) {
 		t.Fatal("unknown tool accepted")
 	}
 }
+
+// A ToolCall changed after NewToolCall must not make the signer bind one
+// argument set (the digest) while the client sends another.
+func TestToolCallWithInconsistentFieldsIsRefused(t *testing.T) {
+	var f struct {
+		AgentKey   vectorKey `json:"agent_key"`
+		ConfigJSON string    `json:"client_config_json"`
+		Cases      []struct {
+			Tool              string `json:"tool"`
+			Now               int64  `json:"now"`
+			ChallengeResponse string `json:"challenge_response"`
+		} `json:"cases"`
+	}
+	vectorFile(t, "tool-call.json", &f)
+	cfg, err := ParseClientConfig([]byte(f.ConfigJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := f.Cases[0]
+	ch, err := cfg.CheckChallenge(c.Tool, []byte(c.ChallengeResponse), c.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call, err := NewToolCall(c.Tool, []byte(`{"limit":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _ := NewToolCall(c.Tool, []byte(`{"limit":2}`))
+	call.PayloadDigest = other.PayloadDigest
+	if _, err := cfg.ChallengeRequest(call); err == nil {
+		t.Fatal("challenge request for inconsistent call")
+	}
+	if _, err := SignToolCall(cfg, f.AgentKey.load(t), call, ch); err == nil {
+		t.Fatal("signed an inconsistent call")
+	}
+	call.CanonicalArguments = []byte(`{ "limit":2}`)
+	if _, err := SignToolCall(cfg, f.AgentKey.load(t), call, ch); err == nil {
+		t.Fatal("signed non-canonical arguments")
+	}
+}

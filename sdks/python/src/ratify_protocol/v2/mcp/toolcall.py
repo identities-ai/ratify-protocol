@@ -43,11 +43,31 @@ def new_tool_call(tool: Any, arguments: Union[str, bytes, bytearray, dict, None]
     return ToolCall(tool, canonical, binding.payload_digest(canonical))
 
 
+def verified_digest(call: ToolCall) -> bytes:
+    """Re-derive the payload digest from the call's canonical arguments, so a
+    ToolCall built or changed by hand cannot make the signer bind one
+    argument set while the client sends another."""
+    if not isinstance(call, ToolCall) or binding.tool_scope(call.tool) is None:
+        raise InvalidArgumentsError("not a tool call")
+    canonical = bytes(call.canonical_arguments)
+    if not canonical or binding.canonical_arguments(canonical) != canonical:
+        raise InvalidArgumentsError("tool call arguments are not canonical")
+    digest = binding.payload_digest(canonical)
+    if digest != bytes(call.payload_digest):
+        raise InvalidArgumentsError("tool call digest does not match its arguments")
+    return digest
+
+
 @dataclass(frozen=True)
 class Challenge:
-    """A challenge response :func:`check_challenge` accepted."""
+    """A challenge response :func:`check_challenge` accepted. It signs only a
+    call to ``tool`` under the configuration (verifier, workspace,
+    connection) it was checked for."""
 
     tool: str
+    verifier_id: str
+    workspace_id: str
+    connection_id: str
     challenge: bytes
     invocation_id: str
     issued_at: int
@@ -84,9 +104,9 @@ def check_challenge(config: ClientConfig, tool: str, response: Union[str, bytes,
     issued, expires = msg.get("issued_at"), msg.get("expires_at")
     if not _integer(issued) or not _integer(expires) or issued <= 0 or issued > expires:
         raise ChallengeRefusedError("issued_at/expires_at are invalid")
-    if expires - now < binding.MIN_CHALLENGE_SECONDS_LEFT:
+    if now > expires - binding.MIN_CHALLENGE_SECONDS_LEFT:
         raise ChallengeRefusedError("challenge expires too soon")
-    return Challenge(tool, raw, inv, issued, expires)
+    return Challenge(tool, config.verifier_id, config.workspace_id, config.connection_id, raw, inv, issued, expires)
 
 
 @dataclass(frozen=True)
@@ -118,13 +138,19 @@ def _sign_tool_call(config: ClientConfig, pub: HybridPublicKey, call: ToolCall, 
                     sign: Callable[[ProofBundleV2], ProofBundleV2]) -> ProofEnvelope:
     if not isinstance(challenge, Challenge) or not isinstance(call, ToolCall) or challenge.tool != call.tool:
         raise ChallengeRefusedError("the challenge was checked for another tool")
+    if (challenge.verifier_id, challenge.workspace_id, challenge.connection_id) != (
+            config.verifier_id, config.workspace_id, config.connection_id):
+        raise ChallengeRefusedError("the challenge was checked under another configuration")
+    digest = verified_digest(call)
     agent_id = key_id_v2(pub)
     if not config.delegations or config.delegations[-1].subject_id != agent_id:
         raise ChallengeRefusedError("the last delegation certificate is not issued to this agent key")
-    req = binding.request_hash(call.tool, config.connection_id, config.audience, call.payload_digest)
+    req = binding.request_hash(call.tool, config.connection_id, config.audience, digest)
     session = binding.session_context(config.verifier_id, config.workspace_id, agent_id,
                                       config.connection_id, challenge.invocation_id, req)
-    wire = sign_presentation(config.verifier_id, agent_id, pub, list(config.delegations),
+    # The configuration lists the chain root side first; a SPEC-v2 bundle
+    # carries it leaf first.
+    wire = sign_presentation(config.verifier_id, agent_id, pub, list(reversed(config.delegations)),
                              challenge.challenge, challenge.issued_at, session, sign)
     return ProofEnvelope(config.connection_id, challenge.invocation_id,
                          base64.b64encode(challenge.challenge).decode(), base64.b64encode(wire).decode())

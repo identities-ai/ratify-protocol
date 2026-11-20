@@ -33,7 +33,7 @@ type configFile struct {
 func (g *gen) baseConfig() map[string]any {
 	return map[string]any{
 		"endpoint": endpoint, "audience": audience, "verifier_id": verifierID, "workspace_id": workspaceID,
-		"connection_id": connectionID, "delegations": []any{b64(g.certWire)},
+		"connection_id": connectionID, "delegations": []any{b64(g.issuerWire), b64(g.certWire)},
 	}
 }
 
@@ -57,10 +57,11 @@ func (r rawJSON) MarshalJSON() ([]byte, error) { return []byte(r), nil }
 func (g *gen) clientConfig() (any, error) {
 	f := configFile{Version: 1, Description: "Verify MCP console client configuration (preview). Each valid config_json must " +
 		"parse to expected (delegation_cert_ids lists the decoded certificates' cert_id, in order); each invalid one must be refused. " +
-		"A top-level client_config object is unwrapped; unknown fields are ignored."}
+		"A top-level client_config object is unwrapped; unknown fields are ignored. delegations are root side first: each " +
+		"certificate's subject (ID and public key) is the next one's issuer, and the last is issued to the agent key."}
 	base := g.baseConfig()
 	expected := func(ep string) *configExpected {
-		return &configExpected{ep, ep + "/mcp", verifierID, workspaceID, connectionID, []string{g.cert.CertID}}
+		return &configExpected{ep, ep + "/mcp", verifierID, workspaceID, connectionID, []string{g.issuerCert.CertID, g.cert.CertID}}
 	}
 	for _, c := range []struct {
 		name string
@@ -82,6 +83,12 @@ func (g *gen) clientConfig() (any, error) {
 		}
 		f.Valid = append(f.Valid, configCase{c.name, text, expected(c.ep)})
 	}
+	single := compact(with(base, "delegations", []any{b64(g.directWire)}))
+	if _, err := mcp.ParseClientConfig([]byte(single)); err != nil {
+		return nil, err
+	}
+	f.Valid = append(f.Valid, configCase{"single-root-signed-certificate", single,
+		&configExpected{endpoint, audience, verifierID, workspaceID, connectionID, []string{g.directCert.CertID}}})
 	invalid := []struct {
 		name string
 		cfg  any
@@ -113,6 +120,8 @@ func (g *gen) clientConfig() (any, error) {
 		{"delegation-with-newline", with(base, "delegations", []any{b64(g.certWire)[:40] + "\n" + b64(g.certWire)[40:]})},
 		{"delegation-not-a-certificate", with(base, "delegations", []any{b64([]byte(`{}`))})},
 		{"endpoint-null", with(base, "endpoint", rawJSON("null"))},
+		{"chain-leaf-first", with(base, "delegations", []any{b64(g.certWire), b64(g.issuerWire)})},
+		{"chain-broken-link", with(base, "delegations", []any{b64(g.directWire), b64(g.certWire)})},
 	}
 	for _, field := range []string{"endpoint", "audience", "verifier_id", "workspace_id", "connection_id", "delegations"} {
 		invalid = append(invalid, struct {

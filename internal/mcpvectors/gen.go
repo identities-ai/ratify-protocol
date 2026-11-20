@@ -116,9 +116,13 @@ func compact(v any) string {
 }
 
 type gen struct {
-	root, agent, other *key
-	certWire           []byte
-	cert               *ratify.DelegationCertV2
+	root, issuer, agent, other *key
+	// The connection's chain, root side first: root -> issuer -> agent.
+	issuerWire, certWire []byte
+	issuerCert, cert     *ratify.DelegationCertV2
+	// A single root-signed certificate to the agent.
+	directWire []byte
+	directCert *ratify.DelegationCertV2
 }
 
 // Generate returns every file's bytes keyed by name.
@@ -134,20 +138,33 @@ func Generate() (map[string][]byte, error) {
 	if g.other, err = newKey("other_agent", 0x53, 0xd3); err != nil {
 		return nil, err
 	}
+	if g.issuer, err = newKey("connect_issuer", 0x54, 0xd4); err != nil {
+		return nil, err
+	}
 	scopes := []string{"custom:verify.decisions:read", "custom:verify.events:read", "custom:verify.metrics:read"}
 	sort.Strings(scopes)
-	unsigned := &ratify.DelegationCertV2{
-		Version: 2, CertID: "mcp-connection-cert-1", IssuerID: g.root.id, IssuerPubKey: g.root.pub,
-		SubjectID: g.agent.id, SubjectPubKey: g.agent.pub, Scope: scopes,
-		Constraints: []ratify.ConstraintV2{{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{
-			"exact_receiver_ids": []any{receiverID}, "trust_domain_ids": []any{},
-		}}},
-		IssuedAt: 1790000000, ExpiresAt: 1790000000 + 30*86400,
+	audience := []ratify.ConstraintV2{{Type: ratify.ConstraintReceiverAudience, Params: map[string]any{
+		"exact_receiver_ids": []any{receiverID}, "trust_domain_ids": []any{},
+	}}}
+	issue := func(id string, issuer, subject *key, constraints []ratify.ConstraintV2) (*ratify.DelegationCertV2, []byte, error) {
+		cert, err := ratify.SignDelegationCertV2WithSigner(context.Background(), &ratify.DelegationCertV2{
+			Version: 2, CertID: id, IssuerID: issuer.id, IssuerPubKey: issuer.pub,
+			SubjectID: subject.id, SubjectPubKey: subject.pub, Scope: scopes, Constraints: constraints,
+			IssuedAt: 1790000000, ExpiresAt: 1790000000 + 30*86400,
+		}, detSigner{issuer})
+		if err != nil {
+			return nil, nil, fmt.Errorf("delegation %s: %w", id, err)
+		}
+		wire, err := ratify.EncodeDelegationCertV2(cert)
+		return cert, wire, err
 	}
-	if g.cert, err = ratify.SignDelegationCertV2WithSigner(context.Background(), unsigned, detSigner{g.root}); err != nil {
-		return nil, fmt.Errorf("delegation: %w", err)
+	if g.issuerCert, g.issuerWire, err = issue("mcp-issuer-cert-1", g.root, g.issuer, []ratify.ConstraintV2{}); err != nil {
+		return nil, err
 	}
-	if g.certWire, err = ratify.EncodeDelegationCertV2(g.cert); err != nil {
+	if g.cert, g.certWire, err = issue("mcp-connection-cert-1", g.issuer, g.agent, audience); err != nil {
+		return nil, err
+	}
+	if g.directCert, g.directWire, err = issue("mcp-connection-cert-direct", g.root, g.agent, audience); err != nil {
 		return nil, err
 	}
 	out := map[string][]byte{}

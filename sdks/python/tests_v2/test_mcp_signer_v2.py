@@ -100,6 +100,13 @@ def test_tool_call_vectors():
     for c in f["refused_challenges"]:
         with pytest.raises(mcp.ChallengeRefusedError):
             cfg.check_challenge(c["tool"], c["challenge_response"], c["now"])
+    assert f["refused_signings"]
+    for c in f["refused_signings"]:
+        ch = cfg.check_challenge(c["checked_tool"], c["challenge_response"], c["now"])
+        sign_cfg = mcp.parse_client_config(c["signing_config_json"]) if c["signing_config_json"] else cfg
+        call = mcp.new_tool_call(c["signing_tool"], c["signing_arguments_json"])
+        with pytest.raises(mcp.ChallengeRefusedError):
+            mcp.sign_tool_call(sign_cfg, agent, call, ch)
 
 
 def test_connect_contexts_and_tokens():
@@ -160,3 +167,20 @@ def test_python_values_outside_the_model_are_refused(value):
 
 def test_python_dict_and_json_text_bind_identically():
     assert mcp.canonical_arguments({"b": 1, "a": ["x", True]}) == mcp.canonical_arguments('{"a":["x",true],"b":1}')
+
+
+@needs_native
+def test_a_hand_built_tool_call_cannot_bind_other_arguments():
+    # ToolCall is a public dataclass; a digest that does not match its
+    # arguments would make the proof bind one call while another is sent.
+    f = load("tool-call.json")
+    cfg = mcp.parse_client_config(f["client_config_json"])
+    c = f["cases"][0]
+    ch = cfg.check_challenge(c["tool"], c["challenge_response"], c["now"])
+    one, two = mcp.new_tool_call(c["tool"], '{"limit":1}'), mcp.new_tool_call(c["tool"], '{"limit":2}')
+    for forged in (mcp.ToolCall(c["tool"], one.canonical_arguments, two.payload_digest),
+                   mcp.ToolCall(c["tool"], b'{ "limit":1}', one.payload_digest)):
+        with pytest.raises(mcp.InvalidArgumentsError):
+            cfg.challenge_request(forged)
+        with pytest.raises(mcp.InvalidArgumentsError):
+            mcp.sign_tool_call(cfg, agent_key(f["agent_key"]), forged, ch)

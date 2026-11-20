@@ -127,7 +127,10 @@ class Signer:
             params["cursor"] = cursor
         return self._rpc("tools/list", params)
 
-    def call_tool(self, name: Any, arguments: Any = None) -> dict:
+    def call_tool(self, name: Any, arguments: Optional[dict] = None) -> dict:
+        """Call a hosted tool. ``arguments`` is a dict (or None for ``{}``)."""
+        if arguments is not None and not isinstance(arguments, dict):
+            raise McpError(INVALID_PARAMS, "invalid_params", {"reason": "arguments must be an object"})
         try:
             call = new_tool_call(name, arguments)
         except InvalidArgumentsError as exc:

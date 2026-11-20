@@ -7,6 +7,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
 )
@@ -55,7 +56,7 @@ func ParseConnectToken(token string) (*ConnectToken, error) {
 		return nil, ErrInvalidConnectToken
 	}
 	var msg map[string]json.RawMessage
-	if json.Unmarshal(raw, &msg) != nil || len(msg) != len(connectTokenFields) {
+	if !utf8.Valid(raw) || json.Unmarshal(raw, &msg) != nil || len(msg) != len(connectTokenFields) {
 		return nil, ErrInvalidConnectToken
 	}
 	t := &ConnectToken{}

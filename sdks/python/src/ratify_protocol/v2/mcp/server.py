@@ -10,7 +10,7 @@ from typing import Any, BinaryIO, Optional
 
 from .._version import __version__
 from . import binding
-from .errors import INTERNAL_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR, McpError
+from .errors import INTERNAL_ERROR, INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR, McpError
 from .signer import Signer
 
 log = logging.getLogger("ratify_mcp_signer")
@@ -45,7 +45,8 @@ class StdioServer:
             msg = loads_strict(line)
         except (ValueError, UnicodeDecodeError, RecursionError):
             return _error(None, {"code": PARSE_ERROR, "message": "Parse error"})
-        if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0" or not isinstance(msg.get("method"), str):
+        if (not isinstance(msg, dict) or isinstance(msg, DuplicateKeyObject) or msg.get("jsonrpc") != "2.0"
+                or not isinstance(msg.get("method"), str)):
             rid = msg.get("id") if isinstance(msg, dict) else None
             return _error(rid if _valid_id(rid) else None, {"code": INVALID_REQUEST, "message": "Invalid Request"})
         if "id" not in msg:
@@ -56,8 +57,8 @@ class StdioServer:
         params = msg.get("params")
         if params is None:
             params = {}
-        if not isinstance(params, dict):
-            return _error(rid, {"code": INVALID_REQUEST, "message": "params must be an object"})
+        if not isinstance(params, dict) or isinstance(params, DuplicateKeyObject):
+            return _error(rid, {"code": INVALID_REQUEST, "message": "params must be an object with unique keys"})
         method = msg["method"]
         try:
             result = self._dispatch(method, params)
@@ -88,7 +89,10 @@ class StdioServer:
         if method == "tools/list":
             return self.signer.list_tools(params.get("cursor"))
         if method == "tools/call":
-            return self.signer.call_tool(params.get("name"), params.get("arguments"))
+            arguments = params.get("arguments")
+            if arguments is not None and (not isinstance(arguments, dict) or isinstance(arguments, DuplicateKeyObject)):
+                raise McpError(INVALID_PARAMS, "invalid_params", {"reason": "arguments must be an object"})
+            return self.signer.call_tool(params.get("name"), arguments)
         raise McpError(METHOD_NOT_FOUND, "Method not found")
 
 
@@ -109,12 +113,20 @@ def _reject_constant(name: str) -> Any:
     raise ValueError(f"invalid JSON constant {name}")
 
 
+class NegativeZero:
+    """A JSON number written as -0, which the value model refuses."""
+
+
+def _parse_int(text: str) -> Any:
+    return NegativeZero() if text == "-0" else int(text)
+
+
 def loads_strict(data: bytes) -> Any:
     """Parse one JSON-RPC message keeping what the argument value model needs:
-    a duplicated key yields a DuplicateKeyObject and a fraction a JsonFloat,
-    both of which the binding refuses."""
+    a duplicated key yields a DuplicateKeyObject, a fraction a JsonFloat and
+    -0 a NegativeZero, all of which the binding refuses."""
     return json.loads(data, object_pairs_hook=_pairs_hook, parse_float=JsonFloat,
-                      parse_constant=_reject_constant)
+                      parse_int=_parse_int, parse_constant=_reject_constant)
 
 
 def _valid_id(rid: Any) -> bool:

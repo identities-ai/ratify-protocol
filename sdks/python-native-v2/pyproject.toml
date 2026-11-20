@@ -9,7 +9,7 @@ build-backend = "maturin"
 name = "ratify-protocol-native-v2"
 description = "Native key generation, hybrid signing and hybrid verification for the Ratify Protocol v2 Python SDK"
 readme = "README.md"
-authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
+authors = [{name = "Identities.AI, Inc.", email = "hello@identities.ai"}]
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 classifiers = [

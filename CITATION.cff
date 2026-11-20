@@ -9,7 +9,7 @@ message: >-
   follows.
 type: software
 authors:
-  - name: "Identities AI, Inc."
+  - name: "Identities.AI, Inc."
     website: "https://identities.ai"
     email: hello@identities.ai
 repository-code: "https://github.com/identities-ai/ratify-protocol"

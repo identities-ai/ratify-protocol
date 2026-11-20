@@ -784,4 +784,4 @@ cc examples/verify_bundle.c -I include -L target/release \
 
 Apache-2.0. See [LICENSE](https://github.com/identities-ai/ratify-protocol/blob/main/LICENSE).
 
-Ratify Protocol™ is a trademark of Identities AI, Inc. Patent pending.
+Ratify Protocol™ is a trademark of Identities.AI, Inc. Patent pending.

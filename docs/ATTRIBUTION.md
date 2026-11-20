@@ -29,7 +29,7 @@ text, colors, or proportions, and don't use it to imply endorsement.
 
 ## Trademark
 
-**Ratify Protocol™** is a trademark of Identities AI, Inc. You can say your
+**Ratify Protocol™** is a trademark of Identities.AI, Inc. You can say your
 product "uses", "is built on", or "implements" Ratify Protocol. You can't
 use "Ratify Protocol" as the name of your own product or protocol.
 

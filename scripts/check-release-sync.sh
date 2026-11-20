@@ -113,6 +113,13 @@ else:
         fail(f"sdks/python/pyproject.toml extra {extra!r} parses as a version; pip 25.0 cannot resolve the package")
 if "protocol-v2" not in extras:
     fail("sdks/python/pyproject.toml must define the protocol-v2 extra (Protocol v2's requirements)")
+# The MCP signer extra reaches the native extension only through this
+# package's own protocol-v2 extra, so its pin cannot drift from it.
+mcp_extra = extras.get("mcp-signer")
+if mcp_extra is None or '"ratify-protocol[protocol-v2]"' not in mcp_extra or '"keyring' not in mcp_extra:
+    fail("sdks/python/pyproject.toml must define the mcp-signer extra as ratify-protocol[protocol-v2] plus keyring")
+if not re.search(r'^ratify-mcp-signer = "ratify_protocol\.v2\.mcp\.cli:main"$', pyproject, re.M):
+    fail("sdks/python/pyproject.toml must install the ratify-mcp-signer console script")
 
 
 def py_to_semver(v: str) -> str:

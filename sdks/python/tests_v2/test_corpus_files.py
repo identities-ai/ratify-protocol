@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from corpus import CONSUMERS, CROSS_SDK_DIR, PROVIDER_EVIDENCE_DIR, TESTS_DIR, V2_DIR
+from corpus import CONSUMERS, CROSS_SDK_DIR, MCP_DIR, PROVIDER_EVIDENCE_DIR, TESTS_DIR, V2_DIR
 
 from ratify_protocol.v2.errors_v2 import ALL_ERROR_CLASSES
 
@@ -15,7 +15,7 @@ def test_every_corpus_file_has_a_consumer():
     assert not unknown, f"corpus files with no Python runner: {sorted(unknown)}"
     assert not missing, f"runner expects files that are absent: {sorted(missing)}"
     subdirs = {p.name for p in V2_DIR.iterdir() if p.is_dir()}
-    assert subdirs <= {"cross-sdk", "provider-evidence"}, f"unexpected corpus directories: {sorted(subdirs)}"
+    assert subdirs <= {"cross-sdk", "mcp", "provider-evidence"}, f"unexpected corpus directories: {sorted(subdirs)}"
 
 
 def test_every_consumer_module_reads_its_file():
@@ -73,3 +73,11 @@ def test_corpus_asserts_every_error_class():
         walk(json.loads(path.read_text(encoding="utf-8")))
     missing = sorted(ALL_ERROR_CLASSES - seen)
     assert not missing, f"no shared vector asserts these SPEC-v2 §2.7 classes: {missing}"
+
+
+def test_mcp_directory_is_consumed():
+    if not MCP_DIR.exists():
+        return
+    module = (TESTS_DIR / "test_mcp_signer_v2.py").read_text(encoding="utf-8")
+    for p in MCP_DIR.iterdir():
+        assert f'"{p.name}"' in module, f"mcp/{p.name}: test_mcp_signer_v2.py never names the file"

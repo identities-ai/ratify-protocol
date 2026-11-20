@@ -21,6 +21,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 V2_DIR = Path(os.environ.get("RATIFY_V2_VECTOR_DIR") or TESTS_DIR.parents[2] / "testvectors" / "v2")
 CROSS_SDK_DIR = V2_DIR / "cross-sdk"
 PROVIDER_EVIDENCE_DIR = V2_DIR / "provider-evidence"
+MCP_DIR = V2_DIR / "mcp"
 
 # Every file in testvectors/v2 and the test module that consumes it.
 CONSUMERS = {

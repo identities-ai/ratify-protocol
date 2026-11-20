@@ -410,6 +410,29 @@ fixture. The per-SDK record against the gates in SPEC-v2 §8 is in
 A deployment still supplies durable Part B stores and an independent
 checkpoint.
 
+## Verify MCP signer (Preview)
+
+The `@identities-ai/ratify-protocol/v2/mcp` subpath is the client side of
+the managed Ratify Verify MCP server: it signs the delegated-authority proof
+each MCP tool call carries, answers the console's connect challenge with a
+proof of possession of the agent key, and parses the console's client
+configuration. It is a preview and not part of SPEC-v2 conformance.
+
+```ts
+import * as mcp from "@identities-ai/ratify-protocol/v2/mcp";
+
+const config = mcp.parseClientConfig(consoleJson);
+const call = mcp.newToolCall("get_metrics", "{}");
+// POST config.endpoint + "/challenge" with mcp.challengeRequest(config, call)
+const challenge = mcp.checkChallenge(config, call.tool, responseBody, Math.floor(Date.now() / 1000));
+const envelope = await mcp.signToolCall(config, agentKeyPair, call, challenge);
+// tools/call params._meta[mcp.PROOF_META_KEY] = envelope
+```
+
+`provePossession` answers a connect challenge; `signToolCallWithSigner` and
+`provePossessionWithSigner` take an external `SignerV2`. See
+[`docs/VERIFY_MCP_SIGNER.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/VERIFY_MCP_SIGNER.md).
+
 ## License
 
 Apache-2.0

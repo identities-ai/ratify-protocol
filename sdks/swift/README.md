@@ -31,3 +31,18 @@ Software hybrid keys are stored as two 32-byte seeds in the Keychain using `Keyc
 The reference stores and device models are test components, not production persistence. Callback implementations must preserve the atomic store operations in SPEC-v2 Part B. Cancellation is cooperative, and a callback that does not return can delay its caller. Provider evidence is required before claiming that a particular device or external signer meets the profile.
 
 See [`SPEC-v2.md`](../../SPEC-v2.md), [`KEY_STORAGE.md`](KEY_STORAGE.md), and the [mobile build plan](../../docs/SDKS.md) for the protocol and storage contracts.
+
+## Verify MCP signer (Preview)
+
+`MCP` is the client side of the managed Ratify Verify MCP server: it signs the delegated-authority proof each MCP tool call carries, answers the console's connect challenge with a proof of possession of the agent key, and parses the console's client configuration. It is a preview and not part of SPEC-v2 conformance.
+
+```swift
+let config = try MCP.parseClientConfig(consoleJSON)
+let call = try MCP.newToolCall(tool: "get_metrics", arguments: "{}")
+// POST config.endpoint + "/challenge" with try config.challengeRequest(call)
+let challenge = try config.checkChallenge(tool: call.tool, response: responseBody, now: Int64(Date().timeIntervalSince1970))
+let envelope = try MCP.signToolCall(config: config, agentKey: agentKey, call: call, challenge: challenge)
+// tools/call params._meta[MCP.proofMetaKey] = envelope
+```
+
+`MCP.provePossession(token:agentKey:)` answers a connect challenge, and the `signer:` overloads take an `ExternalSigner`. See [`docs/VERIFY_MCP_SIGNER.md`](../../docs/VERIFY_MCP_SIGNER.md).

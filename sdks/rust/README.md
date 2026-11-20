@@ -228,6 +228,29 @@ SPEC-v2 §8 is in
 [`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
 A deployment supplies durable Part B stores and an independent checkpoint.
 
+## Verify MCP signer (Preview)
+
+`ratify_protocol::v2::mcp` is the client side of the managed Ratify Verify
+MCP server: it signs the delegated-authority proof each MCP tool call
+carries, answers the console's connect challenge with a proof of possession
+of the agent key, and parses the console's client configuration. It is a
+preview and not part of SPEC-v2 conformance.
+
+```rust
+use ratify_protocol::v2::mcp;
+
+let config = mcp::parse_client_config(console_json)?;
+let call = mcp::ToolCall::new("get_metrics", b"{}")?;
+// POST config.endpoint + "/challenge" with config.challenge_request(&call)?
+let challenge = config.check_challenge(call.tool(), &response_body, now_unix)?;
+let envelope = mcp::sign_tool_call(&config, &agent_key, &call, &challenge)?;
+// tools/call params._meta[mcp::PROOF_META_KEY] = envelope
+```
+
+`prove_possession` answers a connect challenge; `sign_tool_call_with_signer`
+and `prove_possession_with_signer` take an external signer. See
+[`docs/VERIFY_MCP_SIGNER.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/VERIFY_MCP_SIGNER.md).
+
 ## License
 
 Apache-2.0. See the project-level LICENSE.

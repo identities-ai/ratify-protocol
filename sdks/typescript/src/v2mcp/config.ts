@@ -1,6 +1,6 @@
 // Console client configuration of the Verify MCP signer (Preview).
 
-import { base64DecodeCanonical, bytesEqual, isWellFormedString } from "../json_v2.js";
+import { base64DecodeCanonical, bytesEqual, isWellFormedString, parseJSONV2, utf8, type JNode } from "../json_v2.js";
 import { decodeDelegationCertV2, type DelegationCertV2 } from "../protocol_v2_wire.js";
 import { InvalidConfigError } from "./errors.js";
 
@@ -47,6 +47,28 @@ export function parseJSONObject(data: Uint8Array | string): Record<string, unkno
     return null;
   }
   return isObject(parsed) ? parsed : null;
+}
+
+const INTEGER_LEXEME = /^-?(0|[1-9][0-9]*)$/;
+
+/**
+ * @internal True when data is a JSON object whose named top-level members,
+ * where present, are spelled as JSON integers -?(0|[1-9][0-9]*). JSON.parse
+ * reads 1.0 and 1e3 as integers, so the spelling is checked on the source.
+ */
+export function integerLexemes(data: Uint8Array | string, names: readonly string[]): boolean {
+  let root: JNode;
+  try {
+    root = parseJSONV2(typeof data === "string" ? utf8(data) : data);
+  } catch {
+    return false;
+  }
+  if (root.k !== "obj") return false;
+  for (const name of names) {
+    const node = root.m.get(name);
+    if (node !== undefined && (node.k !== "num" || !INTEGER_LEXEME.test(node.raw))) return false;
+  }
+  return true;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {

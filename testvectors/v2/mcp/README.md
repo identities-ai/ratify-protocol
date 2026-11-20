@@ -19,6 +19,13 @@ component is deterministic and must match, and both bundles must verify.
 | `tool-call.json` | Fixture agent key, configuration, challenge responses to accept and sign, and challenge responses to refuse |
 | `connect.json` | Connect possession contexts, connect tokens to parse and sign, and tokens to refuse |
 
+Configuration, challenge responses and connect tokens are UTF-8 JSON, and
+integer fields must be written as JSON integers (`1790000100`, never
+`1790000100.0` or `1.79000022e9`). Unknown fields are ignored; a signer may
+refuse an input whose ignored fields are themselves malformed (a lone
+surrogate escape, an out-of-range number, extreme nesting), and these files
+do not pin that case.
+
 Regenerate with `go run ./cmd/ratify-mcp-vectors` from the repository root
 (source: `internal/mcpvectors`). Output is deterministic, and
 `TestGeneratedMCPVectorsMatchCommittedFiles` fails if a committed file

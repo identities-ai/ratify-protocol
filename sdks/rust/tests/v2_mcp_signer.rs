@@ -223,6 +223,7 @@ fn tool_call_vectors() {
     let f = load("tool-call.json");
     let cfg = parse_client_config(s(&f, "client_config_json")).unwrap();
     let agent = load_key(&f["agent_key"]);
+    let agent_id = s(&f["agent_key"], "key_id_v2");
     let wrong = load_key(&f["wrong_agent_key"]);
     let cases = arr(&f, "cases");
     assert!(!cases.is_empty());
@@ -244,6 +245,34 @@ fn tool_call_vectors() {
         let ch = cfg
             .check_challenge(s(c, "tool"), s(c, "challenge_response"), now)
             .unwrap_or_else(|e| panic!("{name}: {e}"));
+        // The binding the proof signs, computed locally from the call and the
+        // pinned configuration, never from the server's response.
+        let req = request_hash(
+            call.tool(),
+            &cfg.connection_id,
+            &cfg.audience,
+            call.payload_digest(),
+        )
+        .unwrap();
+        assert_eq!(
+            hex::encode(&req),
+            s(c, "request_hash"),
+            "{name}: request hash"
+        );
+        let sess = session_context(
+            &cfg.verifier_id,
+            &cfg.workspace_id,
+            agent_id,
+            &cfg.connection_id,
+            ch.invocation_id(),
+            &req,
+        )
+        .unwrap();
+        assert_eq!(
+            hex::encode(&sess),
+            s(c, "session_context"),
+            "{name}: session context"
+        );
         let env =
             sign_tool_call(&cfg, &agent, &call, &ch).unwrap_or_else(|e| panic!("{name}: {e}"));
         let want = &c["envelope"];

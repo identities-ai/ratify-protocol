@@ -150,6 +150,11 @@ object McpVectors {
                 String(cfg.challengeRequest(call), Charsets.UTF_8)
             }
             val ch = cfg.checkChallenge(tool, c.getString("challenge_response"), c.getLong("now"))
+            // The binding is computed locally; the bundle comparison checks it again.
+            val req = Mcp.requestHash(tool, cfg.connectionId, cfg.audience, call.payloadDigest)
+            val sess = Mcp.sessionContext(cfg.verifierId, cfg.workspaceId, agent.key.keyId, cfg.connectionId, ch.invocationId, req)
+            t.check("tool-call/binding", name, req.hex() == c.getString("request_hash") &&
+                sess.hex() == c.getString("session_context")) { "${req.hex()} ${sess.hex()}" }
             val want = c.getJSONObject("envelope")
             // The software key, an external signer, and the SigningKey form must all produce the vector.
             val envelopes = listOf(
@@ -185,7 +190,7 @@ object McpVectors {
                     refused { runBlocking { Mcp.signToolCall(signingConfig, SeedSigner(agent), call, ch) } } &&
                     refused { runBlocking { Mcp.signToolCall(signingConfig, SigningKey.Software(agent.key), call, ch) } })
         }
-        t.finish(listOf("tool-call/arguments" to cases.size, "tool-call/envelopes" to 3 * cases.size,
+        t.finish(listOf("tool-call/arguments" to cases.size, "tool-call/binding" to cases.size, "tool-call/envelopes" to 3 * cases.size,
             "tool-call/wrong_agent_key" to cases.size, "tool-call/refused_challenges" to refusedChallenges.size,
             "tool-call/refused_signings" to refusedSignings.size))
     }

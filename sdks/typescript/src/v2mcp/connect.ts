@@ -6,7 +6,7 @@ import { signProofBundleV2, signProofBundleV2WithSigner, type ProofBundleV2 } fr
 import { keyIDV2, type SignerV2, type SignOptionsV2 } from "../signer_v2.js";
 import type { HybridPublicKey } from "../types.js";
 import { connectPossessionContext } from "./binding.js";
-import { field, HEX64_PATTERN, parseJSONObject, UUID_PATTERN, validEndpoint } from "./config.js";
+import { field, HEX64_PATTERN, integerLexemes, parseJSONObject, UUID_PATTERN, validEndpoint } from "./config.js";
 import { InvalidConnectTokenError } from "./errors.js";
 import { signPresentation } from "./toolcall.js";
 
@@ -46,8 +46,9 @@ export function parseConnectToken(token: string): ConnectToken {
   if (!BASE64URL_PATTERN.test(body)) throw new InvalidConnectTokenError();
   const raw = Buffer.from(body, "base64url");
   if (raw.toString("base64url") !== body) throw new InvalidConnectTokenError();
-  const msg = parseJSONObject(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength));
-  if (msg === null || Object.keys(msg).length !== CONNECT_TOKEN_FIELDS.length) throw new InvalidConnectTokenError();
+  const json = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+  const msg = parseJSONObject(json);
+  if (msg === null || !integerLexemes(json, ["issued_at"]) || Object.keys(msg).length !== CONNECT_TOKEN_FIELDS.length) throw new InvalidConnectTokenError();
   for (const name of CONNECT_TOKEN_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(msg, name)) throw new InvalidConnectTokenError();
   }

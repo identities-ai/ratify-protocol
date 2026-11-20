@@ -26,7 +26,7 @@ import {
   toolScope,
 } from "./binding.js";
 import { canonicalArguments } from "./arguments.js";
-import { field, parseJSONObject, UUID_PATTERN, type ClientConfig } from "./config.js";
+import { field, integerLexemes, parseJSONObject, UUID_PATTERN, type ClientConfig } from "./config.js";
 import { ChallengeRefusedError, InvalidArgumentsError } from "./errors.js";
 
 /**
@@ -159,7 +159,7 @@ export function checkChallenge(config: ClientConfig, tool: string, response: Uin
   const scope = toolScope(tool);
   if (scope === null) throw new ChallengeRefusedError();
   const msg = parseJSONObject(response);
-  if (msg === null) throw new ChallengeRefusedError();
+  if (msg === null || !integerLexemes(response, ["issued_at", "expires_at"])) throw new ChallengeRefusedError();
   const verifier = field(msg, "verifier_id");
   const workspace = field(msg, "workspace_id");
   const gotScope = field(msg, "required_scope");

@@ -405,8 +405,9 @@ fn v2c_mcp_client_config_vectors() {
 #[test]
 fn v2c_mcp_tool_call_vectors() {
     let f = mcp("tool-call.json");
-    let (cfg, _) = parse_config(st(&f, "client_config_json")).unwrap();
+    let (cfg, cfg_fields) = parse_config(st(&f, "client_config_json")).unwrap();
     let agent = load_key(&f["agent_key"]);
+    let agent_id = cs(&agent.id());
     let wrong = load_key(&f["wrong_agent_key"]);
     let provider = Provider::new(&f["agent_key"], &agent);
     let external = provider.signer();
@@ -447,6 +448,55 @@ fn v2c_mcp_tool_call_vectors() {
         assert_eq!(
             st(&fields, "invocation_id"),
             st(&c["envelope"], "invocation_id")
+        );
+        // The binding the proof signs, computed locally from the call and the
+        // pinned configuration, never from the server's response.
+        let digest = buf(|o| unsafe {
+            ratify_v2_mcp_payload_digest(ptr_of(&canonical), canonical.len(), o, ptr::null_mut())
+        })
+        .unwrap();
+        let (conn, aud) = (
+            cs(st(&cfg_fields, "connection_id")),
+            cs(st(&cfg_fields, "audience")),
+        );
+        let req = buf(|o| unsafe {
+            ratify_v2_mcp_request_hash(
+                ctool.as_ptr(),
+                conn.as_ptr(),
+                aud.as_ptr(),
+                digest.as_ptr(),
+                digest.len(),
+                o,
+            )
+        })
+        .unwrap();
+        assert_eq!(
+            hex::encode(&req),
+            st(c, "request_hash"),
+            "{name}: request hash"
+        );
+        let (verifier, workspace, invocation) = (
+            cs(st(&cfg_fields, "verifier_id")),
+            cs(st(&cfg_fields, "workspace_id")),
+            cs(st(&fields, "invocation_id")),
+        );
+        let sess = buf(|o| unsafe {
+            ratify_v2_mcp_session_context(
+                verifier.as_ptr(),
+                workspace.as_ptr(),
+                agent_id.as_ptr(),
+                conn.as_ptr(),
+                invocation.as_ptr(),
+                req.as_ptr(),
+                req.len(),
+                o,
+            )
+        })
+        .unwrap();
+        assert_eq!(
+            hex::encode(&sess),
+            st(c, "session_context"),
+            "{name}: session context"
         );
         let want = &c["envelope"];
         for (label, local, ext) in [

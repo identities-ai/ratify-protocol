@@ -173,6 +173,8 @@ func (g *gen) toolCall() (any, error) {
 		{"expires-at-missing", with(good, "expires_at", nil), now},
 		{"expires-too-soon", good, expiresAt - mcp.MinChallengeSecondsLeft + 1},
 		{"expired", good, expiresAt + 1},
+		{"issued-at-fraction", rawJSON(strings.Replace(compact(good), fmt.Sprintf(`"issued_at":%d`, issuedAt), fmt.Sprintf(`"issued_at":%d.0`, issuedAt), 1)), now},
+		{"expires-at-exponent", rawJSON(strings.Replace(compact(good), fmt.Sprintf(`"expires_at":%d`, expiresAt), `"expires_at":1.79000022e9`, 1)), now},
 		{"not-an-object", []any{good}, now},
 		{"not-json", rawJSON(`{"challenge":`), now},
 	}

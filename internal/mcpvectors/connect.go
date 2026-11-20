@@ -161,6 +161,8 @@ func (g *gen) connect() (any, error) {
 	} {
 		invalid = append(invalid, invalidToken{c.name, token(with(payload, c.field, c.value))})
 	}
+	fraction := strings.Replace(compact(payload), `"issued_at":1790000000`, `"issued_at":1790000000.0`, 1)
+	invalid = append(invalid, invalidToken{"issued-at-fraction", mcp.ConnectTokenPrefix + base64.RawURLEncoding.EncodeToString([]byte(fraction))})
 	for _, c := range invalid {
 		if _, err := mcp.ParseConnectToken(c.Token); err == nil {
 			return nil, fmt.Errorf("invalid token %s was accepted", c.Name)

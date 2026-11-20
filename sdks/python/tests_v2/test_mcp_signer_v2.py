@@ -90,6 +90,10 @@ def test_tool_call_vectors():
         assert call.canonical_arguments == c["canonical_arguments"].encode("utf-8"), c["name"]
         assert cfg.challenge_request(call) == c["challenge_request"].encode("utf-8"), c["name"]
         ch = cfg.check_challenge(c["tool"], c["challenge_response"], c["now"])
+        req = mcp.request_hash(c["tool"], cfg.connection_id, cfg.audience, call.payload_digest)
+        assert req.hex() == c["request_hash"], c["name"]
+        assert mcp.session_context(cfg.verifier_id, cfg.workspace_id, f["agent_key"]["key_id_v2"], cfg.connection_id,
+                                   ch.invocation_id, req).hex() == c["session_context"], c["name"]
         env = mcp.sign_tool_call(cfg, agent, call, ch)
         want = c["envelope"]
         assert (env.connection_id, env.invocation_id, env.challenge) == (

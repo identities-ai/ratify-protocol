@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"unicode/utf8"
 
 	ratify "github.com/identities-ai/ratify-protocol/v2"
@@ -168,7 +169,7 @@ func signToolCall(c *ClientConfig, pub ratify.HybridPublicKey, call *ToolCall, c
 		return nil, err
 	}
 	if c.Delegations[len(c.Delegations)-1].SubjectID != agentID {
-		return nil, errors.New("mcp: the last delegation certificate is not issued to this agent key")
+		return nil, fmt.Errorf("%w: the last delegation certificate is not issued to this agent key", ErrChallengeRefused)
 	}
 	requestHash, err := RequestHash(call.Tool, c.ConnectionID, c.Audience, digest)
 	if err != nil {

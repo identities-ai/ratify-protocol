@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "ratify-protocol-native"
 description = "Native deterministic key generation for the Ratify Protocol Python SDK"
 readme = "README.md"
-authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
+authors = [{name = "Identities.AI, Inc.", email = "hello@identities.ai"}]
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 classifiers = [

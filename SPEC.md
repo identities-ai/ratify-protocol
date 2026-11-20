@@ -2,7 +2,7 @@
 
 **Delegated-authority proofs for human-agent and agent-agent interactions.**
 
-**Status:** Reference — authoritative alongside the Go implementation at module root. Maintained by Identities AI, Inc. Identities AI, Inc. owns the Ratify Protocol™ trademark and the patent-pending invention.
+**Status:** Reference — authoritative alongside the Go implementation at module root. Maintained by Identities.AI, Inc. Identities.AI, Inc. owns the Ratify Protocol™ trademark. U.S. patent application pending.
 **Version:** 1 (wire format `version` = 1)
 **Cryptography:** Post-quantum hybrid signatures: Ed25519 plus ML-DSA-65 (NIST FIPS 204). A signature verifies only when both components verify.
 **License:** CC-BY-4.0 for this text; Apache-2.0 for the reference code.
@@ -1809,4 +1809,4 @@ Until v1.0.0-beta.1, the closure remains functional: when both fields are set on
 
 ---
 
-*v1.0.0-alpha.21 · Identities AI · CC-BY-4.0 · Patent Pending*
+*v1.0.0-alpha.21 · Identities.AI, Inc. · CC-BY-4.0 · Patent Pending*

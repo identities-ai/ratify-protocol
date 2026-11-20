@@ -7,8 +7,8 @@ name = "ratify-protocol"
 version = "2.0.0b2"
 description = "Delegated-authority proofs for human-agent and agent-agent interactions — Python reference SDK for the Ratify Protocol."
 readme = "README.md"
-authors = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
-maintainers = [{name = "Identities AI, Inc.", email = "hello@identities.ai"}]
+authors = [{name = "Identities.AI, Inc.", email = "hello@identities.ai"}]
+maintainers = [{name = "Identities.AI, Inc.", email = "hello@identities.ai"}]
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 keywords = ["ratify", "delegation", "agent", "ed25519", "ml-dsa", "post-quantum", "identity", "ai-agents", "authorization", "cryptography"]

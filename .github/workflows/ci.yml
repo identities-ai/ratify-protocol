@@ -212,8 +212,10 @@ jobs:
           maturin build --release --out dist
           pip install dist/*.whl
 
-      - name: install the SDK with the protocol-v2 extra in the same environment
-        run: pip install -e '.[dev,protocol-v2]'
+      # mcp-signer adds keyring, so the stdio signer suite runs instead of
+      # skipping.
+      - name: install the SDK with the protocol-v2 and mcp-signer extras in the same environment
+        run: pip install -e '.[dev,protocol-v2,mcp-signer]'
 
       - name: full v2 test suite with the native extension required (testvectors/v2)
         env:

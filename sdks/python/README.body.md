@@ -469,6 +469,42 @@ SDKs' programs, and CI checks it. They use the in-memory reference stores and
 are development-only. Upgrading from v1 is covered in
 [`docs/PROTOCOL_V2_MIGRATION.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/PROTOCOL_V2_MIGRATION.md).
 
+## Verify MCP signer (Preview)
+
+`ratify_protocol.v2.mcp` is the client side of the managed Ratify Verify MCP
+server: it signs the delegated-authority proof each MCP tool call carries,
+answers the console's connect challenge with a proof of possession of the
+agent key, and parses the console's client configuration. Signing runs in
+the native v2 extension. It is a preview and not part of SPEC-v2
+conformance.
+
+```python
+import time
+
+from ratify_protocol.v2 import mcp
+
+config = mcp.parse_client_config(console_json)
+call = mcp.new_tool_call("get_metrics", {})
+# POST config.endpoint + "/challenge" with config.challenge_request(call)
+challenge = config.check_challenge(call.tool, response_body, int(time.time()))
+envelope = mcp.sign_tool_call(config, agent_key, call, challenge)
+# tools/call params._meta[mcp.PROOF_META_KEY] = envelope.to_dict()
+```
+
+The same signer runs as a stdio MCP server for any MCP client that can
+launch a local process:
+
+```bash
+pip install "ratify-protocol[protocol-v2,mcp-signer]=={{VERSION_PYPI}}"
+ratify-mcp-signer init --dir ~/.config/ratify-mcp/laptop
+ratify-mcp-signer serve --config ~/.config/ratify-mcp/laptop/config.json
+```
+
+The `ratify-mcp-signer` command is installed with every wheel and, without
+the `mcp-signer` extra, prints the install command and exits. Setup, key
+storage and the upgrade path from the earlier standalone signer are in
+[`docs/VERIFY_MCP_SIGNER.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/VERIFY_MCP_SIGNER.md).
+
 ## License
 
 Apache-2.0. See the project-level LICENSE.

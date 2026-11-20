@@ -613,6 +613,34 @@ C and Rust is not independent evidence (SPEC-v2 §1.3). The per-SDK record
 against the gates in SPEC-v2 §8 is in
 [`docs/V2_REFERENCE_COMPATIBILITY.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/V2_REFERENCE_COMPATIBILITY.md).
 
+### Verify MCP signer ABI (Preview)
+
+The `ratify_v2_mcp_*` exports are the client side of the managed Ratify
+Verify MCP server: they sign the delegated-authority proof each MCP tool
+call carries, answer the console's connect challenge with a proof of
+possession of the agent key, and parse the console's client configuration.
+They are a preview and not part of SPEC-v2 conformance.
+
+- `ratify_v2_mcp_client_config_parse` returns a configuration handle
+  (`ratify_v2_mcp_client_config_free`).
+- `ratify_v2_mcp_canonical_arguments` and `ratify_v2_mcp_challenge_request`
+  build the `POST <endpoint>/challenge` body;
+  `ratify_v2_mcp_check_challenge` returns a challenge handle
+  (`ratify_v2_mcp_challenge_free`) bound to the tool and configuration it
+  was checked for.
+- `ratify_v2_mcp_sign_tool_call` signs with a local key pair or an external
+  signer and returns the proof envelope as JSON.
+- `ratify_v2_mcp_parse_connect_token` and `ratify_v2_mcp_prove_possession`
+  answer a connect challenge.
+- `ratify_v2_mcp_payload_digest`, `ratify_v2_mcp_request_hash`,
+  `ratify_v2_mcp_session_context`, `ratify_v2_mcp_connect_possession_context`
+  and `ratify_v2_mcp_constants_json` expose the binding itself.
+
+Refusals return the result codes -20 to -24 (`mcp_invalid_arguments`,
+`mcp_invalid_config`, `mcp_challenge_refused`, `mcp_invalid_connect_token`,
+`mcp_agent_not_delegated`). See
+[`docs/VERIFY_MCP_SIGNER.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/VERIFY_MCP_SIGNER.md).
+
 ### Added in v1 alpha.16
 
 The following first shipped in the v1 alpha.16 release and are covered by the

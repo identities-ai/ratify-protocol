@@ -435,6 +435,100 @@ LogResult.appended [EnumElement] -> (RatifyProtocol.LogResult.Type) -> RatifyPro
 LogResult.hash(into:) [Func] -> (), Swift.Hasher
 LogResult.hashValue [Var] -> Swift.Int
 LogResult.replay [EnumElement] -> (RatifyProtocol.LogResult.Type) -> RatifyProtocol.LogResult
+MCP [Enum]
+MCP.Challenge [Struct]
+MCP.Challenge.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.MCP.Challenge, RatifyProtocol.MCP.Challenge
+MCP.Challenge.expiresAt [Var] -> Swift.Int64
+MCP.Challenge.hash(into:) [Func] -> (), Swift.Hasher
+MCP.Challenge.hashValue [Var] -> Swift.Int
+MCP.Challenge.invocationId [Var] -> Swift.String
+MCP.ClientConfig [Struct]
+MCP.ClientConfig.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.MCP.ClientConfig, RatifyProtocol.MCP.ClientConfig
+MCP.ClientConfig.audience [Var] -> Swift.String
+MCP.ClientConfig.challengeRequest(_:) [Func] -> Foundation.Data, RatifyProtocol.MCP.ToolCall
+MCP.ClientConfig.checkChallenge(tool:response:now:) [Func] -> RatifyProtocol.MCP.Challenge, Swift.String, Foundation.Data, Swift.Int64
+MCP.ClientConfig.connectionId [Var] -> Swift.String
+MCP.ClientConfig.delegations [Var] -> [RatifyProtocol.DelegationCert]
+MCP.ClientConfig.endpoint [Var] -> Swift.String
+MCP.ClientConfig.hash(into:) [Func] -> (), Swift.Hasher
+MCP.ClientConfig.hashValue [Var] -> Swift.Int
+MCP.ClientConfig.verifierId [Var] -> Swift.String
+MCP.ClientConfig.workspaceId [Var] -> Swift.String
+MCP.ConnectToken [Struct]
+MCP.ConnectToken.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.MCP.ConnectToken, RatifyProtocol.MCP.ConnectToken
+MCP.ConnectToken.audience [Var] -> Swift.String
+MCP.ConnectToken.challenge [Var] -> Foundation.Data
+MCP.ConnectToken.challengeId [Var] -> Swift.String
+MCP.ConnectToken.hash(into:) [Func] -> (), Swift.Hasher
+MCP.ConnectToken.hashValue [Var] -> Swift.Int
+MCP.ConnectToken.issuedAt [Var] -> Swift.Int64
+MCP.ConnectToken.receiverId [Var] -> Swift.String
+MCP.ConnectToken.verifierId [Var] -> Swift.String
+MCP.ConnectToken.workspaceId [Var] -> Swift.String
+MCP.PossessionProof [Struct]
+MCP.PossessionProof.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.MCP.PossessionProof, RatifyProtocol.MCP.PossessionProof
+MCP.PossessionProof.connectChallengeId [Var] -> Swift.String
+MCP.PossessionProof.encode(to:) [Func] -> (), any Swift.Encoder
+MCP.PossessionProof.hash(into:) [Func] -> (), Swift.Hasher
+MCP.PossessionProof.hashValue [Var] -> Swift.Int
+MCP.PossessionProof.possessionProof [Var] -> Swift.String
+MCP.ProofEnvelope [Struct]
+MCP.ProofEnvelope.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.MCP.ProofEnvelope, RatifyProtocol.MCP.ProofEnvelope
+MCP.ProofEnvelope.bundle [Var] -> Swift.String
+MCP.ProofEnvelope.challenge [Var] -> Swift.String
+MCP.ProofEnvelope.connectionId [Var] -> Swift.String
+MCP.ProofEnvelope.encode(to:) [Func] -> (), any Swift.Encoder
+MCP.ProofEnvelope.hash(into:) [Func] -> (), Swift.Hasher
+MCP.ProofEnvelope.hashValue [Var] -> Swift.Int
+MCP.ProofEnvelope.invocationId [Var] -> Swift.String
+MCP.SignerError [Enum]
+MCP.SignerError.__derived_enum_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.MCP.SignerError, RatifyProtocol.MCP.SignerError
+MCP.SignerError.challengeRefused [EnumElement] -> (RatifyProtocol.MCP.SignerError.Type) -> RatifyProtocol.MCP.SignerError
+MCP.SignerError.description [Var] -> Swift.String
+MCP.SignerError.hash(into:) [Func] -> (), Swift.Hasher
+MCP.SignerError.hashValue [Var] -> Swift.Int
+MCP.SignerError.invalidArguments [EnumElement] -> (RatifyProtocol.MCP.SignerError.Type) -> RatifyProtocol.MCP.SignerError
+MCP.SignerError.invalidConfig [EnumElement] -> (RatifyProtocol.MCP.SignerError.Type) -> RatifyProtocol.MCP.SignerError
+MCP.SignerError.invalidConnectToken [EnumElement] -> (RatifyProtocol.MCP.SignerError.Type) -> RatifyProtocol.MCP.SignerError
+MCP.Tool [Struct]
+MCP.Tool.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.MCP.Tool, RatifyProtocol.MCP.Tool
+MCP.Tool.hash(into:) [Func] -> (), Swift.Hasher
+MCP.Tool.hashValue [Var] -> Swift.Int
+MCP.Tool.name [Var] -> Swift.String
+MCP.Tool.scope [Var] -> Swift.String
+MCP.ToolCall [Struct]
+MCP.ToolCall.__derived_struct_equals(_:_:) [Func] -> Swift.Bool, RatifyProtocol.MCP.ToolCall, RatifyProtocol.MCP.ToolCall
+MCP.ToolCall.canonicalArguments [Var] -> Foundation.Data
+MCP.ToolCall.hash(into:) [Func] -> (), Swift.Hasher
+MCP.ToolCall.hashValue [Var] -> Swift.Int
+MCP.ToolCall.payloadDigest [Var] -> Foundation.Data
+MCP.ToolCall.tool [Var] -> Swift.String
+MCP.action [Var] -> Swift.String
+MCP.canonicalArguments(_:) [Func] -> Foundation.Data, Foundation.Data
+MCP.canonicalArguments(_:) [Func] -> Foundation.Data, Swift.String
+MCP.connectPossessionContext(workspaceId:receiverId:audience:challengeId:agentId:) [Func] -> Foundation.Data, Swift.String, Swift.String, Swift.String, Swift.String, Swift.String
+MCP.connectPossessionDomain [Var] -> Swift.String
+MCP.connectTokenPrefix [Var] -> Swift.String
+MCP.maxArgumentDepth [Var] -> Swift.Int
+MCP.maxConnectTokenLength [Var] -> Swift.Int
+MCP.minChallengeSecondsLeft [Var] -> Swift.Int64
+MCP.newToolCall(tool:arguments:) [Func] -> RatifyProtocol.MCP.ToolCall, Swift.String, Foundation.Data
+MCP.newToolCall(tool:arguments:) [Func] -> RatifyProtocol.MCP.ToolCall, Swift.String, Swift.String
+MCP.parseClientConfig(_:) [Func] -> RatifyProtocol.MCP.ClientConfig, Foundation.Data
+MCP.parseClientConfig(_:) [Func] -> RatifyProtocol.MCP.ClientConfig, Swift.String
+MCP.parseConnectToken(_:) [Func] -> RatifyProtocol.MCP.ConnectToken, Swift.String
+MCP.payloadDigest(_:) [Func] -> Foundation.Data, Foundation.Data
+MCP.payloadDigestText(_:) [Func] -> Swift.String, Foundation.Data
+MCP.proofMetaKey [Var] -> Swift.String
+MCP.protocolVersion [Var] -> Swift.String
+MCP.provePossession(token:agentKey:) [Func] -> RatifyProtocol.MCP.PossessionProof, Swift.String, RatifyProtocol.SoftwarePrivateKey
+MCP.provePossession(token:signer:) [Func] -> RatifyProtocol.MCP.PossessionProof, Swift.String, any RatifyProtocol.ExternalSigner
+MCP.requestHash(tool:connectionId:audience:payloadDigest:) [Func] -> Foundation.Data, Swift.String, Swift.String, Swift.String, Foundation.Data
+MCP.sessionContext(verifierId:workspaceId:agentId:connectionId:invocationId:requestHash:) [Func] -> Foundation.Data, Swift.String, Swift.String, Swift.String, Swift.String, Swift.String, Foundation.Data
+MCP.signToolCall(config:agentKey:call:challenge:) [Func] -> RatifyProtocol.MCP.ProofEnvelope, RatifyProtocol.MCP.ClientConfig, RatifyProtocol.SoftwarePrivateKey, RatifyProtocol.MCP.ToolCall, RatifyProtocol.MCP.Challenge
+MCP.signToolCall(config:signer:call:challenge:) [Func] -> RatifyProtocol.MCP.ProofEnvelope, RatifyProtocol.MCP.ClientConfig, any RatifyProtocol.ExternalSigner, RatifyProtocol.MCP.ToolCall, RatifyProtocol.MCP.Challenge
+MCP.toolScope(_:) [Func] -> Swift.String?, Swift.String
+MCP.tools [Var] -> [RatifyProtocol.MCP.Tool]
 ObjectType [Enum]
 ObjectType.AllCases [TypeAlias]
 ObjectType.RawValue [TypeAlias]

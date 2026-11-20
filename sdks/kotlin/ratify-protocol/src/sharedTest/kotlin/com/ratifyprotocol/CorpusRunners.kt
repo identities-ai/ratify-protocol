@@ -42,6 +42,7 @@ object CorpusRunners {
         "device-state.json" to DeviceStateVectors::run,
         "verifier-ordering.json" to VerifierOrderingVectors::run,
         "concurrency-scenarios.json" to ConcurrencyVectors::run,
+        "mcp" to McpVectors::run,
         "cross-sdk" to {
             CrossSdkObjectVectors.run()
             CrossSdkObjectVectors.scenarios()

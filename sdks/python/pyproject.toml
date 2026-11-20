@@ -64,11 +64,24 @@ protocol-v2 = [
     "ratify-protocol-native-v2==2.0.0b2",
     "tzdata==2025.3",
 ]
+# The Verify MCP signer (preview): ratify_protocol.v2.mcp and the
+# ratify-mcp-signer command. keyring holds the agent key in the OS credential
+# store; signing needs the v2 native extension, pulled in through this
+# package's own protocol-v2 extra (pip resolves it at the same version). The
+# command is installed with every wheel and refuses to run, naming this
+# extra, when either requirement is missing.
+mcp-signer = [
+    "ratify-protocol[protocol-v2]",
+    "keyring>=24",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "hypothesis>=6.100",
 ]
+
+[project.scripts]
+ratify-mcp-signer = "ratify_protocol.v2.mcp.cli:main"
 
 [project.urls]
 Homepage = "https://ratifyprotocol.com"

@@ -78,7 +78,8 @@ typedef enum RatifyStatus {
 // Positive values are the SPEC-v2 §2.7 failure classes in table order.
 // Negative values are not Protocol failure classes: `-1..=-4` are ABI
 // conditions; `-10..=-17` are Part B store sentinels a callback returns
-// (and that a few store-facing functions report). A signing refusal
+// (and that a few store-facing functions report); `-20..=-24` are refusals
+// of the preview MCP signer (`ratify_v2_mcp_*`). A signing refusal
 // reports its SPEC-v2 §2.7 class like every other failure. Values are
 // stable within one `RATIFY_V2_ABI_VERSION`; a C `switch` must include a
 // `default` case.
@@ -189,6 +190,19 @@ enum RatifyV2Code
     // Store sentinel: a security-journal compare-and-swap lost to another
     // writer.
     RatifyV2StoreJournalConflict = -17,
+    // Preview MCP signer (`ratify_v2_mcp_*`): the tool is unknown or its
+    // arguments are outside the restricted value model.
+    RatifyV2McpInvalidArguments = -20,
+    // Preview MCP signer: the console client configuration is refused.
+    RatifyV2McpInvalidConfig = -21,
+    // Preview MCP signer: the challenge response does not match the pinned
+    // configuration or the call, or expires too soon.
+    RatifyV2McpChallengeRefused = -22,
+    // Preview MCP signer: the text is not a well-formed connect token.
+    RatifyV2McpInvalidConnectToken = -23,
+    // Preview MCP signer: the last delegation certificate of the
+    // configuration is not issued to the signing agent key.
+    RatifyV2McpAgentNotDelegated = -24,
 };
 #ifndef __cplusplus
 typedef int32_t RatifyV2Code;
@@ -425,6 +439,17 @@ typedef struct RatifyV2EvaluatorCall RatifyV2EvaluatorCall;
 // one thread at a time; the library reads it during a signing call and never
 // retains or copies it.
 typedef struct RatifyV2KeyPair RatifyV2KeyPair;
+
+// A challenge response `ratify_v2_mcp_check_challenge` accepted. It signs
+// only a call to the tool, and under the configuration (verifier,
+// workspace, connection), it was checked for. Release it with
+// `ratify_v2_mcp_challenge_free`.
+typedef struct RatifyV2McpChallenge RatifyV2McpChallenge;
+
+// A parsed console client configuration. Create it with
+// `ratify_v2_mcp_client_config_parse`; release it with
+// `ratify_v2_mcp_client_config_free`. Read-only after creation.
+typedef struct RatifyV2McpClientConfig RatifyV2McpClientConfig;
 
 #if defined(RATIFY_V2_TEST_REFERENCE)
 // TEST ONLY: one single-device offline profile device (component, primary,
@@ -699,6 +724,57 @@ typedef struct RatifyV2ClaimView {
     uintptr_t rate_batch_len;
     struct RatifyV2Slice record;
 } RatifyV2ClaimView;
+
+// Reports the signer's complete public key. Return 0, or a negative code
+// (`RatifyV2ErrCancelled` cancels signing).
+typedef int32_t (*RatifyV2SignerPublicKeyFn)(void *user, struct RatifyV2PublicKey *out);
+
+// What an external signer receives for one typed statement. Every byte is
+// computed by the library and valid only until the callback returns.
+// Ed25519 always signs `message`.
+typedef struct RatifyV2SignRequest {
+    // `RatifyV2SignerMode`.
+    int32_t mode;
+    // The 77-byte transcript `M`.
+    struct RatifyV2Slice message;
+    // The 22-byte ML-DSA context in direct mode; empty in external-μ mode.
+    struct RatifyV2Slice ml_dsa_context;
+    // The 64-byte μ in external-μ mode; empty in direct mode.
+    struct RatifyV2Slice ml_dsa_mu;
+    // The complete key the provider must sign under; a provider holding any
+    // other key must refuse.
+    const struct RatifyV2PublicKey *public_key;
+    // `key_id_v2` of `public_key`, NUL-terminated.
+    const char *key_id;
+} RatifyV2SignRequest;
+
+// A hybrid signature. An external signer sets each `*_len` to the number of
+// bytes it wrote (64 and 3309 for a well-formed signature); any other length
+// is a missing or malformed component and fails signing.
+typedef struct RatifyV2Signature {
+    uint8_t ed25519[64];
+    uintptr_t ed25519_len;
+    uint8_t ml_dsa_65[3309];
+    uintptr_t ml_dsa_65_len;
+} RatifyV2Signature;
+
+// Signs one request. Write both components and their lengths into `*out`
+// and return 0; return `RatifyV2ErrCancelled` to cancel, or any other
+// non-zero code to refuse. The library verifies the result before use.
+typedef int32_t (*RatifyV2SignerSignFn)(void *user,
+                                        const struct RatifyV2SignRequest *request,
+                                        struct RatifyV2Signature *out);
+
+// An external signer (HSM, KMS, remote service). `mode` is declared when the
+// signer is bound and never changes. The callbacks run on the calling thread
+// during the signing call and are never retained after it returns.
+typedef struct RatifyV2ExternalSigner {
+    void *user;
+    // `RatifyV2SignerMode`; any other value is refused before any callback.
+    int32_t mode;
+    RatifyV2SignerPublicKeyFn public_key;
+    RatifyV2SignerSignFn sign;
+} RatifyV2ExternalSigner;
 
 // Reads an authoritative clock (integer Unix seconds). A reading below the
 // greatest reading already returned must fail with `RatifyV2ClockRegressed`.
@@ -1006,57 +1082,6 @@ typedef struct RatifyV2IssuanceStoreCallbacks {
     RatifyV2IssuancePersistFn persist;
     RatifyV2IssuanceLoadFn load;
 } RatifyV2IssuanceStoreCallbacks;
-
-// Reports the signer's complete public key. Return 0, or a negative code
-// (`RatifyV2ErrCancelled` cancels signing).
-typedef int32_t (*RatifyV2SignerPublicKeyFn)(void *user, struct RatifyV2PublicKey *out);
-
-// What an external signer receives for one typed statement. Every byte is
-// computed by the library and valid only until the callback returns.
-// Ed25519 always signs `message`.
-typedef struct RatifyV2SignRequest {
-    // `RatifyV2SignerMode`.
-    int32_t mode;
-    // The 77-byte transcript `M`.
-    struct RatifyV2Slice message;
-    // The 22-byte ML-DSA context in direct mode; empty in external-μ mode.
-    struct RatifyV2Slice ml_dsa_context;
-    // The 64-byte μ in external-μ mode; empty in direct mode.
-    struct RatifyV2Slice ml_dsa_mu;
-    // The complete key the provider must sign under; a provider holding any
-    // other key must refuse.
-    const struct RatifyV2PublicKey *public_key;
-    // `key_id_v2` of `public_key`, NUL-terminated.
-    const char *key_id;
-} RatifyV2SignRequest;
-
-// A hybrid signature. An external signer sets each `*_len` to the number of
-// bytes it wrote (64 and 3309 for a well-formed signature); any other length
-// is a missing or malformed component and fails signing.
-typedef struct RatifyV2Signature {
-    uint8_t ed25519[64];
-    uintptr_t ed25519_len;
-    uint8_t ml_dsa_65[3309];
-    uintptr_t ml_dsa_65_len;
-} RatifyV2Signature;
-
-// Signs one request. Write both components and their lengths into `*out`
-// and return 0; return `RatifyV2ErrCancelled` to cancel, or any other
-// non-zero code to refuse. The library verifies the result before use.
-typedef int32_t (*RatifyV2SignerSignFn)(void *user,
-                                        const struct RatifyV2SignRequest *request,
-                                        struct RatifyV2Signature *out);
-
-// An external signer (HSM, KMS, remote service). `mode` is declared when the
-// signer is bound and never changes. The callbacks run on the calling thread
-// during the signing call and are never retained after it returns.
-typedef struct RatifyV2ExternalSigner {
-    void *user;
-    // `RatifyV2SignerMode`; any other value is refused before any callback.
-    int32_t mode;
-    RatifyV2SignerPublicKeyFn public_key;
-    RatifyV2SignerSignFn sign;
-} RatifyV2ExternalSigner;
 
 // The caller-authenticated revocation status policy (§2.5 bounds).
 typedef struct RatifyV2StatusPolicy {
@@ -2691,6 +2716,137 @@ int32_t ratify_v2_public_key_id(const struct RatifyV2PublicKey *key, char *out, 
 // `{"ed25519":"<b64>","ml_dsa_65":"<b64>"}` (for request and context JSON).
 // Free `*out` with `ratify_v2_string_free`.
 int32_t ratify_v2_public_key_to_json(const struct RatifyV2PublicKey *key, char **out);
+
+// Write the signer constants and the hosted tool table as JSON:
+// `{"action","proof_meta_key","protocol_version","min_challenge_seconds_left",
+// "connect_possession_domain","connect_token_prefix","max_connect_token_length",
+// "max_argument_depth","tools":[{"name","scope"}, ...]}` (tools in their
+// fixed order). Free `*out` with `ratify_v2_string_free`.
+int32_t ratify_v2_mcp_constants_json(char **out);
+
+// Parse the JSON text of `params.arguments` under the restricted value
+// model and write its canonical bytes (send them as `params.arguments`).
+// Empty input, JSON whitespace, and `null` mean `{}`. Refused input is
+// `RatifyV2McpInvalidArguments`.
+int32_t ratify_v2_mcp_canonical_arguments(const uint8_t *arguments,
+                                          uintptr_t arguments_len,
+                                          struct RatifyV2Buffer *out);
+
+// SHA-256 of canonical argument bytes into `*digest_out` (32 bytes); when
+// `text_out` is non-NULL, also the `sha256:<lowercase hex>` text (free it
+// with `ratify_v2_string_free`).
+int32_t ratify_v2_mcp_payload_digest(const uint8_t *canonical_arguments,
+                                     uintptr_t canonical_arguments_len,
+                                     struct RatifyV2Buffer *digest_out,
+                                     char **text_out);
+
+// The SPEC-v2 operation context (32 bytes) of one tool call: the tool's
+// scope, operation `mcp.tools/call:<tool>`, `connection_id` as resource,
+// `audience` as requested path, and the 32-byte payload digest. An unknown
+// tool is `RatifyV2McpInvalidArguments`.
+int32_t ratify_v2_mcp_request_hash(const char *tool,
+                                   const char *connection_id,
+                                   const char *audience,
+                                   const uint8_t *payload_digest,
+                                   uintptr_t payload_digest_len,
+                                   struct RatifyV2Buffer *out);
+
+// The SPEC-v2 session context (32 bytes) a tool-call proof signs; the
+// session ID is `connection_id`.
+int32_t ratify_v2_mcp_session_context(const char *verifier_id,
+                                      const char *workspace_id,
+                                      const char *agent_id,
+                                      const char *connection_id,
+                                      const char *invocation_id,
+                                      const uint8_t *request_hash,
+                                      uintptr_t request_hash_len,
+                                      struct RatifyV2Buffer *out);
+
+// The 32-byte session context of the connect proof of possession: SHA-256
+// of the connect possession domain followed by each field with its 8-byte
+// big-endian length.
+int32_t ratify_v2_mcp_connect_possession_context(const char *workspace_id,
+                                                 const char *receiver_id,
+                                                 const char *audience,
+                                                 const char *challenge_id,
+                                                 const char *agent_id,
+                                                 struct RatifyV2Buffer *out);
+
+// Parse the console's client configuration (the `client_config` object, or
+// an object carrying it under `client_config`; unknown fields are ignored).
+// On success `*out` is a new handle. When `fields_json_out` is non-NULL it
+// receives `{"endpoint","audience","verifier_id","workspace_id",
+// "connection_id","delegation_cert_ids":[...]}` (certificates root side
+// first, each issued to the next one's issuer). A refused configuration is
+// `RatifyV2McpInvalidConfig`.
+int32_t ratify_v2_mcp_client_config_parse(const uint8_t *config,
+                                          uintptr_t config_len,
+                                          struct RatifyV2McpClientConfig **out,
+                                          char **fields_json_out);
+
+// Release a client configuration. NULL is a no-op.
+void ratify_v2_mcp_client_config_free(struct RatifyV2McpClientConfig *config);
+
+// The exact JSON body of `POST <endpoint>/challenge` for a call to `tool`
+// with `arguments` (JSON text, canonicalized first):
+// `{"connection_id":...,"tool":...,"payload_digest":"sha256:..."}`.
+int32_t ratify_v2_mcp_challenge_request(const struct RatifyV2McpClientConfig *config,
+                                        const char *tool,
+                                        const uint8_t *arguments,
+                                        uintptr_t arguments_len,
+                                        struct RatifyV2Buffer *out);
+
+// Accept the JSON response of `POST <endpoint>/challenge` for `tool` at
+// `now` (Unix seconds), or refuse it with `RatifyV2McpChallengeRefused`.
+// The response must be valid UTF-8 JSON; unknown fields, including any hash
+// the server supplies, are ignored. On success `*out` is a new handle that
+// signs only a call to `tool` under `config`. When
+// `fields_json_out` is non-NULL it receives `{"tool","invocation_id",
+// "challenge" (standard base64),"issued_at","expires_at"}`.
+int32_t ratify_v2_mcp_check_challenge(const struct RatifyV2McpClientConfig *config,
+                                      const char *tool,
+                                      const uint8_t *response,
+                                      uintptr_t response_len,
+                                      int64_t now,
+                                      struct RatifyV2McpChallenge **out,
+                                      char **fields_json_out);
+
+// Release a checked challenge. NULL is a no-op.
+void ratify_v2_mcp_challenge_free(struct RatifyV2McpChallenge *challenge);
+
+// Sign the proof for a call to `tool` with `arguments` (JSON text) under a
+// checked `challenge`, with exactly one of a library key pair (`local`) or
+// an external signer. `*envelope_json_out` receives the
+// `params._meta["com.ratifyprotocol/proof"]` value
+// `{"connection_id","invocation_id","challenge","bundle"}` (free with
+// `ratify_v2_string_free`). A challenge checked for another tool or under
+// another verifier, workspace or connection is `RatifyV2McpChallengeRefused`;
+// a key the last delegation is not issued to is
+// `RatifyV2McpAgentNotDelegated`. The bundle carries the configuration's
+// delegations leaf first.
+int32_t ratify_v2_mcp_sign_tool_call(const struct RatifyV2McpClientConfig *config,
+                                     const char *tool,
+                                     const uint8_t *arguments,
+                                     uintptr_t arguments_len,
+                                     const struct RatifyV2McpChallenge *challenge,
+                                     const struct RatifyV2KeyPair *local,
+                                     const struct RatifyV2ExternalSigner *external,
+                                     char **envelope_json_out);
+
+// Parse a console connect token. `*out_json` receives `{"challenge_id",
+// "challenge" (standard base64),"issued_at","workspace_id","receiver_id",
+// "audience","verifier_id"}`. A refused token is
+// `RatifyV2McpInvalidConnectToken`.
+int32_t ratify_v2_mcp_parse_connect_token(const char *token, char **out_json);
+
+// Answer a connect token with a proof of possession of the agent key
+// (exactly one of `local` or `external`). `*out_json` receives
+// `{"connect_challenge_id","possession_proof"}` (the proof bundle wire in
+// standard base64). Never contacts the network.
+int32_t ratify_v2_mcp_prove_possession(const char *token,
+                                       const struct RatifyV2KeyPair *local,
+                                       const struct RatifyV2ExternalSigner *external,
+                                       char **out_json);
 
 // Derive the full 256-bit v2 key ID
 // (`hex(SHA-256("ratify-key-id-v2\0" || ed25519 || ml_dsa_65))`) and write it

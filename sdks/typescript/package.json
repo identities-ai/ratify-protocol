@@ -18,6 +18,10 @@
     "./v2/reference": {
       "types": "./dist/v2reference.d.ts",
       "import": "./dist/v2reference.js"
+    },
+    "./v2/mcp": {
+      "types": "./dist/v2mcp.d.ts",
+      "import": "./dist/v2mcp.js"
     }
   },
   "files": [

@@ -52,6 +52,7 @@ pub mod callbacks;
 pub mod codec;
 pub mod keys;
 pub(crate) mod marshal;
+pub mod mcp;
 pub mod objects;
 #[cfg(feature = "test-reference")]
 pub mod reference;
@@ -62,6 +63,7 @@ pub mod verifier;
 pub use callbacks::*;
 pub use codec::*;
 pub use keys::*;
+pub use mcp::*;
 pub use objects::*;
 #[cfg(feature = "test-reference")]
 pub use reference::*;
@@ -98,7 +100,8 @@ pub const RATIFY_V2_ERROR_CLASS_COUNT: u32 = 49;
 /// Positive values are the SPEC-v2 §2.7 failure classes in table order.
 /// Negative values are not Protocol failure classes: `-1..=-4` are ABI
 /// conditions; `-10..=-17` are Part B store sentinels a callback returns
-/// (and that a few store-facing functions report). A signing refusal
+/// (and that a few store-facing functions report); `-20..=-24` are refusals
+/// of the preview MCP signer (`ratify_v2_mcp_*`). A signing refusal
 /// reports its SPEC-v2 §2.7 class like every other failure. Values are
 /// stable within one `RATIFY_V2_ABI_VERSION`; a C `switch` must include a
 /// `default` case.
@@ -207,6 +210,19 @@ pub enum RatifyV2Code {
     /// Store sentinel: a security-journal compare-and-swap lost to another
     /// writer.
     RatifyV2StoreJournalConflict = -17,
+    /// Preview MCP signer (`ratify_v2_mcp_*`): the tool is unknown or its
+    /// arguments are outside the restricted value model.
+    RatifyV2McpInvalidArguments = -20,
+    /// Preview MCP signer: the console client configuration is refused.
+    RatifyV2McpInvalidConfig = -21,
+    /// Preview MCP signer: the challenge response does not match the pinned
+    /// configuration or the call, or expires too soon.
+    RatifyV2McpChallengeRefused = -22,
+    /// Preview MCP signer: the text is not a well-formed connect token.
+    RatifyV2McpInvalidConnectToken = -23,
+    /// Preview MCP signer: the last delegation certificate of the
+    /// configuration is not issued to the signing agent key.
+    RatifyV2McpAgentNotDelegated = -24,
 }
 
 /// Object kinds used by `ratify_v2_verify_object`, `ratify_v2_object_*`, and
@@ -458,6 +474,11 @@ const OTHER_CODES: &[(RatifyV2Code, &CStr)] = {
             c"challenge_issuance_not_found",
         ),
         (RatifyV2StoreJournalConflict, c"journal_conflict"),
+        (RatifyV2McpInvalidArguments, c"mcp_invalid_arguments"),
+        (RatifyV2McpInvalidConfig, c"mcp_invalid_config"),
+        (RatifyV2McpChallengeRefused, c"mcp_challenge_refused"),
+        (RatifyV2McpInvalidConnectToken, c"mcp_invalid_connect_token"),
+        (RatifyV2McpAgentNotDelegated, c"mcp_agent_not_delegated"),
     ]
 };
 

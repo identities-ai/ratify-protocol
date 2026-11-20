@@ -720,6 +720,109 @@ public final class com/ratifyprotocol/LogResult : java/lang/Enum {
 	public static fun values ()[Lcom/ratifyprotocol/LogResult;
 }
 
+public final class com/ratifyprotocol/Mcp {
+	public static final field ACTION Ljava/lang/String;
+	public static final field CONNECT_POSSESSION_DOMAIN Ljava/lang/String;
+	public static final field CONNECT_TOKEN_PREFIX Ljava/lang/String;
+	public static final field INSTANCE Lcom/ratifyprotocol/Mcp;
+	public static final field MAX_ARGUMENT_DEPTH I
+	public static final field MAX_CONNECT_TOKEN_LENGTH I
+	public static final field MIN_CHALLENGE_SECONDS_LEFT J
+	public static final field PROOF_META_KEY Ljava/lang/String;
+	public static final field PROTOCOL_VERSION Ljava/lang/String;
+	public final fun canonicalArguments (Ljava/lang/String;)[B
+	public final fun canonicalArguments ([B)[B
+	public final fun connectPossessionContext (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)[B
+	public final fun getTools ()Ljava/util/List;
+	public final fun newToolCall (Ljava/lang/String;Ljava/lang/String;)Lcom/ratifyprotocol/Mcp$ToolCall;
+	public final fun newToolCall (Ljava/lang/String;[B)Lcom/ratifyprotocol/Mcp$ToolCall;
+	public final fun parseClientConfig (Ljava/lang/String;)Lcom/ratifyprotocol/Mcp$ClientConfig;
+	public final fun parseClientConfig ([B)Lcom/ratifyprotocol/Mcp$ClientConfig;
+	public final fun parseConnectToken (Ljava/lang/String;)Lcom/ratifyprotocol/Mcp$ConnectToken;
+	public final fun payloadDigest ([B)[B
+	public final fun payloadDigestText ([B)Ljava/lang/String;
+	public final fun provePossession (Ljava/lang/String;Lcom/ratifyprotocol/ExternalSigner;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun provePossession (Ljava/lang/String;Lcom/ratifyprotocol/SigningKey;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun provePossession (Ljava/lang/String;Lcom/ratifyprotocol/SoftwarePrivateKey;)Lcom/ratifyprotocol/Mcp$PossessionProof;
+	public final fun requestHash (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[B)[B
+	public final fun sessionContext (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[B)[B
+	public final fun signToolCall (Lcom/ratifyprotocol/Mcp$ClientConfig;Lcom/ratifyprotocol/ExternalSigner;Lcom/ratifyprotocol/Mcp$ToolCall;Lcom/ratifyprotocol/Mcp$Challenge;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun signToolCall (Lcom/ratifyprotocol/Mcp$ClientConfig;Lcom/ratifyprotocol/SigningKey;Lcom/ratifyprotocol/Mcp$ToolCall;Lcom/ratifyprotocol/Mcp$Challenge;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun signToolCall (Lcom/ratifyprotocol/Mcp$ClientConfig;Lcom/ratifyprotocol/SoftwarePrivateKey;Lcom/ratifyprotocol/Mcp$ToolCall;Lcom/ratifyprotocol/Mcp$Challenge;)Lcom/ratifyprotocol/Mcp$ProofEnvelope;
+	public final fun toolScope (Ljava/lang/String;)Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/Mcp$Challenge {
+	public final fun getExpiresAt ()J
+	public final fun getInvocationId ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/Mcp$ClientConfig {
+	public final fun challengeRequest (Lcom/ratifyprotocol/Mcp$ToolCall;)[B
+	public final fun checkChallenge (Ljava/lang/String;Ljava/lang/String;J)Lcom/ratifyprotocol/Mcp$Challenge;
+	public final fun checkChallenge (Ljava/lang/String;[BJ)Lcom/ratifyprotocol/Mcp$Challenge;
+	public final fun getAudience ()Ljava/lang/String;
+	public final fun getConnectionId ()Ljava/lang/String;
+	public final fun getDelegations ()Ljava/util/List;
+	public final fun getEndpoint ()Ljava/lang/String;
+	public final fun getVerifierId ()Ljava/lang/String;
+	public final fun getWorkspaceId ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/Mcp$ConnectToken {
+	public final fun getAudience ()Ljava/lang/String;
+	public final fun getChallenge ()[B
+	public final fun getChallengeId ()Ljava/lang/String;
+	public final fun getIssuedAt ()J
+	public final fun getReceiverId ()Ljava/lang/String;
+	public final fun getVerifierId ()Ljava/lang/String;
+	public final fun getWorkspaceId ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/Mcp$PossessionProof {
+	public final fun getConnectChallengeId ()Ljava/lang/String;
+	public final fun getPossessionProof ()Ljava/lang/String;
+	public final fun toJson ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/Mcp$ProofEnvelope {
+	public final fun getBundle ()Ljava/lang/String;
+	public final fun getChallenge ()Ljava/lang/String;
+	public final fun getConnectionId ()Ljava/lang/String;
+	public final fun getInvocationId ()Ljava/lang/String;
+	public final fun toJson ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/Mcp$Tool {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getName ()Ljava/lang/String;
+	public final fun getScope ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/ratifyprotocol/Mcp$ToolCall {
+	public final fun getCanonicalArguments ()[B
+	public final fun getPayloadDigest ()[B
+	public final fun getTool ()Ljava/lang/String;
+}
+
+public abstract class com/ratifyprotocol/McpException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/ratifyprotocol/McpException$ChallengeRefused : com/ratifyprotocol/McpException {
+}
+
+public final class com/ratifyprotocol/McpException$InvalidArguments : com/ratifyprotocol/McpException {
+}
+
+public final class com/ratifyprotocol/McpException$InvalidConfig : com/ratifyprotocol/McpException {
+}
+
+public final class com/ratifyprotocol/McpException$InvalidConnectToken : com/ratifyprotocol/McpException {
+}
+
 public final class com/ratifyprotocol/ObjectType : java/lang/Enum {
 	public static final field CHALLENGE_PRESENTATION Lcom/ratifyprotocol/ObjectType;
 	public static final field Companion Lcom/ratifyprotocol/ObjectType$Companion;

@@ -86,6 +86,7 @@ const CONSUMED: &[(&str, &str, &str)] = &[
         "\"lifecycle-scenarios.json\"",
     ),
     ("limits.json", "v2c_objects.rs", "\"limits.json\""),
+    ("mcp", "v2c_mcp.rs", "const CORPUS_DIR: &str = \"mcp\";"),
     (
         "log-sequences.json",
         "v2c_logs.rs",
@@ -139,6 +140,15 @@ const CONSUMED: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// The files of testvectors/v2/mcp that `v2c_mcp.rs` consumes.
+const MCP_FILES: &[&str] = &[
+    "README.md",
+    "binding.json",
+    "client-config.json",
+    "connect.json",
+    "tool-call.json",
+];
+
 fn manifest() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -187,6 +197,24 @@ fn every_v2_corpus_entry_has_a_c_abi_runner() {
                 "{name} uses the Rust crate"
             );
         }
+    }
+    // The preview MCP signer directory: exactly these files, and the runner
+    // names each JSON file it loads.
+    let mcp: BTreeSet<String> = fs::read_dir(corpus.join("mcp"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    let mcp_expected: BTreeSet<String> = MCP_FILES.iter().map(|s| s.to_string()).collect();
+    assert_eq!(
+        mcp, mcp_expected,
+        "testvectors/v2/mcp differs from the files v2c_mcp.rs consumes"
+    );
+    let mcp_runner = fs::read_to_string(manifest().join("tests/v2c_mcp.rs")).unwrap();
+    for file in MCP_FILES.iter().filter(|f| f.ends_with(".json")) {
+        assert!(
+            mcp_runner.contains(&format!("mcp(\"{file}\")")),
+            "v2c_mcp.rs does not load {file}"
+        );
     }
     let fixtures: BTreeSet<String> = fs::read_dir(corpus.join("cross-sdk"))
         .unwrap()

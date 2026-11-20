@@ -51,6 +51,28 @@ Runnable programs (quickstart, signed status, custom scope with the
 [`examples/v2/go`](https://github.com/identities-ai/ratify-protocol/tree/main/examples/v2/go);
 run one with `go run ./examples/v2/go/quickstart` from the repository root.
 
+### Verify MCP signer (Preview)
+
+Package `github.com/identities-ai/ratify-protocol/v2/verifyclient/mcp` is
+the client side of the managed Ratify Verify MCP server. It signs the
+delegated-authority proof each MCP tool call carries, answers the console's
+connect challenge with a proof of possession of the agent key, and parses
+the console's client configuration. It is a preview and not part of SPEC-v2
+conformance.
+
+```go
+cfg, err := mcp.ParseClientConfig(consoleJSON)
+call, err := mcp.NewToolCall("get_metrics", []byte(`{}`))
+// POST cfg.Endpoint + "/challenge" with cfg.ChallengeRequest(call)
+ch, err := cfg.CheckChallenge(call.Tool, responseBody, time.Now().Unix())
+envelope, err := mcp.SignToolCall(cfg, agentKey, call, ch)
+// tools/call params._meta[mcp.ProofMetaKey] = envelope
+```
+
+`ProvePossession` answers a connect challenge; `SignToolCallWithSigner` and
+`ProvePossessionWithSigner` take an external `SignerV2`. See
+[`docs/VERIFY_MCP_SIGNER.md`](https://github.com/identities-ai/ratify-protocol/blob/main/docs/VERIFY_MCP_SIGNER.md).
+
 ### Protocol v1 (unchanged module path)
 
 v1 stays at the original module path and its existing tags. Released v1 tags

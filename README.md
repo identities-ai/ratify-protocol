@@ -668,7 +668,7 @@ Link any badge to `https://ratifyprotocol.com`. Full guidelines: [`docs/ATTRIBUT
 - **Source code:** Apache-2.0; see [`LICENSE`](LICENSE).
 - **Specification text:** CC-BY-4.0; see [`docs/LICENSES.md`](docs/LICENSES.md).
 - **Attribution:** Apache 2.0 requires preserving the [`NOTICE`](NOTICE) file. The badge program above is a request, not a license condition; see [`docs/ATTRIBUTION.md`](docs/ATTRIBUTION.md).
-- **Trademarks:** Ratify Protocol™ and the Ratify logo are trademarks of Identities.AI, Inc. The trademarks are not licensed under the open-source licenses governing the code or specification. U.S. patent application pending.
+- **Trademarks:** Ratify Protocol™ and the Ratify logo are trademarks of Identities.AI, Inc. The trademarks are not licensed under the open-source licenses governing the code or specification.
 - **Patent:** U.S. patent application pending.
 
 Maintained by **Identities.AI, Inc.** See [`CONTRIBUTING.md`](CONTRIBUTING.md) for participation, the governance plan, and the DCO sign-off requirement. Questions and bug reports are welcome as GitHub issues.

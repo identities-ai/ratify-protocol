@@ -1,4 +1,4 @@
-# Registry Setup: Identities AI ownership of Ratify SDKs
+# Registry Setup: Identities.AI, Inc. ownership of Ratify SDKs
 
 How to move the Ratify Protocol SDK packages from personal publisher accounts
 to **Identities.AI, Inc.** ownership across PyPI, crates.io, and npm, with

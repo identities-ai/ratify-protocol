@@ -205,6 +205,21 @@ EXTRA_KOTLIN = {
 }
 
 
+# Hand-written SDK namespaces with no core counterpart: every public type
+# and member inside them is exempt from the inventory, with the reason.
+SDK_ONLY_NAMESPACES = {
+    "swift": {"MCP": "Verify MCP signer (preview): hand-written over mapped core functions"},
+    "kotlin": {
+        "Mcp": "Verify MCP signer (preview): hand-written over mapped core functions",
+        "McpException": "the Verify MCP signer's refusals (preview)",
+    },
+}
+
+
+def sdk_only(lang, name):
+    return any(name == ns or name.startswith(ns + ".") for ns in SDK_ONLY_NAMESPACES[lang])
+
+
 # Swift: only members the compiler synthesized (`implicit` in the digester
 # dump) are exempt, plus initializers of a public type.
 # Kotlin has no such flag, so each exemption is scoped to what synthesizes it.
@@ -489,7 +504,7 @@ def cmd_names(swift_dump, kotlin_api):
             used[lang].update(".".join(parts[:i]) for i in range(1, len(parts) + 1))
     # Nothing public that the inventory or the allowlist does not name.
     for t, members in swift.items():
-        if t not in used["swift"]:
+        if t not in used["swift"] and not sdk_only("swift", t):
             errors.append(f"swift public type {t} is not named by the inventory")
     for m in swift.get("Ratify", set()):
         if f"Ratify.{m}" not in used["swift"]:
@@ -514,7 +529,7 @@ def cmd_names(swift_dump, kotlin_api):
 
     for model, lang in ((swift, "swift"), (kotlin, "kotlin")):
         for t, members in model.items():
-            if not t or t == "Ratify":
+            if not t or t == "Ratify" or sdk_only(lang, t):
                 continue
             for m in members:
                 if exempt(lang, t, m):
@@ -522,10 +537,10 @@ def cmd_names(swift_dump, kotlin_api):
                 if f"{t}.{m}" not in members_used[lang] and f"{t}.{m}" not in EXTRA_MEMBERS:
                     errors.append(f"{lang} public member {t}.{m} is not named by the inventory")
     for t in kotlin:
-        if t and t not in used["kotlin"]:
+        if t and t not in used["kotlin"] and not sdk_only("kotlin", t):
             errors.append(f"kotlin public type {t} is not named by the inventory")
     for f in kotlin.get("", set()):
-        if f not in used["kotlin"]:
+        if f not in used["kotlin"] and not sdk_only("kotlin", f):
             errors.append(f"kotlin public function {f} is not named by the inventory")
     for model, lang in ((swift, "swift"), (kotlin, "kotlin")):
         for t, members in model.items():

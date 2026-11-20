@@ -319,6 +319,17 @@ Files are not reproducible: each run generates a new hardware key.
 }
 ```
 
+## mcp/
+
+Preview. The client contract of the Ratify Verify MCP server: the binding a
+tool-call proof signs, the console client configuration, the challenge
+checks a signer applies before it signs, and the connect proof of
+possession. These files describe a managed-service contract, not SPEC-v2
+conformance, and are not part of the requirements below. Every SDK's MCP
+signer runs them; [`mcp/README.md`](mcp/README.md) describes each file and
+how signed bundles are compared. Regenerate with
+`go run ./cmd/ratify-mcp-vectors`.
+
 ## Required for 2.0.0-beta.1
 
 [SPEC-v2 §8](../../SPEC-v2.md#8-conformance-and-release-gates) requires every

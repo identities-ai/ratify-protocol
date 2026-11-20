@@ -1,0 +1,370 @@
+{
+  "version": 1,
+  "description": "Verify MCP tool-call binding (preview; a managed-service contract, not SPEC-v2 conformance). Parse arguments_json under the restricted value model and require canonical_arguments byte for byte; payload_digest is sha256: plus the hex SHA-256 of those bytes; request_hash is the SPEC-v2 operation context (required scope = the tool's scope, operation = action + \":\" + tool, resource = connection_id, requested path = audience, payload digest = the raw 32 bytes); session_context is the SPEC-v2 session context with session = connection_id. Every invalid_arguments input must be refused before anything is signed.",
+  "action": "mcp.tools/call",
+  "proof_meta_key": "com.ratifyprotocol/proof",
+  "tools": [
+    {
+      "name": "get_metrics",
+      "scope": "custom:verify.metrics:read"
+    },
+    {
+      "name": "list_decisions",
+      "scope": "custom:verify.decisions:read"
+    },
+    {
+      "name": "get_decision",
+      "scope": "custom:verify.decisions:read"
+    },
+    {
+      "name": "list_events",
+      "scope": "custom:verify.events:read"
+    },
+    {
+      "name": "list_agents",
+      "scope": "custom:verify.agents:read"
+    },
+    {
+      "name": "list_evidence",
+      "scope": "custom:verify.evidence:read"
+    },
+    {
+      "name": "get_evidence_package",
+      "scope": "custom:verify.evidence:read"
+    }
+  ],
+  "cases": [
+    {
+      "name": "metrics-empty",
+      "tool": "get_metrics",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": "{}",
+      "canonical_arguments": "{}",
+      "payload_digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "request_hash": "a15d2c81501d2706ce08e8e9bae385c00637e7534d24665acea20bc1f4b7d8cf",
+      "session_context": "02a3c93027bbcbeeefdaf0a296ab1d5b1f393d86ceef4ff5b102229c8e04d85d"
+    },
+    {
+      "name": "decisions-filters",
+      "tool": "list_decisions",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": "{\"to\":\"2026-11-17T00:00:00Z\",\"decision\":\"deny\",\"limit\":20,\"from\":\"2026-11-10T00:00:00Z\"}",
+      "canonical_arguments": "{\"decision\":\"deny\",\"from\":\"2026-11-10T00:00:00Z\",\"limit\":20,\"to\":\"2026-11-17T00:00:00Z\"}",
+      "payload_digest": "sha256:37e9f0c83e72b0e63cc9b52cecba88388e2c7366d008502ab6e6ead1465cfa1b",
+      "request_hash": "4411a0ab7572fcceaa3820aaf9bf59ce674e4978db1bad590d2e3bcc6124a327",
+      "session_context": "6c1a25215047e5b5dae17f4b7f20b086129f92cb700c310d2dd266ec673d1873"
+    },
+    {
+      "name": "events-unicode",
+      "tool": "list_events",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": "{\"types\":[\"certificate.admitted\",\"café \\\"q\\\" \\\\ b\"],\"limit\":5}",
+      "canonical_arguments": "{\"limit\":5,\"types\":[\"certificate.admitted\",\"café \\\"q\\\" \\\\ b\"]}",
+      "payload_digest": "sha256:89eaa8e7391e464663e47b1883f5b67ca2bdd30a29a4d4918478c45cef97c2d8",
+      "request_hash": "692fe4bf1bc9d00ff7ac86bb6de0a8a15b12bdefdb1e4ce5bbc06ad23fd4390e",
+      "session_context": "9a81cbaee679f4c9777aafc0a31e37d506e037f9f0c6310651cd940d184cec7d"
+    },
+    {
+      "name": "absent-arguments",
+      "tool": "get_metrics",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": "",
+      "canonical_arguments": "{}",
+      "payload_digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "request_hash": "a15d2c81501d2706ce08e8e9bae385c00637e7534d24665acea20bc1f4b7d8cf",
+      "session_context": "02a3c93027bbcbeeefdaf0a296ab1d5b1f393d86ceef4ff5b102229c8e04d85d"
+    },
+    {
+      "name": "null-arguments",
+      "tool": "list_agents",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": "null",
+      "canonical_arguments": "{}",
+      "payload_digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "request_hash": "02c6f4f473bb8f1bd061fcbfcfbc822eee13f6d9e26b05dde0bc0f0d7561b65d",
+      "session_context": "92980ecbfd54bea9d1d005b33ae4dbf75785758d93a987d74ace848af1c540c1"
+    },
+    {
+      "name": "whitespace-and-escapes",
+      "tool": "get_decision",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": " {\n\t\"decision_id\" : \"d\\u00e9c\\/1\" ,\r\n \"include\" : [ true , false ] } ",
+      "canonical_arguments": "{\"decision_id\":\"déc/1\",\"include\":[true,false]}",
+      "payload_digest": "sha256:d7be33dcddbf55e5889dd11414084265205a68c150953e9368e984adc2d704be",
+      "request_hash": "181d2e39d69d6937751a7fd3f202b83a49629e488f5e05e91916480169bc93f6",
+      "session_context": "50c20128b8df03902afa054c5d9c3eef8aefd3c19dfd106803794fb548085008"
+    },
+    {
+      "name": "keys-sorted-by-utf8-bytes",
+      "tool": "list_evidence",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": "{\"😀\":1,\"ｚ\":2,\"z\":3,\"Z\":4,\"zz\":5,\"\":6}",
+      "canonical_arguments": "{\"\":6,\"Z\":4,\"z\":3,\"zz\":5,\"ｚ\":2,\"😀\":1}",
+      "payload_digest": "sha256:3f50c911ebdc941e7202ebe6ea42cd50bb982fd9151201256bb8526644d58753",
+      "request_hash": "f12e2ea1a9a7d90e02d3c1a4c081ffe2ef8d505910c8470f246d4583f97a5457",
+      "session_context": "66c7361dfe144db6d1e5dd34a14867c4adcca6468370bf94f75d1df479ce7c94"
+    },
+    {
+      "name": "safe-integer-bounds",
+      "tool": "list_decisions",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": "{\"max\":9007199254740991,\"min\":-9007199254740991,\"zero\":0,\"neg\":-7}",
+      "canonical_arguments": "{\"max\":9007199254740991,\"min\":-9007199254740991,\"neg\":-7,\"zero\":0}",
+      "payload_digest": "sha256:f83aa6c73be26828dc4f9431b95fb09e49ae3b274ff1e122e395c436e2ea59c9",
+      "request_hash": "b0901b74bef1100583f60bda9733542202b7aeddcefc877da8f5e1dc960b40d1",
+      "session_context": "b9b88ddebc2464e6947f9ec9816c112c27883f69745388b403180c561c83c768"
+    },
+    {
+      "name": "maximum-depth",
+      "tool": "get_evidence_package",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": "{\"a\":[[[\"x\"]]],\"b\":{\"c\":{\"d\":{\"e\":[]}}}}",
+      "canonical_arguments": "{\"a\":[[[\"x\"]]],\"b\":{\"c\":{\"d\":{\"e\":[]}}}}",
+      "payload_digest": "sha256:c8133e8c8963cd85ba2fe4b2916cabbf89a3fa152574b0805fc4a31153363950",
+      "request_hash": "b99dc2809e93f0ac87c6f11181d0eba4e09aa334daffe471c9a98f4090220214",
+      "session_context": "a9db0e78cf6450dffddca8fdbb31e17eb8da2f6ad3b2108ab1f116053f95465b"
+    },
+    {
+      "name": "empty-containers",
+      "tool": "list_events",
+      "connection_id": "3f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "audience": "https://verify.example/mcp",
+      "verifier_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_id": "6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "agent_id": "2222222222222222222222222222222222222222222222222222222222222222",
+      "invocation_id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "arguments_json": "{\"types\":[],\"filter\":{}}",
+      "canonical_arguments": "{\"filter\":{},\"types\":[]}",
+      "payload_digest": "sha256:345c5462f6b2a7e5fa5ac7634016b36c39a6b74324dad4f74649a7544f3140ba",
+      "request_hash": "72bcef61e0ed63bfd5b42d8c1c157b412b002990b067a97c568ace7e0348495f",
+      "session_context": "b80282881fa182ab6b78e78e4dcd4609fbfdcb0f7a44033b4db72e3dd35b08f7"
+    }
+  ],
+  "invalid_arguments": [
+    {
+      "name": "fraction",
+      "arguments_json": "{\"limit\":1.5}"
+    },
+    {
+      "name": "integral-fraction",
+      "arguments_json": "{\"limit\":1.0}"
+    },
+    {
+      "name": "exponent",
+      "arguments_json": "{\"limit\":1e3}"
+    },
+    {
+      "name": "upper-exponent",
+      "arguments_json": "{\"limit\":1E3}"
+    },
+    {
+      "name": "null-member",
+      "arguments_json": "{\"x\":null}"
+    },
+    {
+      "name": "duplicate-key",
+      "arguments_json": "{\"a\":1,\"a\":2}"
+    },
+    {
+      "name": "duplicate-key-after-unescape",
+      "arguments_json": "{\"a\":1,\"a\":2}"
+    },
+    {
+      "name": "nested-duplicate-key",
+      "arguments_json": "{\"o\":{\"k\":1,\"k\":1}}"
+    },
+    {
+      "name": "escaped-control",
+      "arguments_json": "{\"s\":\"a\\u0001b\"}"
+    },
+    {
+      "name": "escaped-newline",
+      "arguments_json": "{\"s\":\"a\\nb\"}"
+    },
+    {
+      "name": "raw-tab",
+      "arguments_json": "{\"s\":\"a\tb\"}"
+    },
+    {
+      "name": "delete-character",
+      "arguments_json": "{\"s\":\"a\\u007fb\"}"
+    },
+    {
+      "name": "c1-control",
+      "arguments_json": "{\"s\":\"a\\u0085b\"}"
+    },
+    {
+      "name": "line-separator",
+      "arguments_json": "{\"s\":\"a\u2028b\"}"
+    },
+    {
+      "name": "raw-paragraph-separator",
+      "arguments_json": "{\"s\":\"a\u2029b\"}"
+    },
+    {
+      "name": "control-in-key",
+      "arguments_json": "{\"k\\u0000\":1}"
+    },
+    {
+      "name": "lone-high-surrogate",
+      "arguments_json": "{\"s\":\"\\ud800\"}"
+    },
+    {
+      "name": "lone-low-surrogate",
+      "arguments_json": "{\"s\":\"\\udc00\"}"
+    },
+    {
+      "name": "high-surrogate-then-letter",
+      "arguments_json": "{\"s\":\"\\ud800A\"}"
+    },
+    {
+      "name": "above-safe-integer",
+      "arguments_json": "{\"n\":9007199254740992}"
+    },
+    {
+      "name": "below-safe-integer",
+      "arguments_json": "{\"n\":-9007199254740992}"
+    },
+    {
+      "name": "huge-integer",
+      "arguments_json": "{\"n\":123456789012345678901}"
+    },
+    {
+      "name": "negative-zero",
+      "arguments_json": "{\"n\":-0}"
+    },
+    {
+      "name": "leading-zero",
+      "arguments_json": "{\"n\":01}"
+    },
+    {
+      "name": "plus-sign",
+      "arguments_json": "{\"n\":+1}"
+    },
+    {
+      "name": "nan",
+      "arguments_json": "{\"n\":NaN}"
+    },
+    {
+      "name": "too-deep-array",
+      "arguments_json": "{\"a\":[[[[\"x\"]]]]}"
+    },
+    {
+      "name": "too-deep-object",
+      "arguments_json": "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":1}}}}}"
+    },
+    {
+      "name": "top-level-array",
+      "arguments_json": "[1]"
+    },
+    {
+      "name": "top-level-string",
+      "arguments_json": "\"x\""
+    },
+    {
+      "name": "top-level-number",
+      "arguments_json": "1"
+    },
+    {
+      "name": "top-level-true",
+      "arguments_json": "true"
+    },
+    {
+      "name": "trailing-value",
+      "arguments_json": "{} {}"
+    },
+    {
+      "name": "trailing-comma-object",
+      "arguments_json": "{\"a\":1,}"
+    },
+    {
+      "name": "trailing-comma-array",
+      "arguments_json": "{\"a\":[1,]}"
+    },
+    {
+      "name": "unquoted-key",
+      "arguments_json": "{a:1}"
+    },
+    {
+      "name": "single-quotes",
+      "arguments_json": "{'a':1}"
+    },
+    {
+      "name": "invalid-escape",
+      "arguments_json": "{\"s\":\"\\x41\"}"
+    },
+    {
+      "name": "short-unicode-escape",
+      "arguments_json": "{\"s\":\"\\u12\"}"
+    },
+    {
+      "name": "unterminated-string",
+      "arguments_json": "{\"a\":\"x"
+    },
+    {
+      "name": "unterminated-object",
+      "arguments_json": "{\"a\":1"
+    },
+    {
+      "name": "empty-key-value",
+      "arguments_json": "{\"a\":}"
+    },
+    {
+      "name": "invalid-utf8",
+      "arguments_base64": "eyJzIjoiYf9iIn0="
+    },
+    {
+      "name": "overlong-utf8",
+      "arguments_base64": "eyJzIjoiwK8ifQ=="
+    },
+    {
+      "name": "encoded-surrogate",
+      "arguments_base64": "eyJzIjoi7aCAIn0="
+    }
+  ]
+}

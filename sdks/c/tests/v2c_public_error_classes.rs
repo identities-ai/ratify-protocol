@@ -45,6 +45,8 @@ const NOT_FALLIBLE: &[&str] = &[
     "ratify_v2_valid_evaluation_progress",
     "ratify_v2_claim_id_matches_key",
     "ratify_v2_released_allowed",
+    "ratify_v2_mcp_client_config_free",
+    "ratify_v2_mcp_challenge_free",
 ];
 
 /// Documented negative codes a rejection may carry instead of a class.
@@ -53,6 +55,9 @@ fn documented_negative(code: i32) -> bool {
         || code == RatifyV2Code::RatifyV2ErrBadArgument as i32
         || (RatifyV2Code::RatifyV2StoreJournalConflict as i32
             ..=RatifyV2Code::RatifyV2StoreUnavailable as i32)
+            .contains(&code)
+        || (RatifyV2Code::RatifyV2McpAgentNotDelegated as i32
+            ..=RatifyV2Code::RatifyV2McpInvalidArguments as i32)
             .contains(&code)
 }
 
@@ -380,6 +385,133 @@ fn v2c_public_api_errors_are_classified() {
             let mut out = [0 as c_char; 8];
             unsafe { ratify_v2_keypair_key_id(kp.0, out.as_mut_ptr(), out.len()) }
         }),
+        // The preview MCP signer: its own refusal codes, and SPEC-v2 classes
+        // from the constructions it calls.
+        call("ratify_v2_mcp_constants_json", "null_pointer", || unsafe {
+            ratify_v2_mcp_constants_json(ptr::null_mut())
+        }),
+        call(
+            "ratify_v2_mcp_canonical_arguments",
+            "mcp_invalid_arguments",
+            || buffer_call(|o| unsafe { ratify_v2_mcp_canonical_arguments(b"[1]".as_ptr(), 3, o) }),
+        ),
+        call("ratify_v2_mcp_payload_digest", "null_pointer", || unsafe {
+            ratify_v2_mcp_payload_digest(b"{}".as_ptr(), 2, ptr::null_mut(), ptr::null_mut())
+        }),
+        call(
+            "ratify_v2_mcp_request_hash",
+            "mcp_invalid_arguments",
+            || {
+                let (t, c, a) = (cs("delete_everything"), cs("c"), cs("https://a/mcp"));
+                buffer_call(|o| unsafe {
+                    ratify_v2_mcp_request_hash(
+                        t.as_ptr(),
+                        c.as_ptr(),
+                        a.as_ptr(),
+                        [0u8; 32].as_ptr(),
+                        32,
+                        o,
+                    )
+                })
+            },
+        ),
+        call(
+            "ratify_v2_mcp_session_context",
+            "configuration_invalid",
+            || {
+                let x = cs("x");
+                buffer_call(|o| unsafe {
+                    ratify_v2_mcp_session_context(
+                        x.as_ptr(),
+                        x.as_ptr(),
+                        x.as_ptr(),
+                        x.as_ptr(),
+                        x.as_ptr(),
+                        [0u8; 32].as_ptr(),
+                        32,
+                        o,
+                    )
+                })
+            },
+        ),
+        call(
+            "ratify_v2_mcp_connect_possession_context",
+            "null_pointer",
+            || {
+                buffer_call(|o| unsafe {
+                    ratify_v2_mcp_connect_possession_context(
+                        ptr::null(),
+                        ptr::null(),
+                        ptr::null(),
+                        ptr::null(),
+                        ptr::null(),
+                        o,
+                    )
+                })
+            },
+        ),
+        call(
+            "ratify_v2_mcp_client_config_parse",
+            "mcp_invalid_config",
+            move || {
+                let mut h = ptr::null_mut();
+                unsafe { ratify_v2_mcp_client_config_parse(gp, gl, &mut h, ptr::null_mut()) }
+            },
+        ),
+        call("ratify_v2_mcp_challenge_request", "null_pointer", || {
+            let t = cs("get_metrics");
+            buffer_call(|o| unsafe {
+                ratify_v2_mcp_challenge_request(ptr::null(), t.as_ptr(), b"{}".as_ptr(), 2, o)
+            })
+        }),
+        call("ratify_v2_mcp_check_challenge", "null_pointer", || {
+            let t = cs("get_metrics");
+            let mut h = ptr::null_mut();
+            unsafe {
+                ratify_v2_mcp_check_challenge(
+                    ptr::null(),
+                    t.as_ptr(),
+                    b"{}".as_ptr(),
+                    2,
+                    0,
+                    &mut h,
+                    ptr::null_mut(),
+                )
+            }
+        }),
+        call("ratify_v2_mcp_sign_tool_call", "null_pointer", move || {
+            let t = cs("get_metrics");
+            string_call(|o| unsafe {
+                ratify_v2_mcp_sign_tool_call(
+                    ptr::null(),
+                    t.as_ptr(),
+                    b"{}".as_ptr(),
+                    2,
+                    ptr::null(),
+                    kp.0,
+                    ptr::null(),
+                    o,
+                )
+            })
+        }),
+        call(
+            "ratify_v2_mcp_parse_connect_token",
+            "mcp_invalid_connect_token",
+            || {
+                let t = cs("ratify-mcp-connect-1.e30");
+                string_call(|o| unsafe { ratify_v2_mcp_parse_connect_token(t.as_ptr(), o) })
+            },
+        ),
+        call(
+            "ratify_v2_mcp_prove_possession",
+            "mcp_invalid_connect_token",
+            move || {
+                let t = cs("not a token");
+                string_call(|o| unsafe {
+                    ratify_v2_mcp_prove_possession(t.as_ptr(), kp.0, ptr::null(), o)
+                })
+            },
+        ),
         call("ratify_v2_bundle_hash", "malformed", move || {
             string_call(|o| unsafe { ratify_v2_bundle_hash(gp, gl, o) })
         }),

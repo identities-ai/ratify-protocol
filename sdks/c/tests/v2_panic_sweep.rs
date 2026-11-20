@@ -175,6 +175,20 @@ const SWEPT: &[&str] = &[
     "ratify_v2_issue_challenge",
     "ratify_v2_load_expected_challenge",
     "ratify_v2_verify_transaction_receipt",
+    "ratify_v2_mcp_constants_json",
+    "ratify_v2_mcp_canonical_arguments",
+    "ratify_v2_mcp_payload_digest",
+    "ratify_v2_mcp_request_hash",
+    "ratify_v2_mcp_session_context",
+    "ratify_v2_mcp_connect_possession_context",
+    "ratify_v2_mcp_client_config_parse",
+    "ratify_v2_mcp_challenge_request",
+    "ratify_v2_mcp_check_challenge",
+    "ratify_v2_mcp_sign_tool_call",
+    "ratify_v2_mcp_parse_connect_token",
+    "ratify_v2_mcp_prove_possession",
+    "ratify_v2_mcp_client_config_free",
+    "ratify_v2_mcp_challenge_free",
 ];
 
 #[test]
@@ -1166,6 +1180,96 @@ fn every_v2_export_contains_a_panic() {
         -3,
         "ratify_v2_verify_transaction_receipt"
     );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_constants_json(z()) },
+        -3,
+        "ratify_v2_mcp_constants_json"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_canonical_arguments(z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_canonical_arguments"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_payload_digest(z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_payload_digest"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_request_hash(z(), z(), z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_request_hash"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_session_context(z(), z(), z(), z(), z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_session_context"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_connect_possession_context(z(), z(), z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_connect_possession_context"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_client_config_parse(z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_client_config_parse"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_challenge_request(z(), z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_challenge_request"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_check_challenge(z(), z(), z(), z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_check_challenge"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_sign_tool_call(z(), z(), z(), z(), z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_sign_tool_call"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_parse_connect_token(z(), z()) },
+        -3,
+        "ratify_v2_mcp_parse_connect_token"
+    );
+    fired();
+    arm_before_body();
+    assert_eq!(
+        unsafe { ratify_v2_mcp_prove_possession(z(), z(), z(), z()) },
+        -3,
+        "ratify_v2_mcp_prove_possession"
+    );
+    fired();
+    arm_before_body();
+    unsafe { ratify_v2_mcp_client_config_free(z()) };
+    fired();
+    arm_before_body();
+    unsafe { ratify_v2_mcp_challenge_free(z()) };
     fired();
 }
 
